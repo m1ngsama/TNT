@@ -11,3 +11,4 @@
 - Code cleanup (2025-01-28)
 - Fix edge cases (2025-02-03)
 - Update documentation (2025-02-06)
+- Fix edge cases (2025-02-07)
