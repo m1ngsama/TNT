@@ -12,3 +12,4 @@
 - Fix edge cases (2025-02-03)
 - Update documentation (2025-02-06)
 - Fix edge cases (2025-02-07)
+- Add minor improvements (2025-02-26)
