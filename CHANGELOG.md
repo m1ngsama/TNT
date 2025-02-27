@@ -13,3 +13,4 @@
 - Update documentation (2025-02-06)
 - Fix edge cases (2025-02-07)
 - Add minor improvements (2025-02-26)
+- Update dependencies (2025-02-27)
