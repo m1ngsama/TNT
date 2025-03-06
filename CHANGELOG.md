@@ -15,3 +15,4 @@
 - Add minor improvements (2025-02-26)
 - Update dependencies (2025-02-27)
 - Fix edge cases (2025-03-01)
+- Fix bugs and improve stability (2025-03-06)
