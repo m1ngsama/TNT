@@ -18,3 +18,4 @@
 - Fix bugs and improve stability (2025-03-06)
 - Fix bugs and improve stability (2025-03-12)
 - Minor fixes (2025-03-17)
+- Add minor improvements (2025-03-18)
