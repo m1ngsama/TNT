@@ -19,3 +19,4 @@
 - Fix bugs and improve stability (2025-03-12)
 - Minor fixes (2025-03-17)
 - Add minor improvements (2025-03-18)
+- Refactor code structure (2025-03-24)
