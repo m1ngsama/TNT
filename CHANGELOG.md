@@ -20,3 +20,4 @@
 - Minor fixes (2025-03-17)
 - Add minor improvements (2025-03-18)
 - Refactor code structure (2025-03-24)
+- Update dependencies (2025-03-27)
