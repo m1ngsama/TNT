@@ -22,3 +22,4 @@
 - Refactor code structure (2025-03-24)
 - Update dependencies (2025-03-27)
 - Improve error handling (2025-03-28)
+- Improve error handling (2025-04-03)
