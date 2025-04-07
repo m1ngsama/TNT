@@ -23,3 +23,4 @@
 - Update dependencies (2025-03-27)
 - Improve error handling (2025-03-28)
 - Improve error handling (2025-04-03)
+- Update documentation (2025-04-07)
