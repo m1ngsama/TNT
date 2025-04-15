@@ -25,3 +25,4 @@
 - Improve error handling (2025-04-03)
 - Update documentation (2025-04-07)
 - Update documentation (2025-04-13)
+- Code cleanup (2025-04-15)
