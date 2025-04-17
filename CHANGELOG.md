@@ -27,3 +27,4 @@
 - Update documentation (2025-04-13)
 - Code cleanup (2025-04-15)
 - Fix bugs and improve stability (2025-04-16)
+- Add minor improvements (2025-04-17)
