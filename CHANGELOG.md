@@ -31,3 +31,4 @@
 - Minor fixes (2025-04-23)
 - Code cleanup (2025-04-24)
 - Fix edge cases (2025-04-25)
+- Refactor code structure (2025-05-13)
