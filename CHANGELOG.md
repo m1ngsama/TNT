@@ -33,3 +33,4 @@
 - Fix edge cases (2025-04-25)
 - Refactor code structure (2025-05-13)
 - Fix edge cases (2025-05-14)
+- Minor fixes (2025-06-03)
