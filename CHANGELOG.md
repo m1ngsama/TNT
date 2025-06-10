@@ -35,3 +35,4 @@
 - Fix edge cases (2025-05-14)
 - Minor fixes (2025-06-03)
 - Code cleanup (2025-06-05)
+- Add minor improvements (2025-06-10)
