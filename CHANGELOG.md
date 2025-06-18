@@ -36,3 +36,4 @@
 - Minor fixes (2025-06-03)
 - Code cleanup (2025-06-05)
 - Add minor improvements (2025-06-10)
+- Fix bugs and improve stability (2025-06-18)
