@@ -38,3 +38,4 @@
 - Add minor improvements (2025-06-10)
 - Fix bugs and improve stability (2025-06-18)
 - Update dependencies (2025-06-24)
+- Optimize performance (2025-06-30)
