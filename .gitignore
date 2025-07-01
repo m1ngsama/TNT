@@ -1,0 +1,8 @@
+*.o
+obj/
+tnt
+messages.log
+host_key
+host_key.pub
+*.swp
+.DS_Store
