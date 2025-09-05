@@ -46,3 +46,4 @@
 - Code cleanup (2025-07-27)
 - Code cleanup (2025-08-04)
 - Minor fixes (2025-08-28)
+- Improve error handling (2025-09-05)
