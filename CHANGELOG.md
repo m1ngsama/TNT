@@ -49,3 +49,4 @@
 - Improve error handling (2025-09-05)
 - Update documentation (2025-09-09)
 - Code cleanup (2025-09-15)
+- Fix bugs and improve stability (2025-09-19)
