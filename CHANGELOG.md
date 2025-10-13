@@ -52,3 +52,4 @@
 - Fix bugs and improve stability (2025-09-19)
 - Update documentation (2025-09-25)
 - Fix bugs and improve stability (2025-10-06)
+- Fix bugs and improve stability (2025-10-13)
