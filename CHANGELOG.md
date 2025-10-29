@@ -58,3 +58,4 @@
 - Add minor improvements (2025-10-22)
 - Code cleanup (2025-10-26)
 - Add minor improvements (2025-10-28)
+- Fix edge cases (2025-10-29)
