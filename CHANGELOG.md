@@ -60,3 +60,4 @@
 - Add minor improvements (2025-10-28)
 - Fix edge cases (2025-10-29)
 - Fix bugs and improve stability (2025-10-30)
+- Optimize performance (2025-11-04)
