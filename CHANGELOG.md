@@ -64,3 +64,4 @@
 - Improve error handling (2025-11-07)
 - Update documentation (2025-11-12)
 - Fix bugs and improve stability (2025-11-14)
+- Update documentation (2025-11-17)
