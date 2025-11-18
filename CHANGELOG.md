@@ -65,3 +65,4 @@
 - Update documentation (2025-11-12)
 - Fix bugs and improve stability (2025-11-14)
 - Update documentation (2025-11-17)
+- Add minor improvements (2025-11-18)
