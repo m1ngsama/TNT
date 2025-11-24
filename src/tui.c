@@ -45,7 +45,7 @@ void tui_render_screen(client_t *client) {
     for (int i = 0; i < padding; i++) {
         buffer[pos++] = ' ';
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\n");
+    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
 
     /* Messages area */
     int msg_height = client->height - 3;
@@ -74,13 +74,14 @@ void tui_render_screen(client_t *client) {
     for (int i = start; i < end; i++) {
         char msg_line[1024];
         message_format(&g_room->messages[i], msg_line, sizeof(msg_line), client->width);
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\n", msg_line);
+        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", msg_line);
     }
 
     pthread_rwlock_unlock(&g_room->lock);
 
     /* Fill empty lines */
     for (int i = end - start; i < msg_height; i++) {
+        buffer[pos++] = '\r';
         buffer[pos++] = '\n';
     }
 
@@ -91,6 +92,7 @@ void tui_render_screen(client_t *client) {
         memcpy(buffer + pos, line_char, len);
         pos += len;
     }
+    buffer[pos++] = '\r';
     buffer[pos++] = '\n';
 
     /* Status/Input line */
@@ -165,7 +167,7 @@ void tui_render_command_output(client_t *client) {
     for (int i = 0; i < padding; i++) {
         buffer[pos++] = ' ';
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\n");
+    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
 
     /* Command output */
     char *line = strtok(client->command_output, "\n");
@@ -181,7 +183,7 @@ void tui_render_command_output(client_t *client) {
             utf8_truncate(truncated, client->width);
         }
 
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\n", truncated);
+        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", truncated);
         line = strtok(NULL, "\n");
         line_count++;
     }
@@ -298,7 +300,7 @@ void tui_render_help(client_t *client) {
     for (int i = 0; i < padding; i++) {
         buffer[pos++] = ' ';
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\n");
+    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
 
     /* Help content */
     const char *help_text = tui_get_help_text(client->help_lang);
@@ -321,11 +323,12 @@ void tui_render_help(client_t *client) {
     if (end > line_count) end = line_count;
 
     for (int i = start; i < end && (i - start) < content_height - 1; i++) {
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\n", lines[i]);
+        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", lines[i]);
     }
 
     /* Fill remaining lines */
     for (int i = end - start; i < content_height - 1; i++) {
+        buffer[pos++] = '\r';
         buffer[pos++] = '\n';
     }
 

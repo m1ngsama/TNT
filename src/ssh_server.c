@@ -126,7 +126,7 @@ static int read_username(client_t *client) {
         }
     }
 
-    client_printf(client, "\n");
+    client_printf(client, "\r\n");
 
     if (username[0] == '\0') {
         strcpy(client->username, "anonymous");
@@ -458,8 +458,10 @@ static int handle_auth(ssh_session session) {
                 ssh_message_free(message);
                 return 0;
             } else if (ssh_message_subtype(message) == SSH_AUTH_METHOD_NONE) {
-                /* Deny and ask for password */
-                ssh_message_auth_set_methods(message, SSH_AUTH_METHOD_PASSWORD);
+                /* Accept passwordless authentication for open chatroom */
+                ssh_message_auth_reply_success(message, 0);
+                ssh_message_free(message);
+                return 0;
             }
         }
 
