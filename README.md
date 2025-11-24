@@ -12,13 +12,30 @@
 - 🕐 **Full timestamps** - Year-month-day hour:minute with timezone
 - 📖 **Bilingual help** - Press ? for Chinese/English help
 - 🌏 **UTF-8 support** - Full support for Chinese, Japanese, Korean
-- 📦 **Single binary** - Lightweight ~50KB executable
-- 🚀 **Telnet access** - No client installation needed
+- 📦 **Single binary** - Lightweight executable
+- 🔒 **SSH access** - Secure encrypted connections
+- 🖥️ **Auto terminal detection** - Adapts to your terminal size
 - 💾 **Message persistence** - All messages saved to log file
 - ⚡ **Low resource usage** - Minimal memory and CPU
 
 ## Building
 
+**Dependencies:**
+- libssh (required for SSH support)
+
+**Install dependencies:**
+```bash
+# On macOS
+brew install libssh
+
+# On Ubuntu/Debian
+sudo apt-get install libssh-dev
+
+# On Fedora/RHEL
+sudo dnf install libssh-devel
+```
+
+**Build:**
 ```bash
 make
 ```
@@ -36,8 +53,10 @@ make debug
 
 Connect from another terminal:
 ```bash
-telnet localhost 2222
+ssh -p 2222 localhost
 ```
+
+The server will prompt for a password (any password is accepted) and then ask for your username.
 
 ## Usage
 
@@ -78,10 +97,11 @@ telnet localhost 2222
 
 ## Architecture
 
-- **Network**: Multi-threaded TCP server
-- **TUI**: ANSI escape sequences
+- **Network**: Multi-threaded SSH server using libssh
+- **TUI**: ANSI escape sequences with automatic terminal size detection
 - **Storage**: Append-only log file
 - **Concurrency**: pthread + rwlock
+- **Security**: Encrypted SSH connections with host key authentication
 
 ## Configuration
 
@@ -98,6 +118,16 @@ PORT=3333 ./tnt
 - Thread-safe operations
 - Proper UTF-8 handling for CJK characters
 - Box-drawing characters for UI
+- SSH protocol with PTY support for terminal size detection
+- Dynamic window resize handling
+
+## Security
+
+- **Encrypted connections**: All traffic is encrypted via SSH
+- **Host key authentication**: RSA host key generated on first run
+- **Password authentication**: Currently accepts any password (customize for production)
+- **Host key persistence**: Stored in `host_key` file
+- **No plaintext**: Unlike telnet, all data is encrypted in transit
 
 ## License
 

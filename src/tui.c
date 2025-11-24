@@ -6,9 +6,10 @@
 #include <unistd.h>
 
 /* Clear the screen */
-void tui_clear_screen(int fd) {
+void tui_clear_screen(client_t *client) {
+    if (!client || !client->connected) return;
     const char *clear = ANSI_CLEAR ANSI_HOME;
-    write(fd, clear, strlen(clear));
+    client_send(client, clear, strlen(clear));
 }
 
 /* Render the main screen */

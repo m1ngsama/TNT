@@ -3,10 +3,14 @@
 
 #include "common.h"
 #include "chat_room.h"
+#include <libssh/libssh.h>
+#include <libssh/server.h>
 
 /* Client connection structure */
 typedef struct client {
-    int fd;                          /* Socket file descriptor */
+    int fd;                          /* Socket file descriptor (not used with SSH) */
+    ssh_session session;             /* SSH session */
+    ssh_channel channel;             /* SSH channel */
     char username[MAX_USERNAME_LEN];
     int width;
     int height;

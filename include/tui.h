@@ -20,7 +20,7 @@ void tui_render_command_output(struct client *client);
 void tui_render_input(struct client *client, const char *input);
 
 /* Clear the screen */
-void tui_clear_screen(int fd);
+void tui_clear_screen(struct client *client);
 
 /* Get help text based on language */
 const char* tui_get_help_text(help_lang_t lang);

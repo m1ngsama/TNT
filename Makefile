@@ -3,8 +3,17 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c11 -D_XOPEN_SOURCE=700
-LDFLAGS = -pthread
+LDFLAGS = -pthread -lssh
 INCLUDES = -Iinclude
+
+# Detect libssh location (homebrew on macOS)
+ifeq ($(shell uname), Darwin)
+    LIBSSH_PREFIX := $(shell brew --prefix libssh 2>/dev/null)
+    ifneq ($(LIBSSH_PREFIX),)
+        INCLUDES += -I$(LIBSSH_PREFIX)/include
+        LDFLAGS += -L$(LIBSSH_PREFIX)/lib
+    endif
+endif
 
 SRC_DIR = src
 INC_DIR = include
