@@ -68,6 +68,39 @@ int client_send(client_t *client, const char *data, size_t len) {
     return (sent < 0) ? -1 : 0;
 }
 
+/* Increment client reference count - currently unused but kept for future use */
+static void client_addref(client_t *client) __attribute__((unused));
+static void client_addref(client_t *client) {
+    if (!client) return;
+    pthread_mutex_lock(&client->ref_lock);
+    client->ref_count++;
+    pthread_mutex_unlock(&client->ref_lock);
+}
+
+/* Decrement client reference count and free if zero */
+static void client_release(client_t *client) {
+    if (!client) return;
+
+    pthread_mutex_lock(&client->ref_lock);
+    client->ref_count--;
+    int count = client->ref_count;
+    pthread_mutex_unlock(&client->ref_lock);
+
+    if (count == 0) {
+        /* Safe to free now */
+        if (client->channel) {
+            ssh_channel_close(client->channel);
+            ssh_channel_free(client->channel);
+        }
+        if (client->session) {
+            ssh_disconnect(client->session);
+            ssh_free(client->session);
+        }
+        pthread_mutex_destroy(&client->ref_lock);
+        free(client);
+    }
+}
+
 /* Send formatted string to client */
 int client_printf(client_t *client, const char *fmt, ...) {
     char buffer[2048];
@@ -88,7 +121,16 @@ static int read_username(client_t *client) {
     client_printf(client, "请输入用户名: ");
 
     while (1) {
-        int n = ssh_channel_read(client->channel, buf, 1, 0);
+        int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 60000); /* 60 sec timeout */
+
+        if (n == SSH_AGAIN) {
+            /* Timeout */
+            if (!ssh_channel_is_open(client->channel)) {
+                return -1;
+            }
+            continue;
+        }
+
         if (n <= 0) return -1;
 
         unsigned char b = buf[0];
@@ -115,7 +157,11 @@ static int read_username(client_t *client) {
             int len = utf8_byte_length(b);
             buf[0] = b;
             if (len > 1) {
-                ssh_channel_read(client->channel, &buf[1], len - 1, 0);
+                int read_bytes = ssh_channel_read(client->channel, &buf[1], len - 1, 0);
+                if (read_bytes != len - 1) {
+                    /* Incomplete UTF-8 */
+                    continue;
+                }
             }
             if (pos + len < MAX_USERNAME_LEN - 1) {
                 memcpy(username + pos, buf, len);
@@ -216,8 +262,8 @@ static void execute_command(client_t *client) {
     tui_render_command_output(client);
 }
 
-/* Handle client key press */
-static void handle_key(client_t *client, unsigned char key, char *input) {
+/* Handle client key press - returns true if key was consumed */
+static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Handle help screen */
     if (client->show_help) {
         if (key == 'q' || key == 27) {
@@ -244,7 +290,7 @@ static void handle_key(client_t *client, unsigned char key, char *input) {
             client->help_scroll_pos = 999;  /* Large number */
             tui_render_help(client);
         }
-        return;
+        return true;  /* Key consumed */
     }
 
     /* Handle command output display */
@@ -252,7 +298,7 @@ static void handle_key(client_t *client, unsigned char key, char *input) {
         client->command_output[0] = '\0';
         client->mode = MODE_NORMAL;
         tui_render_screen(client);
-        return;
+        return true;  /* Key consumed */
     }
 
     /* Mode-specific handling */
@@ -262,6 +308,7 @@ static void handle_key(client_t *client, unsigned char key, char *input) {
                 client->mode = MODE_NORMAL;
                 client->scroll_pos = 0;
                 tui_render_screen(client);
+                return true;  /* Key consumed */
             } else if (key == '\r') {  /* Enter */
                 if (input[0] != '\0') {
                     message_t msg = {
@@ -274,11 +321,13 @@ static void handle_key(client_t *client, unsigned char key, char *input) {
                     input[0] = '\0';
                 }
                 tui_render_screen(client);
+                return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */
                 if (input[0] != '\0') {
                     utf8_remove_last_char(input);
                     tui_render_input(client, input);
                 }
+                return true;  /* Key consumed */
             }
             break;
 
@@ -286,30 +335,37 @@ static void handle_key(client_t *client, unsigned char key, char *input) {
             if (key == 'i') {
                 client->mode = MODE_INSERT;
                 tui_render_screen(client);
+                return true;  /* Key consumed */
             } else if (key == ':') {
                 client->mode = MODE_COMMAND;
                 client->command_input[0] = '\0';
                 tui_render_screen(client);
+                return true;  /* Key consumed - prevents double colon */
             } else if (key == 'j') {
                 int max_scroll = room_get_message_count(g_room) - 1;
                 if (client->scroll_pos < max_scroll) {
                     client->scroll_pos++;
                     tui_render_screen(client);
                 }
+                return true;  /* Key consumed */
             } else if (key == 'k' && client->scroll_pos > 0) {
                 client->scroll_pos--;
                 tui_render_screen(client);
+                return true;  /* Key consumed */
             } else if (key == 'g') {
                 client->scroll_pos = 0;
                 tui_render_screen(client);
+                return true;  /* Key consumed */
             } else if (key == 'G') {
                 client->scroll_pos = room_get_message_count(g_room) - 1;
                 if (client->scroll_pos < 0) client->scroll_pos = 0;
                 tui_render_screen(client);
+                return true;  /* Key consumed */
             } else if (key == '?') {
                 client->show_help = true;
                 client->help_scroll_pos = 0;
                 tui_render_help(client);
+                return true;  /* Key consumed */
             }
             break;
 
@@ -318,19 +374,24 @@ static void handle_key(client_t *client, unsigned char key, char *input) {
                 client->mode = MODE_NORMAL;
                 client->command_input[0] = '\0';
                 tui_render_screen(client);
+                return true;  /* Key consumed */
             } else if (key == '\r' || key == '\n') {
                 execute_command(client);
+                return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */
                 if (client->command_input[0] != '\0') {
                     utf8_remove_last_char(client->command_input);
                     tui_render_screen(client);
                 }
+                return true;  /* Key consumed */
             }
             break;
 
         default:
             break;
     }
+
+    return false;  /* Key not consumed */
 }
 
 /* Handle client session */
@@ -368,48 +429,73 @@ void* client_handle_session(void *arg) {
 
     /* Main input loop */
     while (client->connected && ssh_channel_is_open(client->channel)) {
-        int n = ssh_channel_read(client->channel, buf, 1, 0);
-        if (n <= 0) break;
+        /* Use non-blocking read with timeout */
+        int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 30000); /* 30 sec timeout */
+
+        if (n == SSH_AGAIN) {
+            /* Timeout - check if channel is still alive */
+            if (!ssh_channel_is_open(client->channel)) {
+                break;
+            }
+            continue;
+        }
+
+        if (n == SSH_ERROR) {
+            /* Read error - connection likely closed */
+            break;
+        }
+
+        if (n <= 0) {
+            /* EOF or error */
+            break;
+        }
 
         unsigned char b = buf[0];
 
         /* Ctrl+C */
         if (b == 3) break;
 
-        /* Handle special keys */
-        handle_key(client, b, input);
+        /* Handle special keys - returns true if key was consumed */
+        bool key_consumed = handle_key(client, b, input);
 
-        /* Add character to input (INSERT mode only) */
-        if (client->mode == MODE_INSERT && !client->show_help &&
-            client->command_output[0] == '\0') {
-            if (b >= 32 && b < 127) {  /* ASCII printable */
-                int len = strlen(input);
-                if (len < MAX_MESSAGE_LEN - 1) {
-                    input[len] = b;
-                    input[len + 1] = '\0';
-                    tui_render_input(client, input);
+        /* Only add character to input if not consumed by handle_key */
+        if (!key_consumed) {
+            /* Add character to input (INSERT mode only) */
+            if (client->mode == MODE_INSERT && !client->show_help &&
+                client->command_output[0] == '\0') {
+                if (b >= 32 && b < 127) {  /* ASCII printable */
+                    int len = strlen(input);
+                    if (len < MAX_MESSAGE_LEN - 1) {
+                        input[len] = b;
+                        input[len + 1] = '\0';
+                        tui_render_input(client, input);
+                    }
+                } else if (b >= 128) {  /* UTF-8 multi-byte */
+                    int char_len = utf8_byte_length(b);
+                    buf[0] = b;
+                    if (char_len > 1) {
+                        int read_bytes = ssh_channel_read(client->channel, &buf[1], char_len - 1, 0);
+                        if (read_bytes != char_len - 1) {
+                            /* Incomplete UTF-8 sequence */
+                            continue;
+                        }
+                    }
+                    int len = strlen(input);
+                    if (len + char_len < MAX_MESSAGE_LEN - 1) {
+                        memcpy(input + len, buf, char_len);
+                        input[len + char_len] = '\0';
+                        tui_render_input(client, input);
+                    }
                 }
-            } else if (b >= 128) {  /* UTF-8 multi-byte */
-                int char_len = utf8_byte_length(b);
-                buf[0] = b;
-                if (char_len > 1) {
-                    ssh_channel_read(client->channel, &buf[1], char_len - 1, 0);
-                }
-                int len = strlen(input);
-                if (len + char_len < MAX_MESSAGE_LEN - 1) {
-                    memcpy(input + len, buf, char_len);
-                    input[len + char_len] = '\0';
-                    tui_render_input(client, input);
-                }
-            }
-        } else if (client->mode == MODE_COMMAND && !client->show_help &&
-                   client->command_output[0] == '\0') {
-            if (b >= 32 && b < 127) {  /* ASCII printable */
-                int len = strlen(client->command_input);
-                if (len < sizeof(client->command_input) - 1) {
-                    client->command_input[len] = b;
-                    client->command_input[len + 1] = '\0';
-                    tui_render_screen(client);
+            } else if (client->mode == MODE_COMMAND && !client->show_help &&
+                       client->command_output[0] == '\0') {
+                if (b >= 32 && b < 127) {  /* ASCII printable */
+                    size_t len = strlen(client->command_input);
+                    if (len < sizeof(client->command_input) - 1) {
+                        client->command_input[len] = b;
+                        client->command_input[len + 1] = '\0';
+                        tui_render_screen(client);
+                    }
                 }
             }
         }
@@ -429,15 +515,8 @@ cleanup:
         room_broadcast(g_room, &leave_msg);
     }
 
-    if (client->channel) {
-        ssh_channel_close(client->channel);
-        ssh_channel_free(client->channel);
-    }
-    if (client->session) {
-        ssh_disconnect(client->session);
-        ssh_free(client->session);
-    }
-    free(client);
+    /* Release the main reference - client will be freed when all refs are gone */
+    client_release(client);
 
     return NULL;
 }
@@ -498,6 +577,8 @@ static ssh_channel handle_channel_open(ssh_session session) {
 /* Handle PTY request and get terminal size */
 static int handle_pty_request(ssh_channel channel, client_t *client) {
     ssh_message message;
+    int pty_received = 0;
+    int shell_received = 0;
 
     do {
         message = ssh_message_get(ssh_channel_get_session(channel));
@@ -515,24 +596,29 @@ static int handle_pty_request(ssh_channel channel, client_t *client) {
 
                 ssh_message_channel_request_reply_success(message);
                 ssh_message_free(message);
-                return 0;
+                pty_received = 1;
+
+                /* Don't return yet, wait for shell request */
+                if (shell_received) {
+                    return 0;
+                }
+                continue;
+
             } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_SHELL) {
                 ssh_message_channel_request_reply_success(message);
                 ssh_message_free(message);
-                return 0;
-            } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_WINDOW_CHANGE) {
-                /* Handle terminal resize */
-                client->width = ssh_message_channel_request_pty_width(message);
-                client->height = ssh_message_channel_request_pty_height(message);
+                shell_received = 1;
 
-                if (client->width <= 0 || client->width > 500) client->width = 80;
-                if (client->height <= 0 || client->height > 200) client->height = 24;
-
-                /* Re-render screen with new dimensions */
-                if (client->connected) {
-                    tui_render_screen(client);
+                /* If we got PTY, we're done */
+                if (pty_received) {
+                    return 0;
                 }
+                continue;
 
+            } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_WINDOW_CHANGE) {
+                /* Handle terminal resize - this should be handled during session, not here */
+                /* For now, just acknowledge and ignore during init */
+                ssh_message_channel_request_reply_success(message);
                 ssh_message_free(message);
                 continue;
             }
@@ -540,9 +626,9 @@ static int handle_pty_request(ssh_channel channel, client_t *client) {
 
         ssh_message_reply_default(message);
         ssh_message_free(message);
-    } while (1);
+    } while (!pty_received || !shell_received);
 
-    return -1;
+    return (pty_received && shell_received) ? 0 : -1;
 }
 
 /* Initialize SSH server */
@@ -635,6 +721,8 @@ int ssh_server_start(int unused) {
         client->session = session;
         client->channel = channel;
         client->fd = -1;  /* Not used with SSH */
+        client->ref_count = 1;  /* Initial reference */
+        pthread_mutex_init(&client->ref_lock, NULL);
 
         /* Handle PTY request and get terminal size */
         if (handle_pty_request(channel, client) < 0) {
