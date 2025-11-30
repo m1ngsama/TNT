@@ -81,10 +81,17 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
     /* Add to history */
     room_add_message(room, msg);
 
-    /* Get copy of client list for iteration */
+    /* Get copy of client list and increment ref counts */
     client_t **clients_copy = calloc(room->client_count, sizeof(client_t*));
     int count = room->client_count;
     memcpy(clients_copy, room->clients, count * sizeof(client_t*));
+
+    /* Increment reference count for each client */
+    for (int i = 0; i < count; i++) {
+        pthread_mutex_lock(&clients_copy[i]->ref_lock);
+        clients_copy[i]->ref_count++;
+        pthread_mutex_unlock(&clients_copy[i]->ref_lock);
+    }
 
     pthread_rwlock_unlock(&room->lock);
 
@@ -94,6 +101,26 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
         if (client->connected && !client->show_help &&
             client->command_output[0] == '\0') {
             tui_render_screen(client);
+        }
+
+        /* Decrement reference count and free if needed */
+        pthread_mutex_lock(&client->ref_lock);
+        client->ref_count--;
+        int ref = client->ref_count;
+        pthread_mutex_unlock(&client->ref_lock);
+
+        if (ref == 0) {
+            /* Safe to free now */
+            if (client->channel) {
+                ssh_channel_close(client->channel);
+                ssh_channel_free(client->channel);
+            }
+            if (client->session) {
+                ssh_disconnect(client->session);
+                ssh_free(client->session);
+            }
+            pthread_mutex_destroy(&client->ref_lock);
+            free(client);
         }
     }
 
