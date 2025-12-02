@@ -45,6 +45,17 @@ For debug build:
 make debug
 ```
 
+## Installation
+
+**Quick install (recommended):**
+```bash
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+```
+
+**Or download from [releases](https://github.com/m1ngsama/TNT/releases)**
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for production setup.
+
 ## Running
 
 ```bash

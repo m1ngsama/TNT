@@ -1,0 +1,25 @@
+[Unit]
+Description=TNT Chat Server
+After=network.target
+
+[Service]
+Type=simple
+User=tnt
+Group=tnt
+WorkingDirectory=/var/lib/tnt
+ExecStart=/usr/local/bin/tnt
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tnt
+
+# Environment
+Environment="PORT=2222"
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-amd64
+            artifact: tnt-linux-amd64
+          - os: ubuntu-latest
+            target: linux-arm64
+            artifact: tnt-linux-arm64
+          - os: macos-latest
+            target: darwin-amd64
+            artifact: tnt-darwin-amd64
+          - os: macos-latest
+            target: darwin-arm64
+            artifact: tnt-darwin-arm64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libssh-dev
+
+    - name: Install cross-compilation tools (Ubuntu ARM64)
+      if: matrix.target == 'linux-arm64'
+      run: |
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+        sudo dpkg --add-architecture arm64
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install libssh
+
+    - name: Build release binary
+      run: make release
+
+    - name: Rename binary
+      run: mv tnt ${{ matrix.artifact }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact }}
+        path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: Create checksums
+      run: |
+        cd artifacts
+        for dir in */; do
+          cd "$dir"
+          sha256sum * > checksums.txt
+          cd ..
+        done
+        cd ..
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/*/tnt-*
+          artifacts/*/checksums.txt
+        body: |
+          ## Installation
+
+          Download the binary for your platform:
+
+          **Linux AMD64:**
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-amd64
+          chmod +x tnt-linux-amd64
+          sudo mv tnt-linux-amd64 /usr/local/bin/tnt
+          ```
+
+          **Linux ARM64:**
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-arm64
+          chmod +x tnt-linux-arm64
+          sudo mv tnt-linux-arm64 /usr/local/bin/tnt
+          ```
+
+          **macOS Intel:**
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-amd64
+          chmod +x tnt-darwin-amd64
+          sudo mv tnt-darwin-amd64 /usr/local/bin/tnt
+          ```
+
+          **macOS Apple Silicon:**
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-arm64
+          chmod +x tnt-darwin-arm64
+          sudo mv tnt-darwin-arm64 /usr/local/bin/tnt
+          ```
+
+          **Verify checksums:**
+          ```bash
+          sha256sum -c checksums.txt
+          ```
+
+          ## What's Changed
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md)
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
