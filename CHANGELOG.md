@@ -1,5 +1,29 @@
 # Changelog
 
+## 2025-12-02 - Stability & Testing Update
+
+### Fixed
+- Double colon bug in vim command mode (`:` key consumed properly)
+- strtok data corruption in command output rendering
+- Use-after-free race condition (added reference counting)
+- SSH read blocking issues (added timeouts)
+- PTY request infinite loop
+- Message history memory waste (optimized loading)
+
+### Added
+- Reference counting for thread-safe client cleanup
+- SSH read timeout (30s) and error handling
+- UTF-8 incomplete sequence detection
+- AddressSanitizer build target (`make asan`)
+- Basic functional tests (`test_basic.sh`)
+- Stress testing script (`test_stress.sh`)
+- Static analysis target (`make check`)
+- Developer documentation (HACKING)
+
+### Changed
+- Improved error handling throughout
+- Better memory management in message loading
+
 ## 2025
 - Ongoing development and improvements
 - Bug fixes and optimizations
