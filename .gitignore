@@ -6,3 +6,5 @@ host_key
 host_key.pub
 *.swp
 .DS_Store
+test.log
+*.dSYM/
