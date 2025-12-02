@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libssh-dev
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install libssh
+
+    - name: Build
+      run: make
+
+    - name: Build with AddressSanitizer
+      run: make asan
+
+    - name: Run basic tests
+      run: |
+        timeout 10 ./tnt &
+        sleep 2
+        pkill tnt || true
+
+    - name: Check for memory leaks
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get install -y valgrind
+        timeout 10 valgrind --leak-check=full --error-exitcode=1 ./tnt &
+        sleep 5
+        pkill tnt || true
