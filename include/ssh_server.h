@@ -23,6 +23,8 @@ typedef struct client {
     char command_output[2048];
     pthread_t thread;
     bool connected;
+    int ref_count;                   /* Reference count for safe cleanup */
+    pthread_mutex_t ref_lock;        /* Lock for ref_count */
 } client_t;
 
 /* Initialize SSH server */

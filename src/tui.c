@@ -169,8 +169,12 @@ void tui_render_command_output(client_t *client) {
     }
     pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
 
-    /* Command output */
-    char *line = strtok(client->command_output, "\n");
+    /* Command output - use a copy to avoid strtok corruption */
+    char output_copy[2048];
+    strncpy(output_copy, client->command_output, sizeof(output_copy) - 1);
+    output_copy[sizeof(output_copy) - 1] = '\0';
+
+    char *line = strtok(output_copy, "\n");
     int line_count = 0;
     int max_lines = client->height - 2;
 
