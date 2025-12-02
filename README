@@ -1,0 +1,98 @@
+TNT(1)                      User Commands                      TNT(1)
+
+NAME
+     tnt - terminal chat server with vim-style interface
+
+SYNOPSIS
+     tnt [-p port] [-h]
+
+DESCRIPTION
+     TNT (TNT's Not Tunnel) is a lightweight SSH chat server.
+     Supports vim-style navigation and message history browsing.
+
+INSTALLATION
+     curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+
+     Or download binary from:
+     https://github.com/m1ngsama/TNT/releases
+
+USAGE
+     Start server:
+         tnt                    # Listen on port 2222
+         tnt -p 3333           # Listen on port 3333
+         PORT=3333 tnt         # Same as above
+
+     Connect as client:
+         ssh -p 2222 localhost
+
+OPTIONS
+     -p port    Listen on specified port (default: 2222)
+     -h         Display help message
+
+MODES
+     INSERT     Type and send messages (default mode)
+                ESC         Switch to NORMAL mode
+                Enter       Send message
+                Backspace   Delete character
+
+     NORMAL     Browse message history
+                i           Return to INSERT mode
+                :           Enter COMMAND mode
+                j/k         Scroll down/up
+                g/G         Jump to top/bottom
+                ?           Show help
+
+     COMMAND    Execute commands
+                :list       List online users
+                :help       Show available commands
+                ESC         Return to NORMAL mode
+
+ENVIRONMENT
+     PORT       Server port (default: 2222)
+
+FILES
+     messages.log    Message history (append-only)
+     host_key        SSH host key (auto-generated)
+
+EXAMPLES
+     Start server on port 3000:
+         PORT=3000 tnt
+
+     Connect and set username:
+         ssh -p 2222 localhost
+         # Enter username when prompted
+
+     Production deployment with systemd:
+         sudo cp tnt.service /etc/systemd/system/
+         sudo systemctl enable --now tnt
+
+DIAGNOSTICS
+     Build with debug symbols:
+         make debug
+
+     Check for memory leaks:
+         make asan
+         ASAN_OPTIONS=detect_leaks=1 ./tnt
+
+     Run tests:
+         ./test_basic.sh
+         ./test_stress.sh 50 120
+
+BUGS
+     Report bugs at: https://github.com/m1ngsama/TNT/issues
+
+SEE ALSO
+     ssh(1), sshd(8)
+
+     Project documentation:
+         HACKING         Developer guide
+         DEPLOYMENT.md   Production setup
+         CICD.md         CI/CD workflow
+
+AUTHOR
+     Written by m1ng.
+
+LICENSE
+     MIT License. See LICENSE file for details.
+
+TNT 1.0                       December 2025                      TNT(1)
