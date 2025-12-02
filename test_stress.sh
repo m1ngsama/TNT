@@ -1,0 +1,38 @@
+#!/bin/sh
+# Stress test for TNT server
+# Usage: ./test_stress.sh [num_clients]
+
+PORT=${PORT:-2222}
+CLIENTS=${1:-10}
+DURATION=${2:-30}
+
+echo "Starting TNT server on port $PORT..."
+./tnt -p $PORT &
+SERVER_PID=$!
+sleep 2
+
+if ! kill -0 $SERVER_PID 2>/dev/null; then
+    echo "Server failed to start"
+    exit 1
+fi
+
+echo "Spawning $CLIENTS clients for ${DURATION}s..."
+
+for i in $(seq 1 $CLIENTS); do
+    (
+        sleep $((i % 5))
+        echo "test user $i" | timeout $DURATION ssh -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null -p $PORT localhost \
+            >/dev/null 2>&1
+    ) &
+done
+
+echo "Running stress test..."
+sleep $DURATION
+
+echo "Cleaning up..."
+kill $SERVER_PID 2>/dev/null
+wait
+
+echo "Stress test complete"
+ps aux | grep tnt | grep -v grep && echo "WARNING: tnt process still running"

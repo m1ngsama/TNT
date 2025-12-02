@@ -23,7 +23,7 @@ SOURCES = $(wildcard $(SRC_DIR)/*.c)
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 TARGET = tnt
 
-.PHONY: all clean install uninstall
+.PHONY: all clean install uninstall debug release asan valgrind check info
 
 all: $(TARGET)
 
@@ -55,6 +55,19 @@ debug: clean $(TARGET)
 release: CFLAGS += -O3 -DNDEBUG
 release: clean $(TARGET)
 	strip $(TARGET)
+
+asan: CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
+asan: LDFLAGS += -fsanitize=address
+asan: clean $(TARGET)
+	@echo "AddressSanitizer build complete. Run with: ASAN_OPTIONS=detect_leaks=1 ./tnt"
+
+valgrind: debug
+	@echo "Run: valgrind --leak-check=full --track-origins=yes ./tnt"
+
+# Static analysis
+check:
+	@command -v cppcheck >/dev/null 2>&1 && cppcheck --enable=warning,performance --quiet src/ || echo "cppcheck not installed"
+	@command -v clang-tidy >/dev/null 2>&1 && clang-tidy src/*.c -- -Iinclude $(INCLUDES) || echo "clang-tidy not installed"
 
 # Show build info
 info:
