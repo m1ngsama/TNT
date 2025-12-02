@@ -121,6 +121,18 @@ PORT=3333 ./tnt
 - SSH protocol with PTY support for terminal size detection
 - Dynamic window resize handling
 
+## Development
+
+```bash
+make debug        # Build with debug symbols
+make asan         # Build with AddressSanitizer
+make check        # Run static analysis
+./test_basic.sh   # Run basic tests
+./test_stress.sh  # Run stress test
+```
+
+See [HACKING](HACKING) for development details.
+
 ## Security
 
 - **Encrypted connections**: All traffic is encrypted via SSH
