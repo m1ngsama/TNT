@@ -25,19 +25,35 @@ int message_load(message_t **messages, int max_messages) {
 
     char line[2048];
     int count = 0;
-    int total = 0;
 
-    /* Read all messages first to get total count */
-    message_t *temp_array = calloc(max_messages * 10, sizeof(message_t));
-    if (!temp_array) {
-        *messages = msg_array;  /* Set the allocated array even on error */
-        fclose(fp);
-        return 0;
+    /* Use a ring buffer approach - keep only last max_messages */
+    /* First, count total lines and seek to appropriate position */
+    long file_pos[1000];  /* Track positions of last 1000 lines */
+    int line_count = 0;
+    int start_index = 0;
+
+    /* Record file positions */
+    while (fgets(line, sizeof(line), fp) && line_count < 1000) {
+        file_pos[line_count++] = ftell(fp) - strlen(line);
     }
 
-    while (fgets(line, sizeof(line), fp) && total < max_messages * 10) {
+    /* Determine where to start reading */
+    if (line_count > max_messages) {
+        start_index = line_count - max_messages;
+        fseek(fp, file_pos[start_index], SEEK_SET);
+    } else {
+        fseek(fp, 0, SEEK_SET);
+        start_index = 0;
+    }
+
+    /* Now read the messages */
+    while (fgets(line, sizeof(line), fp) && count < max_messages) {
         /* Format: RFC3339_timestamp|username|content */
-        char *timestamp_str = strtok(line, "|");
+        char line_copy[2048];
+        strncpy(line_copy, line, sizeof(line_copy) - 1);
+        line_copy[sizeof(line_copy) - 1] = '\0';
+
+        char *timestamp_str = strtok(line_copy, "|");
         char *username = strtok(NULL, "|");
         char *content = strtok(NULL, "\n");
 
@@ -52,23 +68,13 @@ int message_load(message_t **messages, int max_messages) {
             continue;
         }
 
-        temp_array[total].timestamp = mktime(&tm);
-        strncpy(temp_array[total].username, username, MAX_USERNAME_LEN - 1);
-        strncpy(temp_array[total].content, content, MAX_MESSAGE_LEN - 1);
-        total++;
+        msg_array[count].timestamp = mktime(&tm);
+        strncpy(msg_array[count].username, username, MAX_USERNAME_LEN - 1);
+        strncpy(msg_array[count].content, content, MAX_MESSAGE_LEN - 1);
+        count++;
     }
 
     fclose(fp);
-
-    /* Keep only the last max_messages */
-    int start = (total > max_messages) ? (total - max_messages) : 0;
-    count = total - start;
-
-    for (int i = 0; i < count; i++) {
-        msg_array[i] = temp_array[start + i];
-    }
-
-    free(temp_array);
     *messages = msg_array;
     return count;
 }
