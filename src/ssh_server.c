@@ -6,6 +6,7 @@
 #include <libssh/callbacks.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -649,8 +650,8 @@ int ssh_server_init(int port) {
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_BINDPORT, &port);
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_BINDADDR, "0.0.0.0");
 
-    /* Set verbose level for debugging */
-    int verbosity = SSH_LOG_WARNING;
+    /* Set verbose level - use NOLOG to reduce overhead and log spam */
+    int verbosity = SSH_LOG_NOLOG;
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_LOG_VERBOSITY, &verbosity);
 
     if (ssh_bind_listen(g_sshbind) < 0) {
@@ -676,6 +677,14 @@ int ssh_server_start(int unused) {
             continue;
         }
 
+        /* Configure session timeouts and options */
+        long timeout = 10;  /* 10 second timeout for network operations */
+        ssh_options_set(session, SSH_OPTIONS_TIMEOUT, &timeout);
+
+        /* Disable compression to reduce CPU overhead */
+        int no_compression = 0;
+        ssh_options_set(session, SSH_OPTIONS_COMPRESSION, &no_compression);
+
         /* Accept connection */
         if (ssh_bind_accept(g_sshbind, session) != SSH_OK) {
             fprintf(stderr, "Error accepting connection: %s\n", ssh_get_error(g_sshbind));
@@ -683,9 +692,26 @@ int ssh_server_start(int unused) {
             continue;
         }
 
-        /* Perform key exchange */
+        /* Enable TCP keepalive on the accepted socket */
+        int sock = ssh_get_fd(session);
+        if (sock >= 0) {
+            int optval = 1;
+            setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval));
+
+            /* Set keepalive parameters (Linux-specific) */
+            #ifdef __linux__
+            int keepidle = 60;   /* Start probes after 60 seconds of idle */
+            int keepintvl = 10;  /* Send probe every 10 seconds */
+            int keepcnt = 3;     /* Drop after 3 failed probes */
+            setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepidle, sizeof(keepidle));
+            setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepintvl, sizeof(keepintvl));
+            setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepcnt, sizeof(keepcnt));
+            #endif
+        }
+
+        /* Perform key exchange with timeout protection */
         if (ssh_handle_key_exchange(session) != SSH_OK) {
-            fprintf(stderr, "Key exchange failed: %s\n", ssh_get_error(session));
+            /* Don't log every failed key exchange to reduce spam */
             ssh_disconnect(session);
             ssh_free(session);
             continue;
