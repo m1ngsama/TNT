@@ -20,6 +20,8 @@ PORT=3333 tnt    # env var
 
 Connect: `ssh -p 2222 localhost`
 
+**Anonymous Access**: By default, users can connect with ANY username and ANY password (or empty password). No SSH keys required. This makes TNT perfect for public chat servers.
+
 ## Security
 
 Configure via environment variables.
@@ -101,6 +103,7 @@ tnt.service       systemd unit
 ## Docs
 
 - `README` - man page style
+- `EASY_SETUP.md` - 🚀 **快速部署指南 / Quick Setup Guide**
 - `HACKING` - dev guide
 - `DEPLOYMENT.md` - production
 - `CICD.md` - automation
