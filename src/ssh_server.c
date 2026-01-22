@@ -23,12 +23,29 @@ static int setup_host_key(ssh_bind sshbind) {
 
     /* Check if host key exists */
     if (stat(HOST_KEY_FILE, &st) == 0) {
-        /* Load existing key */
-        if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, HOST_KEY_FILE) < 0) {
-            fprintf(stderr, "Failed to load host key: %s\n", ssh_get_error(sshbind));
+        /* Validate file size */
+        if (st.st_size == 0) {
+            fprintf(stderr, "Warning: Empty key file, regenerating...\n");
+            unlink(HOST_KEY_FILE);
+            /* Fall through to generate new key */
+        } else if (st.st_size > 10 * 1024 * 1024) {
+            /* Sanity check: key file shouldn't be > 10MB */
+            fprintf(stderr, "Error: Key file too large (%lld bytes)\n", (long long)st.st_size);
             return -1;
+        } else {
+            /* Verify and fix permissions */
+            if ((st.st_mode & 0077) != 0) {
+                fprintf(stderr, "Warning: Fixing insecure key file permissions\n");
+                chmod(HOST_KEY_FILE, 0600);
+            }
+
+            /* Load existing key */
+            if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, HOST_KEY_FILE) < 0) {
+                fprintf(stderr, "Failed to load host key: %s\n", ssh_get_error(sshbind));
+                return -1;
+            }
+            return 0;
         }
-        return 0;
     }
 
     /* Generate new key */
@@ -733,7 +750,17 @@ int ssh_server_start(int unused) {
 
         /* Create thread for client */
         pthread_t thread;
-        if (pthread_create(&thread, NULL, client_handle_session, client) != 0) {
+        pthread_attr_t attr;
+
+        /* Initialize thread attributes for detached thread */
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+        if (pthread_create(&thread, &attr, client_handle_session, client) != 0) {
+            fprintf(stderr, "Thread creation failed: %s\n", strerror(errno));
+            pthread_attr_destroy(&attr);
+            /* Clean up all resources */
+            pthread_mutex_destroy(&client->ref_lock);
             ssh_channel_close(channel);
             ssh_channel_free(channel);
             ssh_disconnect(session);
@@ -742,7 +769,7 @@ int ssh_server_start(int unused) {
             continue;
         }
 
-        pthread_detach(thread);
+        pthread_attr_destroy(&attr);
     }
 
     return 0;
