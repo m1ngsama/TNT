@@ -20,6 +20,35 @@ PORT=3333 tnt    # env var
 
 Connect: `ssh -p 2222 localhost`
 
+## Security
+
+Configure via environment variables.
+
+### Access Control
+
+```sh
+TNT_ACCESS_TOKEN="secret" tnt           # require password
+TNT_BIND_ADDR=127.0.0.1 tnt             # localhost only
+```
+
+Without `TNT_ACCESS_TOKEN`, server is open (default).
+
+### Rate Limiting
+
+```sh
+TNT_MAX_CONNECTIONS=100 tnt             # total limit
+TNT_MAX_CONN_PER_IP=10 tnt              # per-IP limit
+TNT_RATE_LIMIT=0 tnt                    # disable (testing only)
+```
+
+Default: 64 total, 5 per IP, rate limiting enabled.
+
+### SSH Options
+
+```sh
+TNT_SSH_LOG_LEVEL=3 tnt                 # verbose logging (0-4)
+```
+
 ## Keys
 
 **INSERT** (default)
