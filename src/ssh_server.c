@@ -32,24 +32,42 @@ static int setup_host_key(ssh_bind sshbind) {
     }
 
     /* Generate new key */
-    printf("Generating new RSA host key...\n");
+    printf("Generating new RSA 4096-bit host key...\n");
     ssh_key key;
-    if (ssh_pki_generate(SSH_KEYTYPE_RSA, 2048, &key) < 0) {
+    if (ssh_pki_generate(SSH_KEYTYPE_RSA, 4096, &key) < 0) {
         fprintf(stderr, "Failed to generate RSA key\n");
         return -1;
     }
 
-    /* Export key to file */
-    if (ssh_pki_export_privkey_file(key, NULL, NULL, NULL, HOST_KEY_FILE) < 0) {
+    /* Create temporary file with secure permissions (atomic operation) */
+    char temp_key_file[256];
+    snprintf(temp_key_file, sizeof(temp_key_file), "%s.tmp.%d", HOST_KEY_FILE, getpid());
+
+    /* Set umask to ensure restrictive permissions before file creation */
+    mode_t old_umask = umask(0077);
+
+    /* Export key to temporary file */
+    if (ssh_pki_export_privkey_file(key, NULL, NULL, NULL, temp_key_file) < 0) {
         fprintf(stderr, "Failed to export host key\n");
         ssh_key_free(key);
+        umask(old_umask);
         return -1;
     }
 
     ssh_key_free(key);
 
-    /* Set restrictive permissions */
-    chmod(HOST_KEY_FILE, 0600);
+    /* Restore original umask */
+    umask(old_umask);
+
+    /* Ensure restrictive permissions */
+    chmod(temp_key_file, 0600);
+
+    /* Atomically replace the old key file (if any) */
+    if (rename(temp_key_file, HOST_KEY_FILE) < 0) {
+        fprintf(stderr, "Failed to rename temporary key file\n");
+        unlink(temp_key_file);
+        return -1;
+    }
 
     /* Load the newly created key */
     if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, HOST_KEY_FILE) < 0) {
@@ -647,10 +665,23 @@ int ssh_server_init(int port) {
 
     /* Bind to port */
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_BINDPORT, &port);
-    ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_BINDADDR, "0.0.0.0");
 
-    /* Set verbose level for debugging */
+    /* Configurable bind address (default: 0.0.0.0) */
+    const char *bind_addr = getenv("TNT_BIND_ADDR");
+    if (!bind_addr) {
+        bind_addr = "0.0.0.0";
+    }
+    ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_BINDADDR, bind_addr);
+
+    /* Configurable SSH log level (default: SSH_LOG_WARNING=1) */
     int verbosity = SSH_LOG_WARNING;
+    const char *log_level_env = getenv("TNT_SSH_LOG_LEVEL");
+    if (log_level_env) {
+        int level = atoi(log_level_env);
+        if (level >= 0 && level <= 4) {
+            verbosity = level;
+        }
+    }
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_LOG_VERBOSITY, &verbosity);
 
     if (ssh_bind_listen(g_sshbind) < 0) {
