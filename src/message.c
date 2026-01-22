@@ -28,12 +28,33 @@ int message_load(message_t **messages, int max_messages) {
 
     /* Use a ring buffer approach - keep only last max_messages */
     /* First, count total lines and seek to appropriate position */
-    long file_pos[1000];  /* Track positions of last 1000 lines */
+    /* Use dynamic allocation to handle large log files */
+    long *file_pos = NULL;
+    int pos_capacity = 1000;
     int line_count = 0;
     int start_index = 0;
 
+    /* Allocate initial position array */
+    file_pos = malloc(pos_capacity * sizeof(long));
+    if (!file_pos) {
+        fclose(fp);
+        *messages = msg_array;
+        return 0;
+    }
+
     /* Record file positions */
-    while (fgets(line, sizeof(line), fp) && line_count < 1000) {
+    while (fgets(line, sizeof(line), fp)) {
+        /* Expand array if needed */
+        if (line_count >= pos_capacity) {
+            int new_capacity = pos_capacity * 2;
+            long *new_pos = realloc(file_pos, new_capacity * sizeof(long));
+            if (!new_pos) {
+                /* Out of memory, stop scanning */
+                break;
+            }
+            file_pos = new_pos;
+            pos_capacity = new_capacity;
+        }
         file_pos[line_count++] = ftell(fp) - strlen(line);
     }
 
@@ -100,6 +121,7 @@ int message_load(message_t **messages, int max_messages) {
         count++;
     }
 
+    free(file_pos);
     fclose(fp);
     *messages = msg_array;
     return count;
