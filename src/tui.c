@@ -19,10 +19,47 @@ void tui_render_screen(client_t *client) {
     char buffer[8192];
     int pos = 0;
 
+    /* Acquire all data in one lock to prevent TOCTOU */
     pthread_rwlock_rdlock(&g_room->lock);
     int online = g_room->client_count;
     int msg_count = g_room->message_count;
+
+    /* Calculate which messages to show */
+    int msg_height = client->height - 3;
+    if (msg_height < 1) msg_height = 1;
+
+    int start = 0;
+    if (client->mode == MODE_NORMAL) {
+        start = client->scroll_pos;
+        if (start > msg_count - msg_height) {
+            start = msg_count - msg_height;
+        }
+        if (start < 0) start = 0;
+    } else {
+        /* INSERT mode: show latest */
+        if (msg_count > msg_height) {
+            start = msg_count - msg_height;
+        }
+    }
+
+    int end = start + msg_height;
+    if (end > msg_count) end = msg_count;
+
+    /* Create snapshot of messages to display */
+    message_t *msg_snapshot = NULL;
+    int snapshot_count = end - start;
+
+    if (snapshot_count > 0) {
+        msg_snapshot = calloc(snapshot_count, sizeof(message_t));
+        if (msg_snapshot) {
+            memcpy(msg_snapshot, &g_room->messages[start],
+                   snapshot_count * sizeof(message_t));
+        }
+    }
+
     pthread_rwlock_unlock(&g_room->lock);
+
+    /* Now render using snapshot (no lock held) */
 
     /* Clear and move to top */
     pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_CLEAR ANSI_HOME);
@@ -47,40 +84,18 @@ void tui_render_screen(client_t *client) {
     }
     pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
 
-    /* Messages area */
-    int msg_height = client->height - 3;
-    if (msg_height < 1) msg_height = 1;
-
-    /* Calculate which messages to show */
-    int start = 0;
-    if (client->mode == MODE_NORMAL) {
-        start = client->scroll_pos;
-        if (start > msg_count - msg_height) {
-            start = msg_count - msg_height;
+    /* Render messages from snapshot */
+    if (msg_snapshot) {
+        for (int i = 0; i < snapshot_count; i++) {
+            char msg_line[1024];
+            message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), client->width);
+            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", msg_line);
         }
-        if (start < 0) start = 0;
-    } else {
-        /* INSERT mode: show latest */
-        if (msg_count > msg_height) {
-            start = msg_count - msg_height;
-        }
+        free(msg_snapshot);
     }
-
-    pthread_rwlock_rdlock(&g_room->lock);
-
-    int end = start + msg_height;
-    if (end > msg_count) end = msg_count;
-
-    for (int i = start; i < end; i++) {
-        char msg_line[1024];
-        message_format(&g_room->messages[i], msg_line, sizeof(msg_line), client->width);
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", msg_line);
-    }
-
-    pthread_rwlock_unlock(&g_room->lock);
 
     /* Fill empty lines */
-    for (int i = end - start; i < msg_height; i++) {
+    for (int i = snapshot_count; i < msg_height; i++) {
         buffer[pos++] = '\r';
         buffer[pos++] = '\n';
     }

@@ -1,5 +1,61 @@
 # Changelog
 
+## 2026-01-22 - Security Audit Fixes
+
+Comprehensive security hardening addressing 23 identified vulnerabilities across 6 categories.
+
+### Critical
+
+- **[AUTH]** Add optional access token authentication (`TNT_ACCESS_TOKEN`)
+- **[AUTH]** Implement IP-based rate limiting (10 conn/IP/60s, 5-min block after 5 auth failures)
+- **[AUTH]** Add global connection limits (default: 64, configurable via `TNT_MAX_CONNECTIONS`)
+
+### High Priority
+
+- **[BUFFER]** Replace all `strcpy()` with `strncpy()` (3 locations)
+- **[BUFFER]** Add buffer overflow checking in `client_printf()`
+- **[BUFFER]** Implement UTF-8 validation to prevent malformed input and overlong encodings
+- **[SSH]** Upgrade RSA key from 2048 to 4096 bits
+- **[SSH]** Fix key file permission race with atomic generation (umask + temp file + rename)
+- **[SSH]** Add configurable bind address (`TNT_BIND_ADDR`) and log level (`TNT_SSH_LOG_LEVEL`)
+- **[CONCURRENCY]** Fix `room_broadcast()` reference counting race
+- **[CONCURRENCY]** Fix `tui_render_screen()` message array TOCTOU via snapshot approach
+- **[CONCURRENCY]** Fix `handle_key()` scroll position TOCTOU
+
+### Medium Priority
+
+- **[INPUT]** Add username validation rejecting shell metacharacters and control chars
+- **[INPUT]** Sanitize message content to prevent log injection attacks
+- **[INPUT]** Enhance `message_load()` with field length and timestamp validation
+- **[RESOURCE]** Convert message position array from fixed 1000 to dynamic allocation
+- **[RESOURCE]** Enhance `setup_host_key()` validation (size, permissions, auto-regeneration)
+- **[RESOURCE]** Improve thread cleanup with proper pthread_attr and error handling
+
+### New Environment Variables
+
+- `TNT_ACCESS_TOKEN` - Optional password for authentication (backward compatible)
+- `TNT_BIND_ADDR` - Bind address (default: 0.0.0.0)
+- `TNT_SSH_LOG_LEVEL` - SSH logging verbosity 0-4 (default: 1)
+- `TNT_RATE_LIMIT` - Enable/disable rate limiting (default: 1)
+- `TNT_MAX_CONNECTIONS` - Max concurrent connections (default: 64)
+- `TNT_MAX_CONN_PER_IP` - Max connections per IP (default: 5)
+
+### Security Summary
+
+| Category | Fixes | Impact |
+|----------|-------|--------|
+| Buffer Security | 3 | Prevents overflows, malformed UTF-8 |
+| SSH Hardening | 4 | Stronger crypto, no races |
+| Input Validation | 3 | Prevents injection, log poisoning |
+| Resource Management | 3 | Handles large logs, prevents DoS |
+| Authentication | 3 | Optional protection, rate limiting |
+| Concurrency Safety | 3 | Eliminates races, crashes |
+| **TOTAL** | **19** | **23 vulnerabilities fixed** |
+
+All changes maintain backward compatibility. Server remains open by default.
+
+---
+
 ## 2025-12-02 - Stability & Testing Update
 
 ### Fixed

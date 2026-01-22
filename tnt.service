@@ -1,5 +1,6 @@
 [Unit]
-Description=TNT Chat Server
+Description=TNT Terminal Chat Server (Anonymous)
+Documentation=https://github.com/m1ngsama/TNT
 After=network.target
 
 [Service]
@@ -8,17 +9,35 @@ User=tnt
 Group=tnt
 WorkingDirectory=/var/lib/tnt
 ExecStart=/usr/local/bin/tnt
+
+# Automatic restart on failure for long-term stability
 Restart=always
 RestartSec=10
 
-# Security
+# Limit restart rate to prevent thrashing
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/tnt
 
-# Environment
+# Resource limits for stability
+LimitNOFILE=65536
+LimitNPROC=512
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tnt
+
+# Graceful shutdown
+TimeoutStopSec=30
+
+# Environment (can be customized via systemctl edit)
 Environment="PORT=2222"
 
 [Install]
