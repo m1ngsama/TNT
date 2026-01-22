@@ -17,6 +17,33 @@
 /* Global SSH bind instance */
 static ssh_bind g_sshbind = NULL;
 
+/* Validate username to prevent injection attacks */
+static bool is_valid_username(const char *username) {
+    if (!username || username[0] == '\0') {
+        return false;
+    }
+
+    /* Reject usernames starting with special characters */
+    if (username[0] == ' ' || username[0] == '.' || username[0] == '-') {
+        return false;
+    }
+
+    /* Check for illegal characters that could cause injection */
+    const char *illegal_chars = "|;&$`\n\r<>(){}[]'\"\\";
+    for (size_t i = 0; i < strlen(username); i++) {
+        /* Reject control characters (except tab) */
+        if (username[i] < 32 && username[i] != 9) {
+            return false;
+        }
+        /* Reject shell metacharacters */
+        if (strchr(illegal_chars, username[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 /* Generate or load SSH host key */
 static int setup_host_key(ssh_bind sshbind) {
     struct stat st;
@@ -178,9 +205,18 @@ static int read_username(client_t *client) {
         strcpy(client->username, "anonymous");
     } else {
         strncpy(client->username, username, MAX_USERNAME_LEN - 1);
-        /* Truncate to 20 characters */
-        if (utf8_strlen(client->username) > 20) {
-            utf8_truncate(client->username, 20);
+        client->username[MAX_USERNAME_LEN - 1] = '\0';
+
+        /* Validate username for security */
+        if (!is_valid_username(client->username)) {
+            client_printf(client, "Invalid username. Using 'anonymous' instead.\r\n");
+            strcpy(client->username, "anonymous");
+            sleep(1);  /* Slow down rapid retry attempts */
+        } else {
+            /* Truncate to 20 characters */
+            if (utf8_strlen(client->username) > 20) {
+                utf8_truncate(client->username, 20);
+            }
         }
     }
 
