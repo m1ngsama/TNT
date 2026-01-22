@@ -98,8 +98,18 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
     /* Render to each client (outside of lock) */
     for (int i = 0; i < count; i++) {
         client_t *client = clients_copy[i];
-        if (client->connected && !client->show_help &&
-            client->command_output[0] == '\0') {
+
+        /* Check client state before rendering (while holding ref) */
+        bool should_render = false;
+        pthread_mutex_lock(&client->ref_lock);
+        if (client->ref_count > 0) {
+            should_render = client->connected &&
+                          !client->show_help &&
+                          client->command_output[0] == '\0';
+        }
+        pthread_mutex_unlock(&client->ref_lock);
+
+        if (should_render) {
             tui_render_screen(client);
         }
 

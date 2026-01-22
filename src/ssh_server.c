@@ -342,7 +342,13 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 tui_render_screen(client);
                 return true;  /* Key consumed - prevents double colon */
             } else if (key == 'j') {
-                int max_scroll = room_get_message_count(g_room) - 1;
+                /* Get message count atomically to prevent TOCTOU */
+                int max_scroll = room_get_message_count(g_room);
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                max_scroll = max_scroll - msg_height;
+                if (max_scroll < 0) max_scroll = 0;
+
                 if (client->scroll_pos < max_scroll) {
                     client->scroll_pos++;
                     tui_render_screen(client);
@@ -357,8 +363,14 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 tui_render_screen(client);
                 return true;  /* Key consumed */
             } else if (key == 'G') {
-                client->scroll_pos = room_get_message_count(g_room) - 1;
-                if (client->scroll_pos < 0) client->scroll_pos = 0;
+                /* Get message count atomically to prevent TOCTOU */
+                int max_scroll = room_get_message_count(g_room);
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                max_scroll = max_scroll - msg_height;
+                if (max_scroll < 0) max_scroll = 0;
+
+                client->scroll_pos = max_scroll;
                 tui_render_screen(client);
                 return true;  /* Key consumed */
             } else if (key == '?') {
