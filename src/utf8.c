@@ -135,3 +135,55 @@ void utf8_remove_last_char(char *str) {
 
     str[i] = '\0';
 }
+
+/* Validate a UTF-8 byte sequence */
+bool utf8_is_valid_sequence(const char *bytes, int len) {
+    if (len <= 0 || len > 4 || !bytes) {
+        return false;
+    }
+
+    const unsigned char *b = (const unsigned char *)bytes;
+
+    /* Check first byte matches the expected length */
+    int expected_len = utf8_byte_length(b[0]);
+    if (expected_len != len) {
+        return false;
+    }
+
+    /* Validate continuation bytes (must be 10xxxxxx) */
+    for (int i = 1; i < len; i++) {
+        if ((b[i] & 0xC0) != 0x80) {
+            return false;
+        }
+    }
+
+    /* Validate codepoint ranges to prevent overlong encodings */
+    uint32_t codepoint = 0;
+    switch (len) {
+        case 1:
+            /* 0xxxxxxx - valid range: 0x00-0x7F */
+            codepoint = b[0];
+            if (codepoint > 0x7F) return false;
+            break;
+        case 2:
+            /* 110xxxxx 10xxxxxx - valid range: 0x80-0x7FF */
+            codepoint = ((b[0] & 0x1F) << 6) | (b[1] & 0x3F);
+            if (codepoint < 0x80 || codepoint > 0x7FF) return false;
+            break;
+        case 3:
+            /* 1110xxxx 10xxxxxx 10xxxxxx - valid range: 0x800-0xFFFF */
+            codepoint = ((b[0] & 0x0F) << 12) | ((b[1] & 0x3F) << 6) | (b[2] & 0x3F);
+            if (codepoint < 0x800 || codepoint > 0xFFFF) return false;
+            /* Reject UTF-16 surrogates (0xD800-0xDFFF) */
+            if (codepoint >= 0xD800 && codepoint <= 0xDFFF) return false;
+            break;
+        case 4:
+            /* 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx - valid range: 0x10000-0x10FFFF */
+            codepoint = ((b[0] & 0x07) << 18) | ((b[1] & 0x3F) << 12) |
+                       ((b[2] & 0x3F) << 6) | (b[3] & 0x3F);
+            if (codepoint < 0x10000 || codepoint > 0x10FFFF) return false;
+            break;
+    }
+
+    return true;
+}

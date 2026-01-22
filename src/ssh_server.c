@@ -108,6 +108,12 @@ int client_printf(client_t *client, const char *fmt, ...) {
     va_start(args, fmt);
     int len = vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
+
+    /* Check for buffer overflow or encoding error */
+    if (len < 0 || len >= (int)sizeof(buffer)) {
+        return -1;
+    }
+
     return client_send(client, buffer, len);
 }
 
@@ -155,6 +161,10 @@ static int read_username(client_t *client) {
         } else {
             /* UTF-8 multi-byte */
             int len = utf8_byte_length(b);
+            if (len <= 0 || len > 4) {
+                /* Invalid UTF-8 start byte */
+                continue;
+            }
             buf[0] = b;
             if (len > 1) {
                 int read_bytes = ssh_channel_read(client->channel, &buf[1], len - 1, 0);
@@ -162,6 +172,11 @@ static int read_username(client_t *client) {
                     /* Incomplete UTF-8 */
                     continue;
                 }
+            }
+            /* Validate the complete UTF-8 sequence */
+            if (!utf8_is_valid_sequence(buf, len)) {
+                /* Invalid UTF-8 sequence */
+                continue;
             }
             if (pos + len < MAX_USERNAME_LEN - 1) {
                 memcpy(username + pos, buf, len);
@@ -175,7 +190,8 @@ static int read_username(client_t *client) {
     client_printf(client, "\r\n");
 
     if (username[0] == '\0') {
-        strcpy(client->username, "anonymous");
+        strncpy(client->username, "anonymous", MAX_USERNAME_LEN - 1);
+        client->username[MAX_USERNAME_LEN - 1] = '\0';
     } else {
         strncpy(client->username, username, MAX_USERNAME_LEN - 1);
         /* Truncate to 20 characters */
@@ -420,7 +436,8 @@ void* client_handle_session(void *arg) {
     message_t join_msg = {
         .timestamp = time(NULL),
     };
-    strcpy(join_msg.username, "系统");
+    strncpy(join_msg.username, "系统", MAX_USERNAME_LEN - 1);
+    join_msg.username[MAX_USERNAME_LEN - 1] = '\0';
     snprintf(join_msg.content, MAX_MESSAGE_LEN, "%s 加入了聊天室", client->username);
     room_broadcast(g_room, &join_msg);
 
@@ -472,6 +489,10 @@ void* client_handle_session(void *arg) {
                     }
                 } else if (b >= 128) {  /* UTF-8 multi-byte */
                     int char_len = utf8_byte_length(b);
+                    if (char_len <= 0 || char_len > 4) {
+                        /* Invalid UTF-8 start byte */
+                        continue;
+                    }
                     buf[0] = b;
                     if (char_len > 1) {
                         int read_bytes = ssh_channel_read(client->channel, &buf[1], char_len - 1, 0);
@@ -479,6 +500,11 @@ void* client_handle_session(void *arg) {
                             /* Incomplete UTF-8 sequence */
                             continue;
                         }
+                    }
+                    /* Validate the complete UTF-8 sequence */
+                    if (!utf8_is_valid_sequence(buf, char_len)) {
+                        /* Invalid UTF-8 sequence */
+                        continue;
                     }
                     int len = strlen(input);
                     if (len + char_len < MAX_MESSAGE_LEN - 1) {
@@ -507,7 +533,8 @@ cleanup:
         message_t leave_msg = {
             .timestamp = time(NULL),
         };
-        strcpy(leave_msg.username, "系统");
+        strncpy(leave_msg.username, "系统", MAX_USERNAME_LEN - 1);
+        leave_msg.username[MAX_USERNAME_LEN - 1] = '\0';
         snprintf(leave_msg.content, MAX_MESSAGE_LEN, "%s 离开了聊天室", client->username);
 
         client->connected = false;
