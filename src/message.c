@@ -48,6 +48,13 @@ int message_load(message_t **messages, int max_messages) {
 
     /* Now read the messages */
     while (fgets(line, sizeof(line), fp) && count < max_messages) {
+        /* Check for oversized lines */
+        size_t line_len = strlen(line);
+        if (line_len >= sizeof(line) - 1) {
+            fprintf(stderr, "Warning: Skipping oversized line in messages.log\n");
+            continue;
+        }
+
         /* Format: RFC3339_timestamp|username|content */
         char line_copy[2048];
         strncpy(line_copy, line, sizeof(line_copy) - 1);
@@ -57,7 +64,16 @@ int message_load(message_t **messages, int max_messages) {
         char *username = strtok(NULL, "|");
         char *content = strtok(NULL, "\n");
 
+        /* Validate all fields exist */
         if (!timestamp_str || !username || !content) {
+            continue;
+        }
+
+        /* Validate field lengths */
+        if (strlen(username) >= MAX_USERNAME_LEN) {
+            continue;
+        }
+        if (strlen(content) >= MAX_MESSAGE_LEN) {
             continue;
         }
 
@@ -68,9 +84,19 @@ int message_load(message_t **messages, int max_messages) {
             continue;
         }
 
-        msg_array[count].timestamp = mktime(&tm);
+        /* Validate timestamp is reasonable (not in far future or past) */
+        time_t msg_time = mktime(&tm);
+        time_t now = time(NULL);
+        if (msg_time > now + 86400 || msg_time < now - 31536000 * 10) {
+            /* Skip messages more than 1 day in future or 10 years in past */
+            continue;
+        }
+
+        msg_array[count].timestamp = msg_time;
         strncpy(msg_array[count].username, username, MAX_USERNAME_LEN - 1);
+        msg_array[count].username[MAX_USERNAME_LEN - 1] = '\0';
         strncpy(msg_array[count].content, content, MAX_MESSAGE_LEN - 1);
+        msg_array[count].content[MAX_MESSAGE_LEN - 1] = '\0';
         count++;
     }
 
@@ -92,8 +118,30 @@ int message_save(const message_t *msg) {
     gmtime_r(&msg->timestamp, &tm_info);
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &tm_info);
 
+    /* Sanitize username and content to prevent log injection */
+    char safe_username[MAX_USERNAME_LEN];
+    char safe_content[MAX_MESSAGE_LEN];
+
+    strncpy(safe_username, msg->username, sizeof(safe_username) - 1);
+    safe_username[sizeof(safe_username) - 1] = '\0';
+
+    strncpy(safe_content, msg->content, sizeof(safe_content) - 1);
+    safe_content[sizeof(safe_content) - 1] = '\0';
+
+    /* Replace pipe characters and newlines to prevent log format corruption */
+    for (char *p = safe_username; *p; p++) {
+        if (*p == '|' || *p == '\n' || *p == '\r') {
+            *p = '_';
+        }
+    }
+    for (char *p = safe_content; *p; p++) {
+        if (*p == '|' || *p == '\n' || *p == '\r') {
+            *p = ' ';
+        }
+    }
+
     /* Write to file: timestamp|username|content */
-    fprintf(fp, "%s|%s|%s\n", timestamp, msg->username, msg->content);
+    fprintf(fp, "%s|%s|%s\n", timestamp, safe_username, safe_content);
 
     fclose(fp);
     return 0;
