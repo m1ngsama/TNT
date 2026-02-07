@@ -12,6 +12,12 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
+# Detect timeout command
+TIMEOUT_CMD="timeout"
+if command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="gtimeout"
+fi
+
 echo "Starting TNT server on port $PORT..."
 $BIN -p $PORT &
 SERVER_PID=$!
@@ -27,7 +33,7 @@ echo "Spawning $CLIENTS clients for ${DURATION}s..."
 for i in $(seq 1 $CLIENTS); do
     (
         sleep $((i % 5))
-        echo "test user $i" | timeout $DURATION ssh -o StrictHostKeyChecking=no \
+        echo "test user $i" | $TIMEOUT_CMD $DURATION ssh -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null -p $PORT localhost \
             >/dev/null 2>&1
     ) &

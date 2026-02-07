@@ -13,6 +13,12 @@ cleanup() {
 
 trap cleanup EXIT
 
+# Detect timeout command
+TIMEOUT_CMD="timeout"
+if command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="gtimeout"
+fi
+
 echo "=== TNT Basic Tests ==="
 
 # Path to binary
@@ -39,7 +45,7 @@ else
 fi
 
 # Test 2: SSH connection
-if timeout 5 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+if $TIMEOUT_CMD 5 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o BatchMode=yes -p $PORT localhost exit 2>/dev/null; then
     echo "✓ SSH connection works"
     PASS=$((PASS + 1))
@@ -49,7 +55,7 @@ else
 fi
 
 # Test 3: Message logging
-(echo "testuser"; echo "test message"; sleep 1) | timeout 5 ssh -o StrictHostKeyChecking=no \
+(echo "testuser"; echo "test message"; sleep 1) | $TIMEOUT_CMD 5 ssh -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null -p $PORT localhost >/dev/null 2>&1 &
 sleep 3
 if [ -f messages.log ]; then

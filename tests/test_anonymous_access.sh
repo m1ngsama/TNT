@@ -20,12 +20,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Detect timeout command
+TIMEOUT_CMD="timeout"
+if command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="gtimeout"
+fi
+
 echo "Testing anonymous SSH access to TNT server..."
 echo ""
 
 # Test 1: Connection with any username and password
 echo "Test 1: Connection with any username (should succeed)"
-timeout 10 expect -c "
+$TIMEOUT_CMD 10 expect -c "
 spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT testuser@localhost
 expect {
     \"password:\" {
@@ -54,7 +60,7 @@ echo ""
 
 # Test 2: Connection should work with empty password
 echo "Test 2: Simple connection (standard SSH command)"
-timeout 10 expect -c "
+$TIMEOUT_CMD 10 expect -c "
 spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT anonymous@localhost
 expect {
     \"password:\" {

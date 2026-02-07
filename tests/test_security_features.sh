@@ -43,6 +43,12 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
+# Detect timeout command
+TIMEOUT_CMD="timeout"
+if command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="gtimeout"
+fi
+
 # Test 1: 4096-bit RSA Key Generation
 print_test "1. RSA 4096-bit Key Generation"
 rm -f host_key
@@ -75,19 +81,19 @@ fi
 print_test "2. Environment Variable Configuration"
 
 # Test bind address
-TNT_BIND_ADDR=127.0.0.1 timeout 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+TNT_BIND_ADDR=127.0.0.1 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_BIND_ADDR configuration works" || fail "TNT_BIND_ADDR not working"
 
 # Test with access token set (just verify it starts)
-TNT_ACCESS_TOKEN="test123" timeout 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+TNT_ACCESS_TOKEN="test123" $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_ACCESS_TOKEN configuration accepted" || fail "TNT_ACCESS_TOKEN not working"
 
 # Test max connections configuration
-TNT_MAX_CONNECTIONS=10 timeout 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+TNT_MAX_CONNECTIONS=10 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_MAX_CONNECTIONS configuration accepted" || fail "TNT_MAX_CONNECTIONS not working"
 
 # Test rate limit toggle
-TNT_RATE_LIMIT=0 timeout 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+TNT_RATE_LIMIT=0 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_RATE_LIMIT configuration accepted" || fail "TNT_RATE_LIMIT not working"
 
 sleep 1
