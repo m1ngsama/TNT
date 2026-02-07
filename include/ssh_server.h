@@ -21,6 +21,7 @@ typedef struct client {
     bool show_help;
     char command_input[256];
     char command_output[2048];
+    char exec_command[256];
     pthread_t thread;
     bool connected;
     int ref_count;                   /* Reference count for safe cleanup */

@@ -33,11 +33,13 @@ jobs:
     - name: Build with AddressSanitizer
       run: make asan
 
-    - name: Run basic tests
+    - name: Run comprehensive tests
       run: |
-        timeout 10 ./tnt &
-        sleep 2
-        pkill tnt || true
+        make test
+        cd tests
+        ./test_security_features.sh
+        # Skipping anonymous access test in CI as it requires interactive pty handling which might be flaky
+        # ./test_anonymous_access.sh
 
     - name: Check for memory leaks
       if: runner.os == 'Linux'

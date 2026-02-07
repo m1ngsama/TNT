@@ -14,6 +14,9 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 
+/* Suppress libssh deprecation warnings for legacy server API */
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 /* Global SSH bind instance */
 static ssh_bind g_sshbind = NULL;
 
@@ -425,7 +428,7 @@ static int read_username(client_t *client) {
             if (pos < MAX_USERNAME_LEN - 1) {
                 username[pos++] = b;
                 username[pos] = '\0';
-                client_send(client, &b, 1);
+                client_send(client, (char *)&b, 1);
             }
         } else {
             /* UTF-8 multi-byte */
@@ -558,6 +561,20 @@ static void execute_command(client_t *client) {
 
 /* Handle client key press - returns true if key was consumed */
 static bool handle_key(client_t *client, unsigned char key, char *input) {
+    /* Handle Ctrl+C (Exit or switch to NORMAL) */
+    if (key == 3) {
+        if (client->mode != MODE_NORMAL) {
+            client->mode = MODE_NORMAL;
+            client->command_input[0] = '\0';
+            client->show_help = false;
+            tui_render_screen(client);
+        } else {
+            /* In NORMAL mode, Ctrl+C exits */
+            client->connected = false;
+        }
+        return true;
+    }
+
     /* Handle help screen */
     if (client->show_help) {
         if (key == 'q' || key == 27) {
@@ -603,7 +620,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 client->scroll_pos = 0;
                 tui_render_screen(client);
                 return true;  /* Key consumed */
-            } else if (key == '\r') {  /* Enter */
+            } else if (key == '\r' || key == '\n') {  /* Enter */
                 if (input[0] != '\0') {
                     message_t msg = {
                         .timestamp = time(NULL),
@@ -622,6 +639,18 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     tui_render_input(client, input);
                 }
                 return true;  /* Key consumed */
+            } else if (key == 23) { /* Ctrl+W (Delete Word) */
+                if (input[0] != '\0') {
+                    utf8_remove_last_word(input);
+                    tui_render_input(client, input);
+                }
+                return true;
+            } else if (key == 21) { /* Ctrl+U (Delete Line) */
+                if (input[0] != '\0') {
+                    input[0] = '\0';
+                    tui_render_input(client, input);
+                }
+                return true;
             }
             break;
 
@@ -690,6 +719,18 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     tui_render_screen(client);
                 }
                 return true;  /* Key consumed */
+            } else if (key == 23) { /* Ctrl+W (Delete Word) */
+                if (client->command_input[0] != '\0') {
+                    utf8_remove_last_word(client->command_input);
+                    tui_render_screen(client);
+                }
+                return true;
+            } else if (key == 21) { /* Ctrl+U (Delete Line) */
+                if (client->command_input[0] != '\0') {
+                    client->command_input[0] = '\0';
+                    tui_render_screen(client);
+                }
+                return true;
             }
             break;
 
@@ -710,6 +751,20 @@ void* client_handle_session(void *arg) {
     client->mode = MODE_INSERT;
     client->help_lang = LANG_ZH;
     client->connected = true;
+
+    /* Check for exec command */
+    if (client->exec_command[0] != '\0') {
+        if (strcmp(client->exec_command, "exit") == 0) {
+            /* Just exit */
+            ssh_channel_request_send_exit_status(client->channel, 0);
+            goto cleanup;
+        } else {
+            /* Unknown command */
+            client_printf(client, "Command not supported: %s\r\nOnly 'exit' is supported in non-interactive mode.\r\n", client->exec_command);
+            ssh_channel_request_send_exit_status(client->channel, 1);
+            goto cleanup;
+        }
+    }
 
     /* Read username */
     if (read_username(client) < 0) {
@@ -758,9 +813,6 @@ void* client_handle_session(void *arg) {
         }
 
         unsigned char b = buf[0];
-
-        /* Ctrl+C */
-        if (b == 3) break;
 
         /* Handle special keys - returns true if key was consumed */
         bool key_consumed = handle_key(client, b, input);
@@ -933,7 +985,6 @@ static ssh_channel handle_channel_open(ssh_session session) {
 /* Handle PTY request and get terminal size */
 static int handle_pty_request(ssh_channel channel, client_t *client) {
     ssh_message message;
-    int pty_received = 0;
     int shell_received = 0;
 
     do {
@@ -952,9 +1003,8 @@ static int handle_pty_request(ssh_channel channel, client_t *client) {
 
                 ssh_message_channel_request_reply_success(message);
                 ssh_message_free(message);
-                pty_received = 1;
 
-                /* Don't return yet, wait for shell request */
+                /* Don't return yet, wait for shell/exec request */
                 if (shell_received) {
                     return 0;
                 }
@@ -964,12 +1014,21 @@ static int handle_pty_request(ssh_channel channel, client_t *client) {
                 ssh_message_channel_request_reply_success(message);
                 ssh_message_free(message);
                 shell_received = 1;
+                /* Shell requested, we are done */
+                return 0;
 
-                /* If we got PTY, we're done */
-                if (pty_received) {
-                    return 0;
+            } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_EXEC) {
+                /* Handle exec request (e.g. "ssh user@host command") */
+                const char *cmd = ssh_message_channel_request_command(message);
+                if (cmd) {
+                    strncpy(client->exec_command, cmd, sizeof(client->exec_command) - 1);
+                    client->exec_command[sizeof(client->exec_command) - 1] = '\0';
                 }
-                continue;
+                /* For now, just allow it and treat like shell start */
+                ssh_message_channel_request_reply_success(message);
+                ssh_message_free(message);
+                shell_received = 1;
+                return 0;
 
             } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_WINDOW_CHANGE) {
                 /* Handle terminal resize - this should be handled during session, not here */
@@ -982,9 +1041,9 @@ static int handle_pty_request(ssh_channel channel, client_t *client) {
 
         ssh_message_reply_default(message);
         ssh_message_free(message);
-    } while (!pty_received || !shell_received);
+    } while (!shell_received);
 
-    return (pty_received && shell_received) ? 0 : -1;
+    return 0;
 }
 
 /* Initialize SSH server */

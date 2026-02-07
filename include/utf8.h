@@ -24,6 +24,9 @@ int utf8_strlen(const char *str);
 /* Remove last UTF-8 character from string */
 void utf8_remove_last_char(char *str);
 
+/* Remove last word from string (mimic Ctrl+W) */
+void utf8_remove_last_word(char *str);
+
 /* Validate a UTF-8 byte sequence */
 bool utf8_is_valid_sequence(const char *bytes, int len);
 

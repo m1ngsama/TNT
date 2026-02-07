@@ -5,9 +5,15 @@
 PORT=${PORT:-2222}
 CLIENTS=${1:-10}
 DURATION=${2:-30}
+BIN="../tnt"
+
+if [ ! -f "$BIN" ]; then
+    echo "Error: Binary $BIN not found."
+    exit 1
+fi
 
 echo "Starting TNT server on port $PORT..."
-./tnt -p $PORT &
+$BIN -p $PORT &
 SERVER_PID=$!
 sleep 2
 
@@ -35,4 +41,10 @@ kill $SERVER_PID 2>/dev/null
 wait
 
 echo "Stress test complete"
-ps aux | grep tnt | grep -v grep && echo "WARNING: tnt process still running"
+if ps aux | grep tnt | grep -v grep > /dev/null; then
+    echo "WARNING: tnt process still running"
+else
+    echo "Server shutdown confirmed."
+fi
+
+exit 0

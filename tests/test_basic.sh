@@ -15,8 +15,16 @@ trap cleanup EXIT
 
 echo "=== TNT Basic Tests ==="
 
+# Path to binary
+BIN="../tnt"
+
+if [ ! -f "$BIN" ]; then
+    echo "Error: Binary $BIN not found. Run make first."
+    exit 1
+fi
+
 # Start server
-./tnt -p $PORT >test.log 2>&1 &
+$BIN -p $PORT >test.log 2>&1 &
 SERVER_PID=$!
 sleep 2
 
@@ -41,7 +49,7 @@ else
 fi
 
 # Test 3: Message logging
-echo "test message" | timeout 5 ssh -o StrictHostKeyChecking=no \
+(echo "testuser"; echo "test message"; sleep 1) | timeout 5 ssh -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null -p $PORT localhost >/dev/null 2>&1 &
 sleep 3
 if [ -f messages.log ]; then
