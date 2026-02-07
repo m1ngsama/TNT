@@ -908,6 +908,7 @@ cleanup:
 /* Password authentication callback */
 static int auth_password(ssh_session session, const char *user,
                          const char *password, void *userdata) {
+    (void)user;  /* Unused - we don't validate usernames */
     session_context_t *ctx = (session_context_t *)userdata;
 
     ctx->auth_attempts++;
