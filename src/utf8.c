@@ -136,6 +136,26 @@ void utf8_remove_last_char(char *str) {
     str[i] = '\0';
 }
 
+/* Remove last word from string (mimic Ctrl+W) */
+void utf8_remove_last_word(char *str) {
+    int len = strlen(str);
+    if (len == 0) return;
+
+    int i = len;
+
+    /* Skip trailing spaces */
+    while (i > 0 && str[i - 1] == ' ') {
+        i--;
+    }
+
+    /* Skip non-spaces (the word) */
+    while (i > 0 && str[i - 1] != ' ') {
+        i--;
+    }
+
+    str[i] = '\0';
+}
+
 /* Validate a UTF-8 byte sequence */
 bool utf8_is_valid_sequence(const char *bytes, int len) {
     if (len <= 0 || len > 4 || !bytes) {

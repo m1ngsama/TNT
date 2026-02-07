@@ -8,7 +8,7 @@ void message_init(void) {
     /* Nothing to initialize for now */
 }
 
-/* Load messages from log file */
+/* Load messages from log file - Optimized for large files */
 int message_load(message_t **messages, int max_messages) {
     /* Always allocate the message array */
     message_t *msg_array = calloc(max_messages, sizeof(message_t));
@@ -23,56 +23,75 @@ int message_load(message_t **messages, int max_messages) {
         return 0;
     }
 
-    char line[2048];
-    int count = 0;
-
-    /* Use a ring buffer approach - keep only last max_messages */
-    /* First, count total lines and seek to appropriate position */
-    /* Use dynamic allocation to handle large log files */
-    long *file_pos = NULL;
-    int pos_capacity = 1000;
-    int line_count = 0;
-    int start_index = 0;
-
-    /* Allocate initial position array */
-    file_pos = malloc(pos_capacity * sizeof(long));
-    if (!file_pos) {
+    /* Seek to end */
+    if (fseek(fp, 0, SEEK_END) != 0) {
         fclose(fp);
         *messages = msg_array;
         return 0;
     }
 
-    /* Record file positions */
-    while (fgets(line, sizeof(line), fp)) {
-        /* Expand array if needed */
-        if (line_count >= pos_capacity) {
-            int new_capacity = pos_capacity * 2;
-            long *new_pos = realloc(file_pos, new_capacity * sizeof(long));
-            if (!new_pos) {
-                /* Out of memory, stop scanning */
-                break;
-            }
-            file_pos = new_pos;
-            pos_capacity = new_capacity;
+    long file_size = ftell(fp);
+    if (file_size == 0) {
+        fclose(fp);
+        *messages = msg_array;
+        return 0;
+    }
+
+    /* Scan backwards to find the start position */
+    int newlines_found = 0;
+    long pos = file_size - 1;
+    /* Skip the very last byte if it's a newline */
+    if (pos >= 0) {
+        /* Read last char */
+        fseek(fp, pos, SEEK_SET);
+        if (fgetc(fp) == '\n') {
+            pos--;
         }
-        file_pos[line_count++] = ftell(fp) - strlen(line);
     }
 
-    /* Determine where to start reading */
-    if (line_count > max_messages) {
-        start_index = line_count - max_messages;
-        fseek(fp, file_pos[start_index], SEEK_SET);
-    } else {
-        fseek(fp, 0, SEEK_SET);
-        start_index = 0;
+    /* Read backwards in chunks for performance */
+    #define CHUNK_SIZE 4096
+    char chunk[CHUNK_SIZE];
+    
+    while (pos >= 0 && newlines_found < max_messages) {
+        long read_size = (pos >= CHUNK_SIZE) ? CHUNK_SIZE : (pos + 1);
+        long read_pos = pos - read_size + 1;
+        
+        fseek(fp, read_pos, SEEK_SET);
+        if (fread(chunk, 1, read_size, fp) != (size_t)read_size) {
+            break;
+        }
+        
+        /* Scan chunk backwards */
+        for (int i = read_size - 1; i >= 0; i--) {
+            if (chunk[i] == '\n') {
+                newlines_found++;
+                if (newlines_found >= max_messages) {
+                    /* Found our start point: one char after this newline */
+                    fseek(fp, read_pos + i + 1, SEEK_SET);
+                    goto read_messages;
+                }
+            }
+        }
+        
+        pos -= read_size;
     }
+    
+    /* If we got here, we reached start of file or didn't find enough newlines */
+    fseek(fp, 0, SEEK_SET);
 
-    /* Now read the messages */
+read_messages:;
+    char line[2048];
+    int count = 0;
+
+    /* Now read forward */
     while (fgets(line, sizeof(line), fp) && count < max_messages) {
         /* Check for oversized lines */
         size_t line_len = strlen(line);
         if (line_len >= sizeof(line) - 1) {
-            fprintf(stderr, "Warning: Skipping oversized line in messages.log\n");
+            /* Skip remainder of line */
+            int c;
+            while ((c = fgetc(fp)) != '\n' && c != EOF);
             continue;
         }
 
@@ -109,7 +128,6 @@ int message_load(message_t **messages, int max_messages) {
         time_t msg_time = mktime(&tm);
         time_t now = time(NULL);
         if (msg_time > now + 86400 || msg_time < now - 31536000 * 10) {
-            /* Skip messages more than 1 day in future or 10 years in past */
             continue;
         }
 
@@ -121,7 +139,6 @@ int message_load(message_t **messages, int max_messages) {
         count++;
     }
 
-    free(file_pos);
     fclose(fp);
     *messages = msg_array;
     return count;

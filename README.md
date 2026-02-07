@@ -96,8 +96,8 @@ tnt.service       systemd unit
 ## Test
 
 ```sh
-./test_basic.sh         # functional
-./test_stress.sh 50     # 50 clients
+make test               # run comprehensive test suite
+# Individual tests are in tests/ directory
 ```
 
 ## Docs

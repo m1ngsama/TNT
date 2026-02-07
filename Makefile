@@ -39,6 +39,7 @@ $(OBJ_DIR):
 
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
+	rm -f tests/*.log tests/host_key* tests/messages.log
 	@echo "Clean complete"
 
 install: $(TARGET)
@@ -68,6 +69,11 @@ valgrind: debug
 check:
 	@command -v cppcheck >/dev/null 2>&1 && cppcheck --enable=warning,performance --quiet src/ || echo "cppcheck not installed"
 	@command -v clang-tidy >/dev/null 2>&1 && clang-tidy src/*.c -- -Iinclude $(INCLUDES) || echo "clang-tidy not installed"
+
+# Test
+test: all
+	@echo "Running tests..."
+	@cd tests && ./test_basic.sh
 
 # Show build info
 info:

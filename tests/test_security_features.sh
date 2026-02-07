@@ -27,7 +27,7 @@ fail() {
 }
 
 cleanup() {
-    pkill -f "^\./tnt" 2>/dev/null || true
+    pkill -f "^\.\./tnt" 2>/dev/null || true
     sleep 1
 }
 
@@ -37,10 +37,22 @@ echo -e "${YELLOW}========================================${NC}"
 echo -e "${YELLOW}TNT Security Features Test Suite${NC}"
 echo -e "${YELLOW}========================================${NC}"
 
+BIN="../tnt"
+if [ ! -f "$BIN" ]; then
+    echo "Error: Binary $BIN not found."
+    exit 1
+fi
+
+# Detect timeout command
+TIMEOUT_CMD="timeout"
+if command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="gtimeout"
+fi
+
 # Test 1: 4096-bit RSA Key Generation
 print_test "1. RSA 4096-bit Key Generation"
 rm -f host_key
-./tnt &
+$BIN &
 PID=$!
 sleep 8  # Wait for key generation
 kill $PID 2>/dev/null || true
@@ -55,7 +67,12 @@ if [ -f host_key ]; then
     fi
 
     # Check permissions
-    PERMS=$(stat -f "%OLp" host_key)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        PERMS=$(stat -f "%OLp" host_key)
+    else
+        PERMS=$(stat -c "%a" host_key)
+    fi
+    
     if [ "$PERMS" = "600" ]; then
         pass "Host key has secure permissions (600)"
     else
@@ -69,19 +86,19 @@ fi
 print_test "2. Environment Variable Configuration"
 
 # Test bind address
-TNT_BIND_ADDR=127.0.0.1 timeout 3 ./tnt 2>&1 | grep -q "TNT chat server" && \
+TNT_BIND_ADDR=127.0.0.1 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_BIND_ADDR configuration works" || fail "TNT_BIND_ADDR not working"
 
 # Test with access token set (just verify it starts)
-TNT_ACCESS_TOKEN="test123" timeout 3 ./tnt 2>&1 | grep -q "TNT chat server" && \
+TNT_ACCESS_TOKEN="test123" $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_ACCESS_TOKEN configuration accepted" || fail "TNT_ACCESS_TOKEN not working"
 
 # Test max connections configuration
-TNT_MAX_CONNECTIONS=10 timeout 3 ./tnt 2>&1 | grep -q "TNT chat server" && \
+TNT_MAX_CONNECTIONS=10 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_MAX_CONNECTIONS configuration accepted" || fail "TNT_MAX_CONNECTIONS not working"
 
 # Test rate limit toggle
-TNT_RATE_LIMIT=0 timeout 3 ./tnt 2>&1 | grep -q "TNT chat server" && \
+TNT_RATE_LIMIT=0 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_RATE_LIMIT configuration accepted" || fail "TNT_RATE_LIMIT not working"
 
 sleep 1
@@ -101,7 +118,7 @@ newline
 EOF
 
 # Start server and let it load messages
-./tnt &
+$BIN &
 PID=$!
 sleep 3
 kill $PID 2>/dev/null || true
@@ -120,8 +137,8 @@ print_test "4. UTF-8 Input Validation"
 cat > test_utf8.c <<'EOF'
 #include <stdio.h>
 #include <stdbool.h>
-#include "include/utf8.h"
-#include "include/common.h"
+#include "../include/utf8.h"
+#include "../include/common.h"
 
 int main() {
     // Valid UTF-8 sequences
@@ -154,7 +171,7 @@ int main() {
 }
 EOF
 
-if gcc -I. -o test_utf8 test_utf8.c src/utf8.c 2>/dev/null; then
+if gcc -I../include -o test_utf8 test_utf8.c ../src/utf8.c 2>/dev/null; then
     if ./test_utf8; then
         pass "UTF-8 validation function works correctly"
     else
@@ -168,12 +185,12 @@ rm -f test_utf8.c
 
 # Test 5: Buffer Safety with AddressSanitizer
 print_test "5. Buffer Overflow Protection (ASAN Build)"
-if make clean >/dev/null 2>&1 && make asan >/dev/null 2>&1; then
+if make -C .. clean >/dev/null 2>&1 && make -C .. asan >/dev/null 2>&1; then
     # Just verify it compiles - actual ASAN testing needs runtime
-    if [ -f tnt ]; then
+    if [ -f ../tnt ]; then
         pass "AddressSanitizer build successful"
         # Restore normal build
-        make clean >/dev/null 2>&1 && make >/dev/null 2>&1
+        make -C .. clean >/dev/null 2>&1 && make -C .. >/dev/null 2>&1
     else
         fail "AddressSanitizer build failed"
     fi
@@ -184,8 +201,8 @@ fi
 # Test 6: Concurrent Safety
 print_test "6. Concurrency Safety (Data Structure Integrity)"
 # This test verifies the code compiles with thread sanitizer flags
-if gcc -fsanitize=thread -g -O1 -Iinclude -I/opt/homebrew/opt/libssh/include \
-    -c src/chat_room.c -o /tmp/test_tsan.o 2>/dev/null; then
+if gcc -fsanitize=thread -g -O1 -I../include -I/opt/homebrew/opt/libssh/include \
+    -c ../src/chat_room.c -o /tmp/test_tsan.o 2>/dev/null; then
     pass "Code compiles with ThreadSanitizer (concurrency checks enabled)"
     rm -f /tmp/test_tsan.o
 else
@@ -200,7 +217,7 @@ for i in $(seq 1 2000); do
     echo "2026-01-22T$(printf "%02d" $((i/100))):$(printf "%02d" $((i%60))):00Z|user$i|message $i" >> messages.log
 done
 
-./tnt &
+$BIN &
 PID=$!
 sleep 4
 kill $PID 2>/dev/null || true

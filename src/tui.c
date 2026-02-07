@@ -61,8 +61,8 @@ void tui_render_screen(client_t *client) {
 
     /* Now render using snapshot (no lock held) */
 
-    /* Clear and move to top */
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_CLEAR ANSI_HOME);
+    /* Move to top (Home) - Do NOT clear screen to prevent flicker */
+    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_HOME);
 
     /* Title bar */
     const char *mode_str = (client->mode == MODE_INSERT) ? "INSERT" :
@@ -82,22 +82,21 @@ void tui_render_screen(client_t *client) {
     for (int i = 0; i < padding; i++) {
         buffer[pos++] = ' ';
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
+    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\033[K\r\n");
 
     /* Render messages from snapshot */
     if (msg_snapshot) {
         for (int i = 0; i < snapshot_count; i++) {
             char msg_line[1024];
             message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), client->width);
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", msg_line);
+            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\033[K\r\n", msg_line);
         }
         free(msg_snapshot);
     }
 
-    /* Fill empty lines */
+    /* Fill empty lines and clear them */
     for (int i = snapshot_count; i < msg_height; i++) {
-        buffer[pos++] = '\r';
-        buffer[pos++] = '\n';
+        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\033[K\r\n");
     }
 
     /* Separator - use box drawing character */
@@ -107,21 +106,20 @@ void tui_render_screen(client_t *client) {
         memcpy(buffer + pos, line_char, len);
         pos += len;
     }
-    buffer[pos++] = '\r';
-    buffer[pos++] = '\n';
+    pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\033[K\r\n");
 
     /* Status/Input line */
     if (client->mode == MODE_INSERT) {
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "> ");
+        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "> \033[K");
     } else if (client->mode == MODE_NORMAL) {
         int total = msg_count;
         int scroll_pos = client->scroll_pos + 1;
         if (total == 0) scroll_pos = 0;
         pos += snprintf(buffer + pos, sizeof(buffer) - pos,
-                       "-- NORMAL -- (%d/%d)", scroll_pos, total);
+                       "-- NORMAL -- (%d/%d)\033[K", scroll_pos, total);
     } else if (client->mode == MODE_COMMAND) {
         pos += snprintf(buffer + pos, sizeof(buffer) - pos,
-                       ":%s", client->command_input);
+                       ":%s\033[K", client->command_input);
     }
 
     client_send(client, buffer, pos);
@@ -224,7 +222,9 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  ESC        - Enter NORMAL mode\n"
                "  Enter      - Send message\n"
                "  Backspace  - Delete character\n"
-               "  Ctrl+C     - Exit chat\n"
+               "  Ctrl+W     - Delete last word\n"
+               "  Ctrl+U     - Delete line\n"
+               "  Ctrl+C     - Enter NORMAL mode\n"
                "\n"
                "NORMAL MODE KEYS:\n"
                "  i          - Return to INSERT mode\n"
@@ -240,6 +240,8 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  Enter      - Execute command\n"
                "  ESC        - Cancel, return to NORMAL\n"
                "  Backspace  - Delete character\n"
+               "  Ctrl+W     - Delete last word\n"
+               "  Ctrl+U     - Delete line\n"
                "\n"
                "AVAILABLE COMMANDS:\n"
                "  list, users, who  - Show online users\n"
@@ -266,7 +268,9 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  ESC        - 进入 NORMAL 模式\n"
                "  Enter      - 发送消息\n"
                "  Backspace  - 删除字符\n"
-               "  Ctrl+C     - 退出聊天\n"
+               "  Ctrl+W     - 删除上个单词\n"
+               "  Ctrl+U     - 删除整行\n"
+               "  Ctrl+C     - 进入 NORMAL 模式\n"
                "\n"
                "NORMAL 模式按键:\n"
                "  i          - 返回 INSERT 模式\n"
@@ -282,6 +286,8 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  Enter      - 执行命令\n"
                "  ESC        - 取消,返回 NORMAL 模式\n"
                "  Backspace  - 删除字符\n"
+               "  Ctrl+W     - 删除上个单词\n"
+               "  Ctrl+U     - 删除整行\n"
                "\n"
                "可用命令:\n"
                "  list, users, who  - 显示在线用户\n"
