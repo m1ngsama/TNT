@@ -67,7 +67,12 @@ if [ -f host_key ]; then
     fi
 
     # Check permissions
-    PERMS=$(stat -f "%OLp" host_key)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        PERMS=$(stat -f "%OLp" host_key)
+    else
+        PERMS=$(stat -c "%a" host_key)
+    fi
+    
     if [ "$PERMS" = "600" ]; then
         pass "Host key has secure permissions (600)"
     else
