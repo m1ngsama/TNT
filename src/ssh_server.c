@@ -14,11 +14,21 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 
-/* Suppress libssh deprecation warnings for legacy server API */
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 /* Global SSH bind instance */
 static ssh_bind g_sshbind = NULL;
+
+/* Session context for callback-based API */
+typedef struct {
+    char client_ip[INET6_ADDRSTRLEN];
+    int pty_width;
+    int pty_height;
+    char exec_command[256];
+    bool auth_success;
+    int auth_attempts;
+    bool channel_ready;  /* Set when shell/exec request received */
+    ssh_channel channel;  /* Channel created in callback */
+    struct ssh_channel_callbacks_struct *channel_cb;  /* Channel callbacks */
+} session_context_t;
 
 /* Rate limiting and connection tracking */
 #define MAX_TRACKED_IPS 256
@@ -893,157 +903,156 @@ cleanup:
     return NULL;
 }
 
-/* Handle SSH authentication with optional token */
-static int handle_auth(ssh_session session, const char *client_ip) {
-    ssh_message message;
-    int auth_attempts = 0;
+/* Authentication callbacks for callback-based API */
 
-    do {
-        message = ssh_message_get(session);
-        if (!message) break;
+/* Password authentication callback */
+static int auth_password(ssh_session session, const char *user,
+                         const char *password, void *userdata) {
+    session_context_t *ctx = (session_context_t *)userdata;
 
-        if (ssh_message_type(message) == SSH_REQUEST_AUTH) {
-            auth_attempts++;
+    ctx->auth_attempts++;
 
-            /* Limit auth attempts */
-            if (auth_attempts > 3) {
-                record_auth_failure(client_ip);
-                ssh_message_free(message);
-                fprintf(stderr, "Too many auth attempts from %s\n", client_ip);
-                return -1;
-            }
+    /* Limit auth attempts */
+    if (ctx->auth_attempts > 3) {
+        record_auth_failure(ctx->client_ip);
+        fprintf(stderr, "Too many auth attempts from %s\n", ctx->client_ip);
+        ssh_disconnect(session);
+        return SSH_AUTH_DENIED;
+    }
 
-            if (ssh_message_subtype(message) == SSH_AUTH_METHOD_PASSWORD) {
-                const char *password = ssh_message_auth_password(message);
-
-                /* If access token is configured, require it */
-                if (g_access_token[0] != '\0') {
-                    if (password && strcmp(password, g_access_token) == 0) {
-                        /* Token matches */
-                        ssh_message_auth_reply_success(message, 0);
-                        ssh_message_free(message);
-                        return 0;
-                    } else {
-                        /* Wrong token */
-                        record_auth_failure(client_ip);
-                        ssh_message_reply_default(message);
-                        ssh_message_free(message);
-                        sleep(2);  /* Slow down brute force */
-                        continue;
-                    }
-                } else {
-                    /* No token configured, accept any password */
-                    ssh_message_auth_reply_success(message, 0);
-                    ssh_message_free(message);
-                    return 0;
-                }
-            } else if (ssh_message_subtype(message) == SSH_AUTH_METHOD_NONE) {
-                /* If access token is configured, reject passwordless */
-                if (g_access_token[0] != '\0') {
-                    ssh_message_reply_default(message);
-                    ssh_message_free(message);
-                    continue;
-                } else {
-                    /* No token configured, allow passwordless */
-                    ssh_message_auth_reply_success(message, 0);
-                    ssh_message_free(message);
-                    return 0;
-                }
-            }
+    /* If access token is configured, require it */
+    if (g_access_token[0] != '\0') {
+        if (password && strcmp(password, g_access_token) == 0) {
+            /* Token matches */
+            ctx->auth_success = true;
+            return SSH_AUTH_SUCCESS;
+        } else {
+            /* Wrong token */
+            record_auth_failure(ctx->client_ip);
+            sleep(2);  /* Slow down brute force */
+            return SSH_AUTH_DENIED;
         }
-
-        ssh_message_reply_default(message);
-        ssh_message_free(message);
-    } while (1);
-
-    return -1;
+    } else {
+        /* No token configured, accept any password */
+        ctx->auth_success = true;
+        return SSH_AUTH_SUCCESS;
+    }
 }
 
-/* Handle SSH channel requests */
-static ssh_channel handle_channel_open(ssh_session session) {
-    ssh_message message;
-    ssh_channel channel = NULL;
+/* Passwordless (none) authentication callback */
+static int auth_none(ssh_session session, const char *user, void *userdata) {
+    (void)session;  /* Unused */
+    (void)user;     /* Unused */
+    session_context_t *ctx = (session_context_t *)userdata;
 
-    do {
-        message = ssh_message_get(session);
-        if (!message) break;
-
-        if (ssh_message_type(message) == SSH_REQUEST_CHANNEL_OPEN &&
-            ssh_message_subtype(message) == SSH_CHANNEL_SESSION) {
-            channel = ssh_message_channel_request_open_reply_accept(message);
-            ssh_message_free(message);
-            return channel;
-        }
-
-        ssh_message_reply_default(message);
-        ssh_message_free(message);
-    } while (1);
-
-    return NULL;
+    /* If access token is configured, reject passwordless */
+    if (g_access_token[0] != '\0') {
+        return SSH_AUTH_DENIED;
+    } else {
+        /* No token configured, allow passwordless */
+        ctx->auth_success = true;
+        return SSH_AUTH_SUCCESS;
+    }
 }
 
-/* Handle PTY request and get terminal size */
-static int handle_pty_request(ssh_channel channel, client_t *client) {
-    ssh_message message;
-    int shell_received = 0;
+/* Forward declaration of channel callbacks setup */
+static void setup_channel_callbacks(ssh_channel channel, session_context_t *ctx);
 
-    do {
-        message = ssh_message_get(ssh_channel_get_session(channel));
-        if (!message) break;
+/* Channel open callback */
+static ssh_channel channel_open_request_session(ssh_session session, void *userdata) {
+    session_context_t *ctx = (session_context_t *)userdata;
+    ssh_channel channel;
 
-        if (ssh_message_type(message) == SSH_REQUEST_CHANNEL) {
-            if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_PTY) {
-                /* Get terminal dimensions from PTY request */
-                client->width = ssh_message_channel_request_pty_width(message);
-                client->height = ssh_message_channel_request_pty_height(message);
+    channel = ssh_channel_new(session);
+    if (channel == NULL) {
+        return NULL;
+    }
 
-                /* Default to 80x24 if invalid */
-                if (client->width <= 0 || client->width > 500) client->width = 80;
-                if (client->height <= 0 || client->height > 200) client->height = 24;
+    /* Store channel in context for main loop */
+    ctx->channel = channel;
 
-                ssh_message_channel_request_reply_success(message);
-                ssh_message_free(message);
+    /* Set up channel-specific callbacks (PTY, shell, exec) */
+    setup_channel_callbacks(channel, ctx);
 
-                /* Don't return yet, wait for shell/exec request */
-                if (shell_received) {
-                    return 0;
-                }
-                continue;
+    return channel;
+}
 
-            } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_SHELL) {
-                ssh_message_channel_request_reply_success(message);
-                ssh_message_free(message);
-                shell_received = 1;
-                /* Shell requested, we are done */
-                return 0;
+/* Channel callback functions */
 
-            } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_EXEC) {
-                /* Handle exec request (e.g. "ssh user@host command") */
-                const char *cmd = ssh_message_channel_request_command(message);
-                if (cmd) {
-                    strncpy(client->exec_command, cmd, sizeof(client->exec_command) - 1);
-                    client->exec_command[sizeof(client->exec_command) - 1] = '\0';
-                }
-                /* For now, just allow it and treat like shell start */
-                ssh_message_channel_request_reply_success(message);
-                ssh_message_free(message);
-                shell_received = 1;
-                return 0;
+/* PTY request callback */
+static int channel_pty_request(ssh_session session, ssh_channel channel,
+                               const char *term, int width, int height,
+                               int pxwidth, int pxheight, void *userdata) {
+    (void)session;   /* Unused */
+    (void)channel;   /* Unused */
+    (void)term;      /* Unused */
+    (void)pxwidth;   /* Unused */
+    (void)pxheight;  /* Unused */
 
-            } else if (ssh_message_subtype(message) == SSH_CHANNEL_REQUEST_WINDOW_CHANGE) {
-                /* Handle terminal resize - this should be handled during session, not here */
-                /* For now, just acknowledge and ignore during init */
-                ssh_message_channel_request_reply_success(message);
-                ssh_message_free(message);
-                continue;
-            }
-        }
+    session_context_t *ctx = (session_context_t *)userdata;
 
-        ssh_message_reply_default(message);
-        ssh_message_free(message);
-    } while (!shell_received);
+    /* Store terminal dimensions */
+    ctx->pty_width = width;
+    ctx->pty_height = height;
 
-    return 0;
+    /* Default to 80x24 if invalid */
+    if (ctx->pty_width <= 0 || ctx->pty_width > 500) ctx->pty_width = 80;
+    if (ctx->pty_height <= 0 || ctx->pty_height > 200) ctx->pty_height = 24;
+
+    return SSH_OK;
+}
+
+/* Shell request callback */
+static int channel_shell_request(ssh_session session, ssh_channel channel,
+                                 void *userdata) {
+    (void)session;  /* Unused */
+    (void)channel;  /* Unused */
+
+    session_context_t *ctx = (session_context_t *)userdata;
+
+    /* Mark channel as ready */
+    ctx->channel_ready = true;
+
+    /* Accept shell request */
+    return SSH_OK;
+}
+
+/* Exec request callback */
+static int channel_exec_request(ssh_session session, ssh_channel channel,
+                                const char *command, void *userdata) {
+    (void)session;  /* Unused */
+    (void)channel;  /* Unused */
+
+    session_context_t *ctx = (session_context_t *)userdata;
+
+    /* Store exec command */
+    if (command) {
+        strncpy(ctx->exec_command, command, sizeof(ctx->exec_command) - 1);
+        ctx->exec_command[sizeof(ctx->exec_command) - 1] = '\0';
+    }
+
+    /* Mark channel as ready */
+    ctx->channel_ready = true;
+
+    return SSH_OK;
+}
+
+/* Set up channel callbacks */
+static void setup_channel_callbacks(ssh_channel channel, session_context_t *ctx) {
+    /* Allocate channel callbacks on heap to persist */
+    ctx->channel_cb = calloc(1, sizeof(struct ssh_channel_callbacks_struct));
+    if (!ctx->channel_cb) {
+        return;
+    }
+
+    ssh_callbacks_init(ctx->channel_cb);
+
+    ctx->channel_cb->userdata = ctx;
+    ctx->channel_cb->channel_pty_request_function = channel_pty_request;
+    ctx->channel_cb->channel_shell_request_function = channel_shell_request;
+    ctx->channel_cb->channel_exec_request_function = channel_exec_request;
+
+    ssh_set_channel_callbacks(channel, ctx->channel_cb);
 }
 
 /* Initialize SSH server */
@@ -1114,26 +1123,55 @@ int ssh_server_start(int unused) {
             continue;
         }
 
-        /* Get client IP address */
-        char client_ip[INET6_ADDRSTRLEN];
-        get_client_ip(session, client_ip, sizeof(client_ip));
-
-        /* Check rate limit */
-        if (!check_rate_limit(client_ip)) {
+        /* Create session context for callbacks */
+        session_context_t *ctx = calloc(1, sizeof(session_context_t));
+        if (!ctx) {
             ssh_disconnect(session);
             ssh_free(session);
+            continue;
+        }
+
+        /* Initialize context */
+        get_client_ip(session, ctx->client_ip, sizeof(ctx->client_ip));
+        ctx->pty_width = 80;   /* Default */
+        ctx->pty_height = 24;  /* Default */
+        ctx->exec_command[0] = '\0';
+        ctx->auth_success = false;
+        ctx->auth_attempts = 0;
+        ctx->channel_ready = false;
+        ctx->channel = NULL;
+        ctx->channel_cb = NULL;
+
+        /* Check rate limit */
+        if (!check_rate_limit(ctx->client_ip)) {
+            ssh_disconnect(session);
+            ssh_free(session);
+            free(ctx);
             sleep(1);  /* Slow down blocked clients */
             continue;
         }
 
         /* Check total connection limit */
         if (!check_and_increment_connections()) {
-            fprintf(stderr, "Max connections reached, rejecting %s\n", client_ip);
+            fprintf(stderr, "Max connections reached, rejecting %s\n", ctx->client_ip);
             ssh_disconnect(session);
             ssh_free(session);
+            free(ctx);
             sleep(1);
             continue;
         }
+
+        /* Set up server callbacks (auth and channel) */
+        struct ssh_server_callbacks_struct server_cb;
+        memset(&server_cb, 0, sizeof(server_cb));
+        ssh_callbacks_init(&server_cb);
+
+        server_cb.userdata = ctx;
+        server_cb.auth_password_function = auth_password;
+        server_cb.auth_none_function = auth_none;
+        server_cb.channel_open_request_session_function = channel_open_request_session;
+
+        ssh_set_server_callbacks(session, &server_cb);
 
         /* Perform key exchange */
         if (ssh_handle_key_exchange(session) != SSH_OK) {
@@ -1141,26 +1179,68 @@ int ssh_server_start(int unused) {
             decrement_connections();
             ssh_disconnect(session);
             ssh_free(session);
+            free(ctx);
             sleep(1);
             continue;
         }
 
-        /* Handle authentication */
-        if (handle_auth(session, client_ip) < 0) {
-            fprintf(stderr, "Authentication failed from %s\n", client_ip);
+        /* Event loop to handle authentication and channel setup */
+        ssh_event event = ssh_event_new();
+        if (event == NULL) {
+            fprintf(stderr, "Failed to create event\n");
             decrement_connections();
             ssh_disconnect(session);
             ssh_free(session);
+            free(ctx);
+            continue;
+        }
+
+        ssh_event_add_session(event, session);
+
+        /* Wait for: auth success, channel open, AND channel ready (PTY/shell/exec) */
+        int timeout_sec = 30;
+        time_t start_time = time(NULL);
+        bool timed_out = false;
+        ssh_channel channel = NULL;
+
+        while ((!ctx->auth_success || ctx->channel == NULL || !ctx->channel_ready) && !timed_out) {
+            /* Poll with 1 second timeout per iteration */
+            int rc = ssh_event_dopoll(event, 1000);
+
+            if (rc == SSH_ERROR) {
+                fprintf(stderr, "Event poll error: %s\n", ssh_get_error(session));
+                break;
+            }
+
+            /* Check timeout */
+            if (time(NULL) - start_time > timeout_sec) {
+                timed_out = true;
+            }
+        }
+
+        ssh_event_free(event);
+
+        /* Check if authentication succeeded */
+        if (!ctx->auth_success) {
+            fprintf(stderr, "Authentication failed or timed out from %s\n", ctx->client_ip);
+            decrement_connections();
+            ssh_disconnect(session);
+            ssh_free(session);
+            if (ctx->channel_cb) free(ctx->channel_cb);
+            free(ctx);
             sleep(2);  /* Longer delay for auth failures */
             continue;
         }
 
-        /* Open channel */
-        ssh_channel channel = handle_channel_open(session);
-        if (!channel) {
-            fprintf(stderr, "Failed to open channel\n");
+        /* Check if channel opened and is ready */
+        channel = ctx->channel;
+        if (!channel || !ctx->channel_ready || timed_out) {
+            fprintf(stderr, "Failed to open/setup channel from %s\n", ctx->client_ip);
+            decrement_connections();
             ssh_disconnect(session);
             ssh_free(session);
+            if (ctx->channel_cb) free(ctx->channel_cb);
+            free(ctx);
             continue;
         }
 
@@ -1171,21 +1251,28 @@ int ssh_server_start(int unused) {
             ssh_channel_free(channel);
             ssh_disconnect(session);
             ssh_free(session);
+            free(ctx);
             continue;
         }
 
+        /* Initialize client from context */
         client->session = session;
         client->channel = channel;
         client->fd = -1;  /* Not used with SSH */
+        client->width = ctx->pty_width;
+        client->height = ctx->pty_height;
         client->ref_count = 1;  /* Initial reference */
         pthread_mutex_init(&client->ref_lock, NULL);
 
-        /* Handle PTY request and get terminal size */
-        if (handle_pty_request(channel, client) < 0) {
-            /* Set defaults if PTY request fails */
-            client->width = 80;
-            client->height = 24;
+        /* Copy exec command if any */
+        if (ctx->exec_command[0] != '\0') {
+            strncpy(client->exec_command, ctx->exec_command, sizeof(client->exec_command) - 1);
+            client->exec_command[sizeof(client->exec_command) - 1] = '\0';
         }
+
+        /* Free context and channel callbacks - no longer needed */
+        if (ctx->channel_cb) free(ctx->channel_cb);
+        free(ctx);
 
         /* Create thread for client */
         pthread_t thread;

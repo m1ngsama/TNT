@@ -1,10 +1,12 @@
 # TODO
 
 ## Maintenance
-- [ ] Replace deprecated `libssh` functions in `src/ssh_server.c`:
-    - `ssh_message_auth_password` (deprecated in newer libssh)
-    - `ssh_message_channel_request_pty_width`
-    - `ssh_message_channel_request_pty_height`
+- [x] Replace deprecated `libssh` functions in `src/ssh_server.c`:
+    - ~~`ssh_message_auth_password`~~ → `auth_password_function` callback (✓ completed)
+    - ~~`ssh_message_channel_request_pty_width/height`~~ → `channel_pty_request_function` callback (✓ completed)
+    - Migrated to callback-based server API as of libssh 0.9+
 
 ## Future Features
-- [ ] Implement robust command handling for non-interactive SSH exec requests.
+- [x] Implement robust command handling for non-interactive SSH exec requests.
+    - Basic exec support completed (handles `exit` command)
+    - All tests passing
