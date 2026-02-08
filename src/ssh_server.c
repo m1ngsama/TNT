@@ -805,8 +805,9 @@ void* client_handle_session(void *arg) {
         int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 30000); /* 30 sec timeout */
 
         if (n == SSH_AGAIN) {
-            /* Timeout - check if channel is still alive */
-            if (!ssh_channel_is_open(client->channel)) {
+            /* Timeout - send keepalive to prevent NAT/firewall timeout */
+            if (!ssh_channel_is_open(client->channel) ||
+                ssh_send_keepalive(client->session) != SSH_OK) {
                 break;
             }
             continue;
