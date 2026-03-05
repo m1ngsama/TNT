@@ -482,7 +482,6 @@ static int read_username(client_t *client) {
         if (!is_valid_username(client->username)) {
             client_printf(client, "Invalid username. Using 'anonymous' instead.\r\n");
             strcpy(client->username, "anonymous");
-            sleep(1);  /* Slow down rapid retry attempts */
         } else {
             /* Truncate to 20 characters */
             if (utf8_strlen(client->username) > 20) {
@@ -929,9 +928,9 @@ static int auth_password(ssh_session session, const char *user,
             ctx->auth_success = true;
             return SSH_AUTH_SUCCESS;
         } else {
-            /* Wrong token */
+            /* Wrong token — IP blocking handles brute force, no sleep needed here
+             * (sleeping in a libssh callback blocks the entire accept loop). */
             record_auth_failure(ctx->client_ip);
-            sleep(2);  /* Slow down brute force */
             return SSH_AUTH_DENIED;
         }
     } else {
@@ -1149,7 +1148,6 @@ int ssh_server_start(int unused) {
             ssh_disconnect(session);
             ssh_free(session);
             free(ctx);
-            sleep(1);  /* Slow down blocked clients */
             continue;
         }
 
@@ -1159,7 +1157,6 @@ int ssh_server_start(int unused) {
             ssh_disconnect(session);
             ssh_free(session);
             free(ctx);
-            sleep(1);
             continue;
         }
 
@@ -1182,7 +1179,6 @@ int ssh_server_start(int unused) {
             ssh_disconnect(session);
             ssh_free(session);
             free(ctx);
-            sleep(1);
             continue;
         }
 
@@ -1230,7 +1226,6 @@ int ssh_server_start(int unused) {
             ssh_free(session);
             if (ctx->channel_cb) free(ctx->channel_cb);
             free(ctx);
-            sleep(2);  /* Longer delay for auth failures */
             continue;
         }
 

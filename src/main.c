@@ -5,19 +5,14 @@
 #include <signal.h>
 #include <unistd.h>
 
-static int g_listen_fd = -1;
-
-/* Signal handler for graceful shutdown */
+/* Signal handler: must only call async-signal-safe functions.
+ * pthread, malloc, printf, exit() are NOT safe here.
+ * Just write a message and call _exit() — OS reclaims all resources. */
 static void signal_handler(int sig) {
     (void)sig;
-    if (g_listen_fd >= 0) {
-        close(g_listen_fd);
-    }
-    if (g_room) {
-        room_destroy(g_room);
-    }
-    printf("\nShutting down...\n");
-    exit(0);
+    static const char msg[] = "\nShutting down...\n";
+    (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    _exit(0);
 }
 
 int main(int argc, char **argv) {
@@ -60,19 +55,15 @@ int main(int argc, char **argv) {
     }
 
     /* Initialize server */
-    g_listen_fd = ssh_server_init(port);
-    if (g_listen_fd < 0) {
+    if (ssh_server_init(port) < 0) {
         fprintf(stderr, "Failed to initialize server\n");
         room_destroy(g_room);
         return 1;
     }
 
     /* Start server (blocking) */
-    int ret = ssh_server_start(g_listen_fd);
+    int ret = ssh_server_start(0);
 
-    /* Cleanup */
-    close(g_listen_fd);
     room_destroy(g_room);
-
     return ret;
 }
