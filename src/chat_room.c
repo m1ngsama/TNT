@@ -82,8 +82,16 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
     room_add_message(room, msg);
 
     /* Get copy of client list and increment ref counts */
-    client_t **clients_copy = calloc(room->client_count, sizeof(client_t*));
     int count = room->client_count;
+    if (count == 0) {
+        pthread_rwlock_unlock(&room->lock);
+        return;
+    }
+    client_t **clients_copy = calloc(count, sizeof(client_t*));
+    if (!clients_copy) {
+        pthread_rwlock_unlock(&room->lock);
+        return;
+    }
     memcpy(clients_copy, room->clients, count * sizeof(client_t*));
 
     /* Increment reference count for each client */

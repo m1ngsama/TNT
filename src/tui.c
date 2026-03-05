@@ -16,7 +16,11 @@ void tui_clear_screen(client_t *client) {
 void tui_render_screen(client_t *client) {
     if (!client || !client->connected) return;
 
-    char buffer[8192];
+    /* Heap-allocated: worst case is ~200 messages * ~1100 bytes + separator + status.
+     * 64 KiB covers all real terminal sizes without stack risk. */
+    const size_t buf_size = 65536;
+    char *buffer = malloc(buf_size);
+    if (!buffer) return;
     int pos = 0;
 
     /* Acquire all data in one lock to prevent TOCTOU */
@@ -62,7 +66,7 @@ void tui_render_screen(client_t *client) {
     /* Now render using snapshot (no lock held) */
 
     /* Move to top (Home) - Do NOT clear screen to prevent flicker */
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_HOME);
+    pos += snprintf(buffer + pos, buf_size - pos, ANSI_HOME);
 
     /* Title bar */
     const char *mode_str = (client->mode == MODE_INSERT) ? "INSERT" :
@@ -78,51 +82,52 @@ void tui_render_screen(client_t *client) {
     int padding = client->width - title_width;
     if (padding < 0) padding = 0;
 
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_REVERSE "%s", title);
-    for (int i = 0; i < padding; i++) {
+    pos += snprintf(buffer + pos, buf_size - pos, ANSI_REVERSE "%s", title);
+    for (int i = 0; i < padding && pos < (int)buf_size - 4; i++) {
         buffer[pos++] = ' ';
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\033[K\r\n");
+    pos += snprintf(buffer + pos, buf_size - pos, ANSI_RESET "\033[K\r\n");
 
     /* Render messages from snapshot */
     if (msg_snapshot) {
         for (int i = 0; i < snapshot_count; i++) {
             char msg_line[1024];
             message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), client->width);
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\033[K\r\n", msg_line);
+            pos += snprintf(buffer + pos, buf_size - pos, "%s\033[K\r\n", msg_line);
         }
         free(msg_snapshot);
     }
 
     /* Fill empty lines and clear them */
     for (int i = snapshot_count; i < msg_height; i++) {
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\033[K\r\n");
+        pos += snprintf(buffer + pos, buf_size - pos, "\033[K\r\n");
     }
 
     /* Separator - use box drawing character */
-    for (int i = 0; i < client->width && pos < (int)sizeof(buffer) - 10; i++) {
-        const char *line_char = "─";  /* U+2500 box drawing */
+    for (int i = 0; i < client->width && pos < (int)buf_size - 10; i++) {
+        const char *line_char = "─";  /* U+2500 box drawing, 3 bytes */
         int len = strlen(line_char);
         memcpy(buffer + pos, line_char, len);
         pos += len;
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\033[K\r\n");
+    pos += snprintf(buffer + pos, buf_size - pos, "\033[K\r\n");
 
     /* Status/Input line */
     if (client->mode == MODE_INSERT) {
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "> \033[K");
+        pos += snprintf(buffer + pos, buf_size - pos, "> \033[K");
     } else if (client->mode == MODE_NORMAL) {
         int total = msg_count;
         int scroll_pos = client->scroll_pos + 1;
         if (total == 0) scroll_pos = 0;
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos,
+        pos += snprintf(buffer + pos, buf_size - pos,
                        "-- NORMAL -- (%d/%d)\033[K", scroll_pos, total);
     } else if (client->mode == MODE_COMMAND) {
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos,
+        pos += snprintf(buffer + pos, buf_size - pos,
                        ":%s\033[K", client->command_input);
     }
 
     client_send(client, buffer, pos);
+    free(buffer);
 }
 
 /* Render the input line */
