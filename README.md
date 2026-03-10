@@ -265,6 +265,7 @@ tnt.service     - systemd service unit
 
 - [Development Guide](https://github.com/m1ngsama/TNT/wiki/Development-Guide) - Complete development manual
 - [Quick Setup](docs/EASY_SETUP.md) - 5-minute deployment guide
+- [Roadmap](docs/ROADMAP.md) - Long-term Unix/GNU direction and next stages
 - [Security Reference](docs/SECURITY_QUICKREF.md) - Security config quick reference
 - [Contributing](docs/CONTRIBUTING.md) - How to contribute
 - [Changelog](docs/CHANGELOG.md) - Version history
