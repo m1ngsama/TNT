@@ -47,7 +47,7 @@
 **用户体验：**
 ```bash
 # 用户连接（零配置）
-ssh -p 2222 your.server.ip
+ssh -p 2222 chat.m1ng.space
 # 输入任意内容或直接按回车
 # 开始聊天！
 ```
@@ -143,7 +143,7 @@ ssh -p 2222 your.server.ip
 tnt
 
 # 用户端（任何人）
-ssh -p 2222 server.ip
+ssh -p 2222 chat.m1ng.space
 # 输入任何内容作为密码或直接回车
 # 选择显示名称（可留空）
 # 开始聊天！

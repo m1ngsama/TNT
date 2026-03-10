@@ -38,13 +38,14 @@ https://github.com/m1ngsama/TNT/releases
 ```sh
 tnt              # default port 2222
 tnt -p 3333      # custom port
+tnt -d /var/lib/tnt
 PORT=3333 tnt    # via env var
 ```
 
 ### Connecting
 
 ```sh
-ssh -p 2222 localhost
+ssh -p 2222 chat.m1ng.space
 ```
 
 **Anonymous access by default**: Users can connect with ANY username/password (or empty password). No SSH keys required. Perfect for public chat servers.
@@ -92,6 +93,12 @@ TNT_BIND_ADDR=127.0.0.1 tnt
 
 # Bind to specific IP
 TNT_BIND_ADDR=192.168.1.100 tnt
+
+# Store host key and logs in an explicit state directory
+TNT_STATE_DIR=/var/lib/tnt tnt
+
+# Show the public SSH endpoint in startup logs
+TNT_PUBLIC_HOST=chat.m1ng.space tnt
 ```
 
 **Rate limiting:**
@@ -202,6 +209,18 @@ sudo cp tnt.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable tnt
 sudo systemctl start tnt
+
+# Optional: override defaults without editing the unit
+sudo tee /etc/default/tnt >/dev/null <<'EOF'
+PORT=2222
+TNT_BIND_ADDR=0.0.0.0
+TNT_STATE_DIR=/var/lib/tnt
+TNT_MAX_CONNECTIONS=200
+TNT_MAX_CONN_PER_IP=30
+TNT_RATE_LIMIT=1
+TNT_SSH_LOG_LEVEL=0
+TNT_PUBLIC_HOST=chat.m1ng.space
+EOF
 ```
 
 ### Docker

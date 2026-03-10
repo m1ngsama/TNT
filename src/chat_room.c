@@ -1,10 +1,22 @@
 #include "chat_room.h"
-#include "ssh_server.h"
-#include "tui.h"
-#include <unistd.h>
 
 /* Global chat room instance */
 chat_room_t *g_room = NULL;
+
+static int room_capacity_from_env(void) {
+    const char *env = getenv("TNT_MAX_CONNECTIONS");
+
+    if (!env || env[0] == '\0') {
+        return MAX_CLIENTS;
+    }
+
+    int capacity = atoi(env);
+    if (capacity < 1 || capacity > 1024) {
+        return MAX_CLIENTS;
+    }
+
+    return capacity;
+}
 
 /* Initialize chat room */
 chat_room_t* room_create(void) {
@@ -13,8 +25,8 @@ chat_room_t* room_create(void) {
 
     pthread_rwlock_init(&room->lock, NULL);
 
-    room->client_capacity = MAX_CLIENTS;
-    room->clients = calloc(room->client_capacity, sizeof(client_t*));
+    room->client_capacity = room_capacity_from_env();
+    room->clients = calloc(room->client_capacity, sizeof(struct client *));
     if (!room->clients) {
         free(room);
         return NULL;
@@ -42,7 +54,7 @@ void room_destroy(chat_room_t *room) {
 }
 
 /* Add client to room */
-int room_add_client(chat_room_t *room, client_t *client) {
+int room_add_client(chat_room_t *room, struct client *client) {
     pthread_rwlock_wrlock(&room->lock);
 
     if (room->client_count >= room->client_capacity) {
@@ -57,7 +69,7 @@ int room_add_client(chat_room_t *room, client_t *client) {
 }
 
 /* Remove client from room */
-void room_remove_client(chat_room_t *room, client_t *client) {
+void room_remove_client(chat_room_t *room, struct client *client) {
     pthread_rwlock_wrlock(&room->lock);
 
     for (int i = 0; i < room->client_count; i++) {
@@ -80,69 +92,9 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
 
     /* Add to history */
     room_add_message(room, msg);
-
-    /* Get copy of client list and increment ref counts */
-    int count = room->client_count;
-    if (count == 0) {
-        pthread_rwlock_unlock(&room->lock);
-        return;
-    }
-    client_t **clients_copy = calloc(count, sizeof(client_t*));
-    if (!clients_copy) {
-        pthread_rwlock_unlock(&room->lock);
-        return;
-    }
-    memcpy(clients_copy, room->clients, count * sizeof(client_t*));
-
-    /* Increment reference count for each client */
-    for (int i = 0; i < count; i++) {
-        pthread_mutex_lock(&clients_copy[i]->ref_lock);
-        clients_copy[i]->ref_count++;
-        pthread_mutex_unlock(&clients_copy[i]->ref_lock);
-    }
+    room->update_seq++;
 
     pthread_rwlock_unlock(&room->lock);
-
-    /* Render to each client (outside of lock) */
-    for (int i = 0; i < count; i++) {
-        client_t *client = clients_copy[i];
-
-        /* Check client state before rendering (while holding ref) */
-        bool should_render = false;
-        pthread_mutex_lock(&client->ref_lock);
-        if (client->ref_count > 0) {
-            should_render = client->connected &&
-                          !client->show_help &&
-                          client->command_output[0] == '\0';
-        }
-        pthread_mutex_unlock(&client->ref_lock);
-
-        if (should_render) {
-            tui_render_screen(client);
-        }
-
-        /* Decrement reference count and free if needed */
-        pthread_mutex_lock(&client->ref_lock);
-        client->ref_count--;
-        int ref = client->ref_count;
-        pthread_mutex_unlock(&client->ref_lock);
-
-        if (ref == 0) {
-            /* Safe to free now */
-            if (client->channel) {
-                ssh_channel_close(client->channel);
-                ssh_channel_free(client->channel);
-            }
-            if (client->session) {
-                ssh_disconnect(client->session);
-                ssh_free(client->session);
-            }
-            pthread_mutex_destroy(&client->ref_lock);
-            free(client);
-        }
-    }
-
-    free(clients_copy);
 }
 
 /* Add message to room history */
@@ -186,4 +138,14 @@ int room_get_client_count(chat_room_t *room) {
     int count = room->client_count;
     pthread_rwlock_unlock(&room->lock);
     return count;
+}
+
+uint64_t room_get_update_seq(chat_room_t *room) {
+    uint64_t seq;
+
+    pthread_rwlock_rdlock(&room->lock);
+    seq = room->update_seq;
+    pthread_rwlock_unlock(&room->lock);
+
+    return seq;
 }

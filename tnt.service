@@ -7,8 +7,9 @@ After=network.target
 Type=simple
 User=tnt
 Group=tnt
-WorkingDirectory=/var/lib/tnt
 ExecStart=/usr/local/bin/tnt
+StateDirectory=tnt
+StateDirectoryMode=0700
 
 # Automatic restart on failure for long-term stability
 Restart=always
@@ -39,6 +40,8 @@ TimeoutStopSec=30
 
 # Environment (can be customized via systemctl edit)
 Environment="PORT=2222"
+Environment="TNT_STATE_DIR=/var/lib/tnt"
+EnvironmentFile=-/etc/default/tnt
 
 [Install]
 WantedBy=multi-user.target

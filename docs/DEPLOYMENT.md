@@ -33,8 +33,6 @@ sudo mv tnt-darwin-arm64 /usr/local/bin/tnt
 1. Create user and directory:
 ```bash
 sudo useradd -r -s /bin/false tnt
-sudo mkdir -p /var/lib/tnt
-sudo chown tnt:tnt /var/lib/tnt
 ```
 
 2. Install service file:
@@ -45,7 +43,23 @@ sudo systemctl enable tnt
 sudo systemctl start tnt
 ```
 
-3. Check status:
+3. Optional runtime overrides:
+```bash
+sudo tee /etc/default/tnt >/dev/null <<'EOF'
+PORT=2222
+TNT_BIND_ADDR=0.0.0.0
+TNT_STATE_DIR=/var/lib/tnt
+TNT_MAX_CONNECTIONS=200
+TNT_MAX_CONN_PER_IP=30
+TNT_RATE_LIMIT=1
+TNT_SSH_LOG_LEVEL=0
+TNT_PUBLIC_HOST=chat.m1ng.space
+EOF
+
+sudo systemctl restart tnt
+```
+
+4. Check status:
 ```bash
 sudo systemctl status tnt
 sudo journalctl -u tnt -f
@@ -63,6 +77,9 @@ Environment="PORT=3333"
 
 sudo systemctl restart tnt
 ```
+
+The service uses `StateDirectory=tnt`, so systemd creates `/var/lib/tnt` automatically.
+Use `TNT_STATE_DIR` or `tnt -d DIR` when running outside systemd to avoid depending on the current working directory.
 
 ## Firewall
 

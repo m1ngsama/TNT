@@ -25,7 +25,7 @@ tnt              # 监听 2222 端口
 用户只需要一个SSH客户端即可，无需任何配置：
 
 ```bash
-ssh -p 2222 your.server.ip
+ssh -p 2222 chat.m1ng.space
 ```
 
 **重要提示**：
@@ -125,7 +125,7 @@ That's it! Your server is now running.
 Users only need an SSH client, no configuration required:
 
 ```bash
-ssh -p 2222 your.server.ip
+ssh -p 2222 chat.m1ng.space
 ```
 
 **Important**:
@@ -213,7 +213,7 @@ TNT_ACCESS_TOKEN="your_secret_password" tnt
 tnt
 
 # 用户连接（从任何机器）
-ssh -p 2222 chat.example.com
+ssh -p 2222 chat.m1ng.space
 # 输入任意密码或直接回车
 # 输入显示名称或留空
 # 开始聊天！

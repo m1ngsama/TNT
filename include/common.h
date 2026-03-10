@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
+#include <limits.h>
 #include <pthread.h>
 
 /* Project Metadata */
@@ -17,9 +18,11 @@
 #define MAX_MESSAGES 100
 #define MAX_USERNAME_LEN 64
 #define MAX_MESSAGE_LEN 1024
+#define MAX_EXEC_COMMAND_LEN 1024
 #define MAX_CLIENTS 64
 #define LOG_FILE "messages.log"
 #define HOST_KEY_FILE "host_key"
+#define TNT_DEFAULT_STATE_DIR "."
 
 /* ANSI color codes */
 #define ANSI_RESET "\033[0m"
@@ -42,5 +45,10 @@ typedef enum {
     LANG_EN,
     LANG_ZH
 } help_lang_t;
+
+/* Runtime helpers */
+const char* tnt_state_dir(void);
+int tnt_ensure_state_dir(void);
+int tnt_state_path(char *buffer, size_t buf_size, const char *filename);
 
 #endif /* COMMON_H */

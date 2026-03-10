@@ -21,11 +21,15 @@ typedef struct client {
     bool show_help;
     char command_input[256];
     char command_output[2048];
-    char exec_command[256];
+    char exec_command[MAX_EXEC_COMMAND_LEN];
+    char ssh_login[MAX_USERNAME_LEN];
+    bool redraw_pending;
     pthread_t thread;
     bool connected;
     int ref_count;                   /* Reference count for safe cleanup */
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
+    pthread_mutex_t io_lock;         /* Serialize SSH channel writes */
+    struct ssh_channel_callbacks_struct *channel_cb;
 } client_t;
 
 /* Initialize SSH server */
@@ -42,5 +46,9 @@ int client_send(client_t *client, const char *data, size_t len);
 
 /* Send formatted string to client */
 int client_printf(client_t *client, const char *fmt, ...);
+
+/* Reference counting helpers */
+void client_addref(client_t *client);
+void client_release(client_t *client);
 
 #endif /* SSH_SERVER_H */

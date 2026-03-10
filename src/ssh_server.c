@@ -11,18 +11,21 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
+#include <ctype.h>
 #include <stdarg.h>
 #include <sys/stat.h>
 
 /* Global SSH bind instance */
 static ssh_bind g_sshbind = NULL;
+static int g_listen_port = DEFAULT_PORT;
 
 /* Session context for callback-based API */
 typedef struct {
     char client_ip[INET6_ADDRSTRLEN];
+    char requested_user[MAX_USERNAME_LEN];
     int pty_width;
     int pty_height;
-    char exec_command[256];
+    char exec_command[MAX_EXEC_COMMAND_LEN];
     bool auth_success;
     int auth_attempts;
     bool channel_ready;  /* Set when shell/exec request received */
@@ -30,10 +33,13 @@ typedef struct {
     struct ssh_channel_callbacks_struct *channel_cb;  /* Channel callbacks */
 } session_context_t;
 
+typedef struct {
+    ssh_session session;
+} accepted_session_t;
+
 /* Rate limiting and connection tracking */
 #define MAX_TRACKED_IPS 256
 #define RATE_LIMIT_WINDOW 60        /* seconds */
-#define MAX_CONN_PER_WINDOW 10      /* connections per IP per window */
 #define MAX_AUTH_FAILURES 5         /* auth failures before block */
 #define BLOCK_DURATION 300          /* seconds to block after too many failures */
 
@@ -50,12 +56,54 @@ static ip_rate_limit_t g_rate_limits[MAX_TRACKED_IPS];
 static pthread_mutex_t g_rate_limit_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_total_connections = 0;
 static pthread_mutex_t g_conn_count_lock = PTHREAD_MUTEX_INITIALIZER;
+static time_t g_server_start_time = 0;
 
 /* Configuration from environment variables */
 static int g_max_connections = 64;
 static int g_max_conn_per_ip = 5;
 static int g_rate_limit_enabled = 1;
 static char g_access_token[256] = "";
+
+static void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
+                           const char *fmt, ...) {
+    va_list args;
+    int written;
+
+    if (!buffer || !pos || !fmt || buf_size == 0 || *pos >= buf_size - 1) {
+        return;
+    }
+
+    va_start(args, fmt);
+    written = vsnprintf(buffer + *pos, buf_size - *pos, fmt, args);
+    va_end(args);
+
+    if (written < 0) {
+        return;
+    }
+
+    if ((size_t)written >= buf_size - *pos) {
+        *pos = buf_size - 1;
+    } else {
+        *pos += (size_t)written;
+    }
+}
+
+static void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
+                                const char *data, size_t len) {
+    size_t available;
+    size_t to_copy;
+
+    if (!buffer || !pos || !data || len == 0 || buf_size == 0 ||
+        *pos >= buf_size - 1) {
+        return;
+    }
+
+    available = (buf_size - 1) - *pos;
+    to_copy = (len < available) ? len : available;
+    memcpy(buffer + *pos, data, to_copy);
+    *pos += to_copy;
+    buffer[*pos] = '\0';
+}
 
 /* Initialize rate limit configuration from environment */
 static void init_rate_limit_config(void) {
@@ -160,7 +208,7 @@ static bool check_rate_limit(const char *ip) {
 
     /* Check connection rate */
     entry->connection_count++;
-    if (entry->connection_count > MAX_CONN_PER_WINDOW) {
+    if (entry->connection_count > g_max_conn_per_ip) {
         entry->is_blocked = true;
         entry->block_until = now + BLOCK_DURATION;
         pthread_mutex_unlock(&g_rate_limit_lock);
@@ -234,6 +282,30 @@ static void get_client_ip(ssh_session session, char *ip_buf, size_t buf_size) {
     ip_buf[buf_size - 1] = '\0';
 }
 
+static void sanitize_terminal_size(int *width, int *height) {
+    if (!width || !height) {
+        return;
+    }
+
+    if (*width <= 0 || *width > 500) {
+        *width = 80;
+    }
+    if (*height <= 0 || *height > 200) {
+        *height = 24;
+    }
+}
+
+static void format_timestamp_utc(time_t ts, char *buffer, size_t buf_size) {
+    struct tm tm_info;
+
+    if (!buffer || buf_size == 0) {
+        return;
+    }
+
+    gmtime_r(&ts, &tm_info);
+    strftime(buffer, buf_size, "%Y-%m-%dT%H:%M:%SZ", &tm_info);
+}
+
 /* Validate username to prevent injection attacks */
 static bool is_valid_username(const char *username) {
     if (!username || username[0] == '\0') {
@@ -263,13 +335,19 @@ static bool is_valid_username(const char *username) {
 /* Generate or load SSH host key */
 static int setup_host_key(ssh_bind sshbind) {
     struct stat st;
+    char host_key_path[PATH_MAX];
+
+    if (tnt_state_path(host_key_path, sizeof(host_key_path), HOST_KEY_FILE) < 0) {
+        fprintf(stderr, "State directory path is too long\n");
+        return -1;
+    }
 
     /* Check if host key exists */
-    if (stat(HOST_KEY_FILE, &st) == 0) {
+    if (stat(host_key_path, &st) == 0) {
         /* Validate file size */
         if (st.st_size == 0) {
             fprintf(stderr, "Warning: Empty key file, regenerating...\n");
-            unlink(HOST_KEY_FILE);
+            unlink(host_key_path);
             /* Fall through to generate new key */
         } else if (st.st_size > 10 * 1024 * 1024) {
             /* Sanity check: key file shouldn't be > 10MB */
@@ -279,11 +357,11 @@ static int setup_host_key(ssh_bind sshbind) {
             /* Verify and fix permissions */
             if ((st.st_mode & 0077) != 0) {
                 fprintf(stderr, "Warning: Fixing insecure key file permissions\n");
-                chmod(HOST_KEY_FILE, 0600);
+                chmod(host_key_path, 0600);
             }
 
             /* Load existing key */
-            if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, HOST_KEY_FILE) < 0) {
+            if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, host_key_path) < 0) {
                 fprintf(stderr, "Failed to load host key: %s\n", ssh_get_error(sshbind));
                 return -1;
             }
@@ -300,8 +378,13 @@ static int setup_host_key(ssh_bind sshbind) {
     }
 
     /* Create temporary file with secure permissions (atomic operation) */
-    char temp_key_file[256];
-    snprintf(temp_key_file, sizeof(temp_key_file), "%s.tmp.%d", HOST_KEY_FILE, getpid());
+    char temp_key_file[PATH_MAX];
+    if (snprintf(temp_key_file, sizeof(temp_key_file), "%s.tmp.%d",
+                 host_key_path, getpid()) >= (int)sizeof(temp_key_file)) {
+        fprintf(stderr, "Temporary key path is too long\n");
+        ssh_key_free(key);
+        return -1;
+    }
 
     /* Set umask to ensure restrictive permissions before file creation */
     mode_t old_umask = umask(0077);
@@ -323,14 +406,14 @@ static int setup_host_key(ssh_bind sshbind) {
     chmod(temp_key_file, 0600);
 
     /* Atomically replace the old key file (if any) */
-    if (rename(temp_key_file, HOST_KEY_FILE) < 0) {
+    if (rename(temp_key_file, host_key_path) < 0) {
         fprintf(stderr, "Failed to rename temporary key file\n");
         unlink(temp_key_file);
         return -1;
     }
 
     /* Load the newly created key */
-    if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, HOST_KEY_FILE) < 0) {
+    if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, host_key_path) < 0) {
         fprintf(stderr, "Failed to load host key: %s\n", ssh_get_error(sshbind));
         return -1;
     }
@@ -340,23 +423,38 @@ static int setup_host_key(ssh_bind sshbind) {
 
 /* Send data to client via SSH channel */
 int client_send(client_t *client, const char *data, size_t len) {
-    if (!client || !client->connected || !client->channel) return -1;
+    size_t total = 0;
 
-    int sent = ssh_channel_write(client->channel, data, len);
-    return (sent < 0) ? -1 : 0;
+    if (!client || !data) return -1;
+
+    pthread_mutex_lock(&client->io_lock);
+
+    if (!client->connected || !client->channel) {
+        pthread_mutex_unlock(&client->io_lock);
+        return -1;
+    }
+
+    while (total < len) {
+        int sent = ssh_channel_write(client->channel, data + total, len - total);
+        if (sent <= 0) {
+            pthread_mutex_unlock(&client->io_lock);
+            return -1;
+        }
+        total += (size_t)sent;
+    }
+
+    pthread_mutex_unlock(&client->io_lock);
+    return 0;
 }
 
-/* Increment client reference count - currently unused but kept for future use */
-static void client_addref(client_t *client) __attribute__((unused));
-static void client_addref(client_t *client) {
+void client_addref(client_t *client) {
     if (!client) return;
     pthread_mutex_lock(&client->ref_lock);
     client->ref_count++;
     pthread_mutex_unlock(&client->ref_lock);
 }
 
-/* Decrement client reference count and free if zero */
-static void client_release(client_t *client) {
+void client_release(client_t *client) {
     if (!client) return;
 
     pthread_mutex_lock(&client->ref_lock);
@@ -366,6 +464,9 @@ static void client_release(client_t *client) {
 
     if (count == 0) {
         /* Safe to free now */
+        if (client->channel && client->channel_cb) {
+            ssh_remove_channel_callbacks(client->channel, client->channel_cb);
+        }
         if (client->channel) {
             ssh_channel_close(client->channel);
             ssh_channel_free(client->channel);
@@ -374,6 +475,10 @@ static void client_release(client_t *client) {
             ssh_disconnect(client->session);
             ssh_free(client->session);
         }
+        if (client->channel_cb) {
+            free(client->channel_cb);
+        }
+        pthread_mutex_destroy(&client->io_lock);
         pthread_mutex_destroy(&client->ref_lock);
         free(client);
     }
@@ -493,48 +598,469 @@ static int read_username(client_t *client) {
     return 0;
 }
 
+static void trim_ascii_whitespace(char *text) {
+    char *start;
+    char *end;
+
+    if (!text || text[0] == '\0') {
+        return;
+    }
+
+    start = text;
+    while (*start && isspace((unsigned char)*start)) {
+        start++;
+    }
+
+    if (start != text) {
+        memmove(text, start, strlen(start) + 1);
+    }
+
+    if (text[0] == '\0') {
+        return;
+    }
+
+    end = text + strlen(text) - 1;
+    while (end >= text && isspace((unsigned char)*end)) {
+        *end = '\0';
+        end--;
+    }
+}
+
+static void json_append_string(char *buffer, size_t buf_size, size_t *pos,
+                               const char *text) {
+    const unsigned char *p = (const unsigned char *)(text ? text : "");
+
+    buffer_append_bytes(buffer, buf_size, pos, "\"", 1);
+
+    while (*p && *pos < buf_size - 1) {
+        char escaped[7];
+
+        switch (*p) {
+            case '\\':
+                buffer_append_bytes(buffer, buf_size, pos, "\\\\", 2);
+                break;
+            case '"':
+                buffer_append_bytes(buffer, buf_size, pos, "\\\"", 2);
+                break;
+            case '\n':
+                buffer_append_bytes(buffer, buf_size, pos, "\\n", 2);
+                break;
+            case '\r':
+                buffer_append_bytes(buffer, buf_size, pos, "\\r", 2);
+                break;
+            case '\t':
+                buffer_append_bytes(buffer, buf_size, pos, "\\t", 2);
+                break;
+            default:
+                if (*p < 0x20) {
+                    snprintf(escaped, sizeof(escaped), "\\u%04x", *p);
+                    buffer_append_bytes(buffer, buf_size, pos,
+                                        escaped, strlen(escaped));
+                } else {
+                    buffer_append_bytes(buffer, buf_size, pos,
+                                        (const char *)p, 1);
+                }
+                break;
+        }
+        p++;
+    }
+
+    buffer_append_bytes(buffer, buf_size, pos, "\"", 1);
+}
+
+static void resolve_exec_username(const client_t *client, char *buffer,
+                                  size_t buf_size) {
+    if (!buffer || buf_size == 0) {
+        return;
+    }
+
+    if (client && client->ssh_login[0] != '\0' &&
+        is_valid_username(client->ssh_login)) {
+        snprintf(buffer, buf_size, "%s", client->ssh_login);
+    } else {
+        snprintf(buffer, buf_size, "%s", "anonymous");
+    }
+
+    if (utf8_strlen(buffer) > 20) {
+        utf8_truncate(buffer, 20);
+    }
+}
+
+static int exec_command_help(client_t *client) {
+    static const char help_text[] =
+        "TNT exec interface\n"
+        "Commands:\n"
+        "  help            Show this help\n"
+        "  health          Print service health\n"
+        "  users [--json]  List online users\n"
+        "  stats [--json]  Print room statistics\n"
+        "  tail [N]        Print recent messages\n"
+        "  tail -n N       Print recent messages\n"
+        "  post MESSAGE    Post a message non-interactively\n"
+        "  exit            Exit successfully\n";
+
+    return client_send(client, help_text, sizeof(help_text) - 1) == 0 ? 0 : 1;
+}
+
+static int exec_command_health(client_t *client) {
+    static const char ok[] = "ok\n";
+    return client_send(client, ok, sizeof(ok) - 1) == 0 ? 0 : 1;
+}
+
+static int exec_command_users(client_t *client, bool json) {
+    int count;
+    char (*usernames)[MAX_USERNAME_LEN] = NULL;
+    char *output;
+    size_t output_size;
+    size_t pos = 0;
+    int rc;
+
+    pthread_rwlock_rdlock(&g_room->lock);
+    count = g_room->client_count;
+    if (count > 0) {
+        usernames = calloc((size_t)count, sizeof(*usernames));
+        if (!usernames) {
+            pthread_rwlock_unlock(&g_room->lock);
+            client_printf(client, "users: out of memory\n");
+            return 1;
+        }
+
+        for (int i = 0; i < count; i++) {
+            snprintf(usernames[i], MAX_USERNAME_LEN, "%s",
+                     g_room->clients[i]->username);
+        }
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+
+    output_size = json ? ((size_t)count * (MAX_USERNAME_LEN * 2 + 8) + 8)
+                       : ((size_t)count * (MAX_USERNAME_LEN + 1) + 1);
+    if (output_size < 8) {
+        output_size = 8;
+    }
+
+    output = calloc(output_size, 1);
+    if (!output) {
+        free(usernames);
+        client_printf(client, "users: out of memory\n");
+        return 1;
+    }
+
+    if (json) {
+        buffer_append_bytes(output, output_size, &pos, "[", 1);
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                buffer_append_bytes(output, output_size, &pos, ",", 1);
+            }
+            json_append_string(output, output_size, &pos, usernames[i]);
+        }
+        buffer_append_bytes(output, output_size, &pos, "]\n", 2);
+    } else {
+        for (int i = 0; i < count; i++) {
+            buffer_appendf(output, output_size, &pos, "%s\n", usernames[i]);
+        }
+    }
+
+    rc = client_send(client, output, pos) == 0 ? 0 : 1;
+    free(output);
+    free(usernames);
+    return rc;
+}
+
+static int exec_command_stats(client_t *client, bool json) {
+    int online_users;
+    int message_count;
+    int client_capacity;
+    int active_connections;
+    time_t now = time(NULL);
+    long uptime_seconds;
+    char buffer[512];
+    int len;
+
+    pthread_rwlock_rdlock(&g_room->lock);
+    online_users = g_room->client_count;
+    message_count = g_room->message_count;
+    client_capacity = g_room->client_capacity;
+    pthread_rwlock_unlock(&g_room->lock);
+
+    pthread_mutex_lock(&g_conn_count_lock);
+    active_connections = g_total_connections;
+    pthread_mutex_unlock(&g_conn_count_lock);
+
+    uptime_seconds = (g_server_start_time > 0 && now >= g_server_start_time)
+                     ? (long)(now - g_server_start_time)
+                     : 0;
+
+    if (json) {
+        len = snprintf(buffer, sizeof(buffer),
+                       "{\"status\":\"ok\",\"online_users\":%d,"
+                       "\"message_count\":%d,\"client_capacity\":%d,"
+                       "\"active_connections\":%d,\"uptime_seconds\":%ld}\n",
+                       online_users, message_count, client_capacity,
+                       active_connections, uptime_seconds);
+    } else {
+        len = snprintf(buffer, sizeof(buffer),
+                       "status ok\n"
+                       "online_users %d\n"
+                       "message_count %d\n"
+                       "client_capacity %d\n"
+                       "active_connections %d\n"
+                       "uptime_seconds %ld\n",
+                       online_users, message_count, client_capacity,
+                       active_connections, uptime_seconds);
+    }
+
+    if (len < 0 || len >= (int)sizeof(buffer)) {
+        client_printf(client, "stats: output overflow\n");
+        return 1;
+    }
+
+    return client_send(client, buffer, (size_t)len) == 0 ? 0 : 1;
+}
+
+static int parse_tail_count(const char *args, int *count) {
+    char *end = NULL;
+    long value;
+
+    if (!count) {
+        return -1;
+    }
+
+    *count = 20;
+    if (!args || args[0] == '\0') {
+        return 0;
+    }
+
+    if (strncmp(args, "-n", 2) == 0 && isspace((unsigned char)args[2])) {
+        args += 2;
+        while (*args && isspace((unsigned char)*args)) {
+            args++;
+        }
+    }
+
+    value = strtol(args, &end, 10);
+    if (end == args) {
+        return -1;
+    }
+    while (*end) {
+        if (!isspace((unsigned char)*end)) {
+            return -1;
+        }
+        end++;
+    }
+
+    if (value < 1 || value > MAX_MESSAGES) {
+        return -1;
+    }
+
+    *count = (int)value;
+    return 0;
+}
+
+static int exec_command_tail(client_t *client, const char *args) {
+    int requested = 20;
+    int total_messages;
+    int start;
+    int count;
+    message_t *snapshot = NULL;
+    char *output;
+    size_t output_size;
+    size_t pos = 0;
+    int rc;
+
+    if (parse_tail_count(args, &requested) < 0) {
+        client_printf(client, "tail: usage: tail [N] | tail -n N\n");
+        return 64;
+    }
+
+    pthread_rwlock_rdlock(&g_room->lock);
+    total_messages = g_room->message_count;
+    start = total_messages - requested;
+    if (start < 0) {
+        start = 0;
+    }
+    count = total_messages - start;
+
+    if (count > 0) {
+        snapshot = calloc((size_t)count, sizeof(message_t));
+        if (!snapshot) {
+            pthread_rwlock_unlock(&g_room->lock);
+            client_printf(client, "tail: out of memory\n");
+            return 1;
+        }
+        memcpy(snapshot, &g_room->messages[start], (size_t)count * sizeof(message_t));
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+
+    output_size = (size_t)(count > 0 ? count : 1) *
+                  (MAX_USERNAME_LEN + MAX_MESSAGE_LEN + 48);
+    output = calloc(output_size, 1);
+    if (!output) {
+        free(snapshot);
+        client_printf(client, "tail: out of memory\n");
+        return 1;
+    }
+
+    for (int i = 0; i < count; i++) {
+        char timestamp[64];
+        format_timestamp_utc(snapshot[i].timestamp, timestamp, sizeof(timestamp));
+        buffer_appendf(output, output_size, &pos, "%s\t%s\t%s\n",
+                       timestamp, snapshot[i].username, snapshot[i].content);
+    }
+
+    rc = client_send(client, output, pos) == 0 ? 0 : 1;
+    free(output);
+    free(snapshot);
+    return rc;
+}
+
+static int exec_command_post(client_t *client, const char *args) {
+    char content[MAX_MESSAGE_LEN];
+    char username[MAX_USERNAME_LEN];
+    message_t msg = {
+        .timestamp = time(NULL),
+    };
+
+    if (!args || args[0] == '\0') {
+        client_printf(client, "post: usage: post MESSAGE\n");
+        return 64;
+    }
+
+    strncpy(content, args, sizeof(content) - 1);
+    content[sizeof(content) - 1] = '\0';
+    trim_ascii_whitespace(content);
+
+    if (content[0] == '\0') {
+        client_printf(client, "post: message cannot be empty\n");
+        return 64;
+    }
+
+    if (!utf8_is_valid_string(content)) {
+        client_printf(client, "post: invalid UTF-8 input\n");
+        return 1;
+    }
+
+    resolve_exec_username(client, username, sizeof(username));
+
+    strncpy(msg.username, username, sizeof(msg.username) - 1);
+    msg.username[sizeof(msg.username) - 1] = '\0';
+    strncpy(msg.content, content, sizeof(msg.content) - 1);
+    msg.content[sizeof(msg.content) - 1] = '\0';
+
+    room_broadcast(g_room, &msg);
+    if (message_save(&msg) < 0) {
+        client_printf(client, "post: failed to persist message\n");
+        return 1;
+    }
+
+    return client_send(client, "posted\n", 7) == 0 ? 0 : 1;
+}
+
+static int execute_exec_command(client_t *client) {
+    char command_copy[MAX_EXEC_COMMAND_LEN];
+    char *cmd;
+    char *args;
+
+    strncpy(command_copy, client->exec_command, sizeof(command_copy) - 1);
+    command_copy[sizeof(command_copy) - 1] = '\0';
+    trim_ascii_whitespace(command_copy);
+
+    cmd = command_copy;
+    if (*cmd == '\0') {
+        return exec_command_help(client);
+    }
+
+    args = cmd;
+    while (*args && !isspace((unsigned char)*args)) {
+        args++;
+    }
+    if (*args) {
+        *args++ = '\0';
+        while (*args && isspace((unsigned char)*args)) {
+            args++;
+        }
+    } else {
+        args = NULL;
+    }
+
+    if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0) {
+        return exec_command_help(client);
+    }
+    if (strcmp(cmd, "health") == 0) {
+        return exec_command_health(client);
+    }
+    if (strcmp(cmd, "users") == 0) {
+        if (args && strcmp(args, "--json") != 0) {
+            client_printf(client, "users: usage: users [--json]\n");
+            return 64;
+        }
+        return exec_command_users(client, args != NULL);
+    }
+    if (strcmp(cmd, "stats") == 0) {
+        if (args && strcmp(args, "--json") != 0) {
+            client_printf(client, "stats: usage: stats [--json]\n");
+            return 64;
+        }
+        return exec_command_stats(client, args != NULL);
+    }
+    if (strcmp(cmd, "tail") == 0) {
+        return exec_command_tail(client, args);
+    }
+    if (strcmp(cmd, "post") == 0) {
+        return exec_command_post(client, args);
+    }
+    if (strcmp(cmd, "exit") == 0) {
+        return 0;
+    }
+
+    client_printf(client, "Unknown command: %s\n", cmd);
+    return 64;
+}
+
 /* Execute a command */
 static void execute_command(client_t *client) {
     char *cmd = client->command_input;
     char output[2048] = {0};
-    int pos = 0;
+    size_t pos = 0;
 
     /* Trim whitespace */
     while (*cmd == ' ') cmd++;
-    char *end = cmd + strlen(cmd) - 1;
-    while (end > cmd && *end == ' ') {
-        *end = '\0';
-        end--;
+    size_t cmd_len = strlen(cmd);
+    if (cmd_len > 0) {
+        char *end = cmd + cmd_len - 1;
+        while (end > cmd && *end == ' ') {
+            *end = '\0';
+            end--;
+        }
     }
 
     if (strcmp(cmd, "list") == 0 || strcmp(cmd, "users") == 0 ||
         strcmp(cmd, "who") == 0) {
-        pos += snprintf(output + pos, sizeof(output) - pos,
+        buffer_appendf(output, sizeof(output), &pos,
                        "========================================\n"
                        "     Online Users / 在线用户\n"
                        "========================================\n");
 
         pthread_rwlock_rdlock(&g_room->lock);
-        pos += snprintf(output + pos, sizeof(output) - pos,
+        buffer_appendf(output, sizeof(output), &pos,
                        "Total / 总数: %d\n"
                        "----------------------------------------\n",
                        g_room->client_count);
 
         for (int i = 0; i < g_room->client_count; i++) {
             char marker = (g_room->clients[i] == client) ? '*' : ' ';
-            pos += snprintf(output + pos, sizeof(output) - pos,
+            buffer_appendf(output, sizeof(output), &pos,
                            "%c %d. %s\n", marker, i + 1,
                            g_room->clients[i]->username);
         }
 
         pthread_rwlock_unlock(&g_room->lock);
 
-        pos += snprintf(output + pos, sizeof(output) - pos,
+        buffer_appendf(output, sizeof(output), &pos,
                        "========================================\n"
                        "* = you / 你\n");
 
     } else if (strcmp(cmd, "help") == 0 || strcmp(cmd, "commands") == 0) {
-        pos += snprintf(output + pos, sizeof(output) - pos,
+        buffer_appendf(output, sizeof(output), &pos,
                        "========================================\n"
                        "        Available Commands\n"
                        "========================================\n"
@@ -544,8 +1070,7 @@ static void execute_command(client_t *client) {
                        "========================================\n");
 
     } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
-        pos += snprintf(output + pos, sizeof(output) - pos,
-                       "Command output cleared\n");
+        buffer_appendf(output, sizeof(output), &pos, "Command output cleared\n");
 
     } else if (cmd[0] == '\0') {
         /* Empty command */
@@ -555,15 +1080,15 @@ static void execute_command(client_t *client) {
         return;
 
     } else {
-        pos += snprintf(output + pos, sizeof(output) - pos,
+        buffer_appendf(output, sizeof(output), &pos,
                        "Unknown command: %s\n"
                        "Type 'help' for available commands\n", cmd);
     }
 
-    pos += snprintf(output + pos, sizeof(output) - pos,
+    buffer_appendf(output, sizeof(output), &pos,
                    "\nPress any key to continue...");
 
-    strncpy(client->command_output, output, sizeof(client->command_output) - 1);
+    snprintf(client->command_output, sizeof(client->command_output), "%s", output);
     client->command_input[0] = '\0';
     tui_render_command_output(client);
 }
@@ -634,8 +1159,8 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     message_t msg = {
                         .timestamp = time(NULL),
                     };
-                    strncpy(msg.username, client->username, MAX_USERNAME_LEN - 1);
-                    strncpy(msg.content, input, MAX_MESSAGE_LEN - 1);
+                    snprintf(msg.username, sizeof(msg.username), "%s", client->username);
+                    snprintf(msg.content, sizeof(msg.content), "%s", input);
                     room_broadcast(g_room, &msg);
                     message_save(&msg);
                     input[0] = '\0';
@@ -755,6 +1280,9 @@ void* client_handle_session(void *arg) {
     client_t *client = (client_t*)arg;
     char input[MAX_MESSAGE_LEN] = {0};
     char buf[4];
+    bool joined_room = false;
+    uint64_t seen_update_seq;
+    time_t last_keepalive = time(NULL);
 
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
@@ -763,16 +1291,9 @@ void* client_handle_session(void *arg) {
 
     /* Check for exec command */
     if (client->exec_command[0] != '\0') {
-        if (strcmp(client->exec_command, "exit") == 0) {
-            /* Just exit */
-            ssh_channel_request_send_exit_status(client->channel, 0);
-            goto cleanup;
-        } else {
-            /* Unknown command */
-            client_printf(client, "Command not supported: %s\r\nOnly 'exit' is supported in non-interactive mode.\r\n", client->exec_command);
-            ssh_channel_request_send_exit_status(client->channel, 1);
-            goto cleanup;
-        }
+        int exit_status = execute_exec_command(client);
+        ssh_channel_request_send_exit_status(client->channel, exit_status);
+        goto cleanup;
     }
 
     /* Read username */
@@ -785,6 +1306,7 @@ void* client_handle_session(void *arg) {
         client_printf(client, "Room is full\n");
         goto cleanup;
     }
+    joined_room = true;
 
     /* Broadcast join message */
     message_t join_msg = {
@@ -797,30 +1319,61 @@ void* client_handle_session(void *arg) {
 
     /* Render initial screen */
     tui_render_screen(client);
+    seen_update_seq = room_get_update_seq(g_room);
 
     /* Main input loop */
     while (client->connected && ssh_channel_is_open(client->channel)) {
-        /* Use non-blocking read with timeout */
-        int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 30000); /* 30 sec timeout */
+        int ready = ssh_channel_poll_timeout(client->channel, 1000, 0);
 
-        if (n == SSH_AGAIN) {
-            /* Timeout - send keepalive to prevent NAT/firewall timeout */
-            if (!ssh_channel_is_open(client->channel) ||
-                ssh_send_keepalive(client->session) != SSH_OK) {
+        if (ready == SSH_ERROR) {
+            break;
+        }
+
+        if (ready == 0) {
+            bool room_updated = false;
+            uint64_t current_update_seq = room_get_update_seq(g_room);
+
+            if (!ssh_channel_is_open(client->channel)) {
                 break;
+            }
+
+            if (current_update_seq != seen_update_seq) {
+                seen_update_seq = current_update_seq;
+                room_updated = true;
+            }
+
+            if (client->redraw_pending ||
+                (room_updated && !client->show_help &&
+                 client->command_output[0] == '\0')) {
+                client->redraw_pending = false;
+
+                if (client->show_help) {
+                    tui_render_help(client);
+                } else if (client->command_output[0] != '\0') {
+                    tui_render_command_output(client);
+                } else {
+                    tui_render_screen(client);
+                    if (client->mode == MODE_INSERT && input[0] != '\0') {
+                        tui_render_input(client, input);
+                    }
+                }
+            } else if (time(NULL) - last_keepalive >= 15) {
+                if (ssh_send_keepalive(client->session) != SSH_OK) {
+                    break;
+                }
+                last_keepalive = time(NULL);
             }
             continue;
         }
 
-        if (n == SSH_ERROR) {
-            /* Read error - connection likely closed */
-            break;
-        }
+        int n = ssh_channel_read(client->channel, buf, 1, 0);
 
         if (n <= 0) {
             /* EOF or error */
             break;
         }
+
+        last_keepalive = time(NULL);
 
         unsigned char b = buf[0];
 
@@ -881,7 +1434,7 @@ void* client_handle_session(void *arg) {
 
 cleanup:
     /* Broadcast leave message */
-    {
+    if (joined_room) {
         message_t leave_msg = {
             .timestamp = time(NULL),
         };
@@ -908,8 +1461,12 @@ cleanup:
 /* Password authentication callback */
 static int auth_password(ssh_session session, const char *user,
                          const char *password, void *userdata) {
-    (void)user;  /* Unused - we don't validate usernames */
     session_context_t *ctx = (session_context_t *)userdata;
+
+    if (user && user[0] != '\0') {
+        strncpy(ctx->requested_user, user, sizeof(ctx->requested_user) - 1);
+        ctx->requested_user[sizeof(ctx->requested_user) - 1] = '\0';
+    }
 
     ctx->auth_attempts++;
 
@@ -943,8 +1500,12 @@ static int auth_password(ssh_session session, const char *user,
 /* Passwordless (none) authentication callback */
 static int auth_none(ssh_session session, const char *user, void *userdata) {
     (void)session;  /* Unused */
-    (void)user;     /* Unused */
     session_context_t *ctx = (session_context_t *)userdata;
+
+    if (user && user[0] != '\0') {
+        strncpy(ctx->requested_user, user, sizeof(ctx->requested_user) - 1);
+        ctx->requested_user[sizeof(ctx->requested_user) - 1] = '\0';
+    }
 
     /* If access token is configured, reject passwordless */
     if (g_access_token[0] != '\0') {
@@ -956,8 +1517,62 @@ static int auth_none(ssh_session session, const char *user, void *userdata) {
     }
 }
 
-/* Forward declaration of channel callbacks setup */
-static void setup_channel_callbacks(ssh_channel channel, session_context_t *ctx);
+/* Public key authentication callback */
+static int auth_pubkey(ssh_session session, const char *user,
+                       struct ssh_key_struct *pubkey, char signature_state,
+                       void *userdata) {
+    (void)session;          /* Unused */
+    (void)pubkey;           /* Unused */
+    (void)signature_state;  /* Unused in anonymous mode */
+    session_context_t *ctx = (session_context_t *)userdata;
+
+    if (user && user[0] != '\0') {
+        strncpy(ctx->requested_user, user, sizeof(ctx->requested_user) - 1);
+        ctx->requested_user[sizeof(ctx->requested_user) - 1] = '\0';
+    }
+
+    if (g_access_token[0] != '\0') {
+        return SSH_AUTH_DENIED;
+    }
+
+    ctx->auth_success = true;
+    return SSH_AUTH_SUCCESS;
+}
+
+static void destroy_session_context(session_context_t *ctx) {
+    if (!ctx) {
+        return;
+    }
+
+    if (ctx->channel_cb) {
+        free(ctx->channel_cb);
+    }
+
+    free(ctx);
+}
+
+static void cleanup_failed_session(ssh_session session, session_context_t *ctx) {
+    if (ctx && ctx->channel) {
+        if (ctx->channel_cb) {
+            ssh_remove_channel_callbacks(ctx->channel, ctx->channel_cb);
+        }
+        ssh_channel_close(ctx->channel);
+        ssh_channel_free(ctx->channel);
+        ctx->channel = NULL;
+    }
+
+    if (session) {
+        ssh_disconnect(session);
+        ssh_free(session);
+    }
+
+    destroy_session_context(ctx);
+    decrement_connections();
+}
+
+static void setup_session_channel_callbacks(ssh_channel channel,
+                                            session_context_t *ctx);
+static int install_client_channel_callbacks(client_t *client);
 
 /* Channel open callback */
 static ssh_channel channel_open_request_session(ssh_session session, void *userdata) {
@@ -973,7 +1588,7 @@ static ssh_channel channel_open_request_session(ssh_session session, void *userd
     ctx->channel = channel;
 
     /* Set up channel-specific callbacks (PTY, shell, exec) */
-    setup_channel_callbacks(channel, ctx);
+    setup_session_channel_callbacks(channel, ctx);
 
     return channel;
 }
@@ -996,9 +1611,25 @@ static int channel_pty_request(ssh_session session, ssh_channel channel,
     ctx->pty_width = width;
     ctx->pty_height = height;
 
-    /* Default to 80x24 if invalid */
-    if (ctx->pty_width <= 0 || ctx->pty_width > 500) ctx->pty_width = 80;
-    if (ctx->pty_height <= 0 || ctx->pty_height > 200) ctx->pty_height = 24;
+    sanitize_terminal_size(&ctx->pty_width, &ctx->pty_height);
+
+    return SSH_OK;
+}
+
+static int channel_pty_window_change(ssh_session session, ssh_channel channel,
+                                     int width, int height,
+                                     int pxwidth, int pxheight,
+                                     void *userdata) {
+    (void)session;
+    (void)channel;
+    (void)pxwidth;
+    (void)pxheight;
+
+    session_context_t *ctx = (session_context_t *)userdata;
+
+    ctx->pty_width = width;
+    ctx->pty_height = height;
+    sanitize_terminal_size(&ctx->pty_width, &ctx->pty_height);
 
     return SSH_OK;
 }
@@ -1039,7 +1670,8 @@ static int channel_exec_request(ssh_session session, ssh_channel channel,
 }
 
 /* Set up channel callbacks */
-static void setup_channel_callbacks(ssh_channel channel, session_context_t *ctx) {
+static void setup_session_channel_callbacks(ssh_channel channel,
+                                            session_context_t *ctx) {
     /* Allocate channel callbacks on heap to persist */
     ctx->channel_cb = calloc(1, sizeof(struct ssh_channel_callbacks_struct));
     if (!ctx->channel_cb) {
@@ -1051,15 +1683,235 @@ static void setup_channel_callbacks(ssh_channel channel, session_context_t *ctx)
     ctx->channel_cb->userdata = ctx;
     ctx->channel_cb->channel_pty_request_function = channel_pty_request;
     ctx->channel_cb->channel_shell_request_function = channel_shell_request;
+    ctx->channel_cb->channel_pty_window_change_function = channel_pty_window_change;
     ctx->channel_cb->channel_exec_request_function = channel_exec_request;
 
     ssh_set_channel_callbacks(channel, ctx->channel_cb);
+}
+
+static int client_channel_window_change(ssh_session session, ssh_channel channel,
+                                        int width, int height,
+                                        int pxwidth, int pxheight,
+                                        void *userdata) {
+    (void)session;
+    (void)channel;
+    (void)pxwidth;
+    (void)pxheight;
+
+    client_t *client = (client_t *)userdata;
+    if (!client) {
+        return SSH_ERROR;
+    }
+
+    client->width = width;
+    client->height = height;
+    sanitize_terminal_size(&client->width, &client->height);
+    client->redraw_pending = true;
+    return SSH_OK;
+}
+
+static void client_channel_eof(ssh_session session, ssh_channel channel,
+                               void *userdata) {
+    (void)session;
+    (void)channel;
+
+    client_t *client = (client_t *)userdata;
+    if (client) {
+        client->connected = false;
+    }
+}
+
+static void client_channel_close(ssh_session session, ssh_channel channel,
+                                 void *userdata) {
+    (void)session;
+    (void)channel;
+
+    client_t *client = (client_t *)userdata;
+    if (client) {
+        client->connected = false;
+    }
+}
+
+static int install_client_channel_callbacks(client_t *client) {
+    if (!client || !client->channel) {
+        return -1;
+    }
+
+    client->channel_cb = calloc(1, sizeof(struct ssh_channel_callbacks_struct));
+    if (!client->channel_cb) {
+        return -1;
+    }
+
+    ssh_callbacks_init(client->channel_cb);
+    client->channel_cb->userdata = client;
+    client->channel_cb->channel_eof_function = client_channel_eof;
+    client->channel_cb->channel_close_function = client_channel_close;
+    client->channel_cb->channel_pty_window_change_function =
+        client_channel_window_change;
+
+    if (ssh_set_channel_callbacks(client->channel, client->channel_cb) != SSH_OK) {
+        free(client->channel_cb);
+        client->channel_cb = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+static void *bootstrap_client_session(void *arg) {
+    accepted_session_t *accepted = (accepted_session_t *)arg;
+    ssh_session session;
+    session_context_t *ctx = NULL;
+    ssh_event event = NULL;
+    struct ssh_server_callbacks_struct server_cb;
+    ssh_channel channel;
+    client_t *client = NULL;
+    bool timed_out = false;
+    time_t start_time;
+
+    if (!accepted) {
+        return NULL;
+    }
+
+    session = accepted->session;
+    free(accepted);
+
+    ctx = calloc(1, sizeof(session_context_t));
+    if (!ctx) {
+        ssh_disconnect(session);
+        ssh_free(session);
+        decrement_connections();
+        return NULL;
+    }
+
+    get_client_ip(session, ctx->client_ip, sizeof(ctx->client_ip));
+    ctx->pty_width = 80;
+    ctx->pty_height = 24;
+    ctx->exec_command[0] = '\0';
+    ctx->requested_user[0] = '\0';
+    ctx->auth_success = false;
+    ctx->auth_attempts = 0;
+    ctx->channel_ready = false;
+    ctx->channel = NULL;
+    ctx->channel_cb = NULL;
+
+    memset(&server_cb, 0, sizeof(server_cb));
+    ssh_callbacks_init(&server_cb);
+    server_cb.userdata = ctx;
+    server_cb.auth_password_function = auth_password;
+    server_cb.auth_none_function = auth_none;
+    server_cb.auth_pubkey_function = auth_pubkey;
+    server_cb.channel_open_request_session_function = channel_open_request_session;
+    ssh_set_server_callbacks(session, &server_cb);
+
+    if (ssh_handle_key_exchange(session) != SSH_OK) {
+        fprintf(stderr, "Key exchange failed from %s: %s\n",
+                ctx->client_ip, ssh_get_error(session));
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
+
+    event = ssh_event_new();
+    if (!event) {
+        fprintf(stderr, "Failed to create SSH event for %s\n", ctx->client_ip);
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
+
+    if (ssh_event_add_session(event, session) != SSH_OK) {
+        fprintf(stderr, "Failed to add session to event loop for %s\n",
+                ctx->client_ip);
+        ssh_event_free(event);
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
+
+    start_time = time(NULL);
+    while ((!ctx->auth_success || ctx->channel == NULL || !ctx->channel_ready) &&
+           !timed_out) {
+        int rc = ssh_event_dopoll(event, 1000);
+
+        if (rc == SSH_ERROR) {
+            fprintf(stderr, "Event poll error from %s: %s\n",
+                    ctx->client_ip, ssh_get_error(session));
+            break;
+        }
+
+        if (time(NULL) - start_time > 30) {
+            timed_out = true;
+        }
+    }
+
+    ssh_event_free(event);
+    event = NULL;
+
+    if (!ctx->auth_success) {
+        fprintf(stderr, "Authentication failed or timed out from %s\n",
+                ctx->client_ip);
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
+
+    channel = ctx->channel;
+    if (!channel || !ctx->channel_ready || timed_out) {
+        fprintf(stderr, "Failed to open/setup channel from %s\n",
+                ctx->client_ip);
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
+
+    client = calloc(1, sizeof(client_t));
+    if (!client) {
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
+
+    client->session = session;
+    client->channel = channel;
+    client->fd = -1;
+    client->width = ctx->pty_width;
+    client->height = ctx->pty_height;
+    sanitize_terminal_size(&client->width, &client->height);
+    client->ref_count = 1;
+    pthread_mutex_init(&client->ref_lock, NULL);
+    pthread_mutex_init(&client->io_lock, NULL);
+
+    if (ctx->requested_user[0] != '\0') {
+        strncpy(client->ssh_login, ctx->requested_user,
+                sizeof(client->ssh_login) - 1);
+        client->ssh_login[sizeof(client->ssh_login) - 1] = '\0';
+    }
+    if (ctx->exec_command[0] != '\0') {
+        strncpy(client->exec_command, ctx->exec_command,
+                sizeof(client->exec_command) - 1);
+        client->exec_command[sizeof(client->exec_command) - 1] = '\0';
+    }
+
+    if (install_client_channel_callbacks(client) < 0) {
+        pthread_mutex_destroy(&client->io_lock);
+        pthread_mutex_destroy(&client->ref_lock);
+        free(client);
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
+
+    if (ctx->channel_cb) {
+        ssh_remove_channel_callbacks(channel, ctx->channel_cb);
+        free(ctx->channel_cb);
+        ctx->channel_cb = NULL;
+    }
+    destroy_session_context(ctx);
+
+    client_handle_session(client);
+    return NULL;
 }
 
 /* Initialize SSH server */
 int ssh_server_init(int port) {
     /* Initialize rate limiting configuration */
     init_rate_limit_config();
+    g_listen_port = port;
+    g_server_start_time = time(NULL);
 
     g_sshbind = ssh_bind_new();
     if (!g_sshbind) {
@@ -1106,12 +1958,25 @@ int ssh_server_init(int port) {
 /* Start SSH server (blocking) */
 int ssh_server_start(int unused) {
     (void)unused;
+    const char *public_host = getenv("TNT_PUBLIC_HOST");
+    pthread_attr_t attr;
+    if (!public_host || public_host[0] == '\0') {
+        public_host = "localhost";
+    }
 
-    printf("TNT chat server listening on port %d (SSH)\n", DEFAULT_PORT);
-    printf("Connect with: ssh -p %d localhost\n", DEFAULT_PORT);
+    printf("TNT chat server listening on port %d (SSH)\n", g_listen_port);
+    printf("Connect with: ssh -p %d %s\n", g_listen_port, public_host);
+    fflush(stdout);
+
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
     while (1) {
         ssh_session session = ssh_new();
+        char client_ip[INET6_ADDRSTRLEN];
+        accepted_session_t *accepted;
+        pthread_t thread;
+
         if (!session) {
             fprintf(stderr, "Failed to create SSH session\n");
             continue;
@@ -1124,176 +1989,42 @@ int ssh_server_start(int unused) {
             continue;
         }
 
-        /* Create session context for callbacks */
-        session_context_t *ctx = calloc(1, sizeof(session_context_t));
-        if (!ctx) {
-            ssh_disconnect(session);
-            ssh_free(session);
-            continue;
-        }
-
-        /* Initialize context */
-        get_client_ip(session, ctx->client_ip, sizeof(ctx->client_ip));
-        ctx->pty_width = 80;   /* Default */
-        ctx->pty_height = 24;  /* Default */
-        ctx->exec_command[0] = '\0';
-        ctx->auth_success = false;
-        ctx->auth_attempts = 0;
-        ctx->channel_ready = false;
-        ctx->channel = NULL;
-        ctx->channel_cb = NULL;
+        get_client_ip(session, client_ip, sizeof(client_ip));
 
         /* Check rate limit */
-        if (!check_rate_limit(ctx->client_ip)) {
+        if (!check_rate_limit(client_ip)) {
             ssh_disconnect(session);
             ssh_free(session);
-            free(ctx);
             continue;
         }
 
         /* Check total connection limit */
         if (!check_and_increment_connections()) {
-            fprintf(stderr, "Max connections reached, rejecting %s\n", ctx->client_ip);
+            fprintf(stderr, "Max connections reached, rejecting %s\n", client_ip);
             ssh_disconnect(session);
             ssh_free(session);
-            free(ctx);
             continue;
         }
-
-        /* Set up server callbacks (auth and channel) */
-        struct ssh_server_callbacks_struct server_cb;
-        memset(&server_cb, 0, sizeof(server_cb));
-        ssh_callbacks_init(&server_cb);
-
-        server_cb.userdata = ctx;
-        server_cb.auth_password_function = auth_password;
-        server_cb.auth_none_function = auth_none;
-        server_cb.channel_open_request_session_function = channel_open_request_session;
-
-        ssh_set_server_callbacks(session, &server_cb);
-
-        /* Perform key exchange */
-        if (ssh_handle_key_exchange(session) != SSH_OK) {
-            fprintf(stderr, "Key exchange failed: %s\n", ssh_get_error(session));
+        accepted = calloc(1, sizeof(*accepted));
+        if (!accepted) {
             decrement_connections();
             ssh_disconnect(session);
             ssh_free(session);
-            free(ctx);
             continue;
         }
 
-        /* Event loop to handle authentication and channel setup */
-        ssh_event event = ssh_event_new();
-        if (event == NULL) {
-            fprintf(stderr, "Failed to create event\n");
-            decrement_connections();
-            ssh_disconnect(session);
-            ssh_free(session);
-            free(ctx);
-            continue;
-        }
+        accepted->session = session;
 
-        ssh_event_add_session(event, session);
-
-        /* Wait for: auth success, channel open, AND channel ready (PTY/shell/exec) */
-        int timeout_sec = 30;
-        time_t start_time = time(NULL);
-        bool timed_out = false;
-        ssh_channel channel = NULL;
-
-        while ((!ctx->auth_success || ctx->channel == NULL || !ctx->channel_ready) && !timed_out) {
-            /* Poll with 1 second timeout per iteration */
-            int rc = ssh_event_dopoll(event, 1000);
-
-            if (rc == SSH_ERROR) {
-                fprintf(stderr, "Event poll error: %s\n", ssh_get_error(session));
-                break;
-            }
-
-            /* Check timeout */
-            if (time(NULL) - start_time > timeout_sec) {
-                timed_out = true;
-            }
-        }
-
-        ssh_event_free(event);
-
-        /* Check if authentication succeeded */
-        if (!ctx->auth_success) {
-            fprintf(stderr, "Authentication failed or timed out from %s\n", ctx->client_ip);
-            decrement_connections();
-            ssh_disconnect(session);
-            ssh_free(session);
-            if (ctx->channel_cb) free(ctx->channel_cb);
-            free(ctx);
-            continue;
-        }
-
-        /* Check if channel opened and is ready */
-        channel = ctx->channel;
-        if (!channel || !ctx->channel_ready || timed_out) {
-            fprintf(stderr, "Failed to open/setup channel from %s\n", ctx->client_ip);
-            decrement_connections();
-            ssh_disconnect(session);
-            ssh_free(session);
-            if (ctx->channel_cb) free(ctx->channel_cb);
-            free(ctx);
-            continue;
-        }
-
-        /* Create client structure */
-        client_t *client = calloc(1, sizeof(client_t));
-        if (!client) {
-            ssh_channel_close(channel);
-            ssh_channel_free(channel);
-            ssh_disconnect(session);
-            ssh_free(session);
-            free(ctx);
-            continue;
-        }
-
-        /* Initialize client from context */
-        client->session = session;
-        client->channel = channel;
-        client->fd = -1;  /* Not used with SSH */
-        client->width = ctx->pty_width;
-        client->height = ctx->pty_height;
-        client->ref_count = 1;  /* Initial reference */
-        pthread_mutex_init(&client->ref_lock, NULL);
-
-        /* Copy exec command if any */
-        if (ctx->exec_command[0] != '\0') {
-            strncpy(client->exec_command, ctx->exec_command, sizeof(client->exec_command) - 1);
-            client->exec_command[sizeof(client->exec_command) - 1] = '\0';
-        }
-
-        /* Free context and channel callbacks - no longer needed */
-        if (ctx->channel_cb) free(ctx->channel_cb);
-        free(ctx);
-
-        /* Create thread for client */
-        pthread_t thread;
-        pthread_attr_t attr;
-
-        /* Initialize thread attributes for detached thread */
-        pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-        if (pthread_create(&thread, &attr, client_handle_session, client) != 0) {
+        if (pthread_create(&thread, &attr, bootstrap_client_session, accepted) != 0) {
             fprintf(stderr, "Thread creation failed: %s\n", strerror(errno));
-            pthread_attr_destroy(&attr);
-            /* Clean up all resources */
-            pthread_mutex_destroy(&client->ref_lock);
-            ssh_channel_close(channel);
-            ssh_channel_free(channel);
+            free(accepted);
+            decrement_connections();
             ssh_disconnect(session);
             ssh_free(session);
-            free(client);
             continue;
         }
-
-        pthread_attr_destroy(&attr);
     }
 
+    pthread_attr_destroy(&attr);
     return 0;
 }
