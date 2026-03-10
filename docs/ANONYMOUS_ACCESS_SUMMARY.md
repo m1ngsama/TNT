@@ -164,8 +164,11 @@ TNT_ACCESS_TOKEN="secret" tnt
 # 限制连接数
 TNT_MAX_CONNECTIONS=100 tnt
 
-# 限制每IP连接数
+# Limit concurrent sessions per IP
 TNT_MAX_CONN_PER_IP=10 tnt
+
+# Limit new connections per IP per 60 seconds
+TNT_MAX_CONN_RATE_PER_IP=30 tnt
 
 # 只允许本地访问
 TNT_BIND_ADDR=127.0.0.1 tnt

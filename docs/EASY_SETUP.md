@@ -181,8 +181,11 @@ PORT=3333 tnt
 # Limit max connections
 TNT_MAX_CONNECTIONS=100 tnt
 
-# Limit connections per IP
+# Limit concurrent sessions per IP
 TNT_MAX_CONN_PER_IP=10 tnt
+
+# Limit new connections per IP per 60 seconds
+TNT_MAX_CONN_RATE_PER_IP=30 tnt
 
 # Bind to localhost only
 TNT_BIND_ADDR=127.0.0.1 tnt
