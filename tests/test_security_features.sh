@@ -97,6 +97,10 @@ TNT_ACCESS_TOKEN="test123" $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" 
 TNT_MAX_CONNECTIONS=10 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_MAX_CONNECTIONS configuration accepted" || fail "TNT_MAX_CONNECTIONS not working"
 
+# Test per-IP connection rate configuration
+TNT_MAX_CONN_RATE_PER_IP=20 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+    pass "TNT_MAX_CONN_RATE_PER_IP configuration accepted" || fail "TNT_MAX_CONN_RATE_PER_IP not working"
+
 # Test rate limit toggle
 TNT_RATE_LIMIT=0 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
     pass "TNT_RATE_LIMIT configuration accepted" || fail "TNT_RATE_LIMIT not working"

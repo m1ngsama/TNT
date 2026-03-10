@@ -19,7 +19,7 @@ if command -v gtimeout >/dev/null 2>&1; then
 fi
 
 echo "Starting TNT server on port $PORT..."
-TNT_RATE_LIMIT=0 $BIN -p $PORT &
+TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=$CLIENTS $BIN -p $PORT &
 SERVER_PID=$!
 sleep 2
 

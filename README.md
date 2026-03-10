@@ -106,10 +106,13 @@ TNT_PUBLIC_HOST=chat.m1ng.space tnt
 # Max total connections (default 64)
 TNT_MAX_CONNECTIONS=100 tnt
 
-# Max connections per IP (default 5)
+# Max concurrent sessions per IP (default 5)
 TNT_MAX_CONN_PER_IP=10 tnt
 
-# Disable rate limiting (testing only)
+# Max new connection attempts per IP in 60 seconds (default 10)
+TNT_MAX_CONN_RATE_PER_IP=30 tnt
+
+# Disable connection-rate and auth-failure blocking (testing only)
 TNT_RATE_LIMIT=0 tnt
 ```
 
@@ -124,9 +127,22 @@ TNT_SSH_LOG_LEVEL=3 tnt
 TNT_ACCESS_TOKEN="strong-password-123" \
 TNT_BIND_ADDR=0.0.0.0 \
 TNT_MAX_CONNECTIONS=200 \
-TNT_MAX_CONN_PER_IP=3 \
+TNT_MAX_CONN_PER_IP=30 \
+TNT_MAX_CONN_RATE_PER_IP=60 \
 TNT_SSH_LOG_LEVEL=1 \
 tnt -p 2222
+```
+
+### SSH Exec Interface
+
+TNT also exposes a small non-interactive SSH surface for scripts:
+
+```sh
+ssh -p 2222 chat.m1ng.space health
+ssh -p 2222 chat.m1ng.space stats --json
+ssh -p 2222 chat.m1ng.space users
+ssh -p 2222 chat.m1ng.space "tail -n 20"
+ssh -p 2222 operator@chat.m1ng.space post "service notice"
 ```
 
 ## Development
@@ -151,6 +167,7 @@ cd tests
 ./test_basic.sh              # basic functionality
 ./test_security_features.sh  # security features
 ./test_anonymous_access.sh   # anonymous access
+./test_connection_limits.sh  # per-IP concurrency and rate limits
 ./test_stress.sh             # stress test
 ```
 
@@ -217,6 +234,7 @@ TNT_BIND_ADDR=0.0.0.0
 TNT_STATE_DIR=/var/lib/tnt
 TNT_MAX_CONNECTIONS=200
 TNT_MAX_CONN_PER_IP=30
+TNT_MAX_CONN_RATE_PER_IP=60
 TNT_RATE_LIMIT=1
 TNT_SSH_LOG_LEVEL=0
 TNT_PUBLIC_HOST=chat.m1ng.space

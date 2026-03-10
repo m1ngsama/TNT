@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "chat_room.h"
+#include <arpa/inet.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 
@@ -12,6 +13,7 @@ typedef struct client {
     ssh_session session;             /* SSH session */
     ssh_channel channel;             /* SSH channel */
     char username[MAX_USERNAME_LEN];
+    char client_ip[INET6_ADDRSTRLEN];
     int width;
     int height;
     client_mode_t mode;

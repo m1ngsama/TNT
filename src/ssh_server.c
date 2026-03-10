@@ -35,6 +35,7 @@ typedef struct {
 
 typedef struct {
     ssh_session session;
+    char client_ip[INET6_ADDRSTRLEN];
 } accepted_session_t;
 
 /* Rate limiting and connection tracking */
@@ -46,7 +47,8 @@ typedef struct {
 typedef struct {
     char ip[INET6_ADDRSTRLEN];
     time_t window_start;
-    int connection_count;
+    int recent_connection_count;
+    int active_connections;
     int auth_failure_count;
     bool is_blocked;
     time_t block_until;
@@ -61,6 +63,7 @@ static time_t g_server_start_time = 0;
 /* Configuration from environment variables */
 static int g_max_connections = 64;
 static int g_max_conn_per_ip = 5;
+static int g_max_conn_rate_per_ip = 10;
 static int g_rate_limit_enabled = 1;
 static char g_access_token[256] = "";
 
@@ -118,8 +121,15 @@ static void init_rate_limit_config(void) {
 
     if ((env = getenv("TNT_MAX_CONN_PER_IP")) != NULL) {
         int val = atoi(env);
-        if (val > 0 && val <= 100) {
+        if (val > 0 && val <= 1024) {
             g_max_conn_per_ip = val;
+        }
+    }
+
+    if ((env = getenv("TNT_MAX_CONN_RATE_PER_IP")) != NULL) {
+        int val = atoi(env);
+        if (val > 0 && val <= 1024) {
+            g_max_conn_rate_per_ip = val;
         }
     }
 
@@ -147,7 +157,8 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
         if (g_rate_limits[i].ip[0] == '\0') {
             strncpy(g_rate_limits[i].ip, ip, sizeof(g_rate_limits[i].ip) - 1);
             g_rate_limits[i].window_start = time(NULL);
-            g_rate_limits[i].connection_count = 0;
+            g_rate_limits[i].recent_connection_count = 0;
+            g_rate_limits[i].active_connections = 0;
             g_rate_limits[i].auth_failure_count = 0;
             g_rate_limits[i].is_blocked = false;
             g_rate_limits[i].block_until = 0;
@@ -155,13 +166,27 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
         }
     }
 
-    /* Find oldest entry to replace */
-    int oldest_idx = 0;
-    time_t oldest_time = g_rate_limits[0].window_start;
-    for (int i = 1; i < MAX_TRACKED_IPS; i++) {
-        if (g_rate_limits[i].window_start < oldest_time) {
+    /* Reuse the oldest inactive entry first so active IP accounting stays intact. */
+    int oldest_idx = -1;
+    time_t oldest_time = 0;
+    for (int i = 0; i < MAX_TRACKED_IPS; i++) {
+        if (g_rate_limits[i].active_connections != 0) {
+            continue;
+        }
+        if (oldest_idx < 0 || g_rate_limits[i].window_start < oldest_time) {
             oldest_time = g_rate_limits[i].window_start;
             oldest_idx = i;
+        }
+    }
+
+    if (oldest_idx < 0) {
+        oldest_idx = 0;
+        oldest_time = g_rate_limits[0].window_start;
+        for (int i = 1; i < MAX_TRACKED_IPS; i++) {
+            if (g_rate_limits[i].window_start < oldest_time) {
+                oldest_time = g_rate_limits[i].window_start;
+                oldest_idx = i;
+            }
         }
     }
 
@@ -169,53 +194,55 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
     strncpy(g_rate_limits[oldest_idx].ip, ip, sizeof(g_rate_limits[oldest_idx].ip) - 1);
     g_rate_limits[oldest_idx].ip[sizeof(g_rate_limits[oldest_idx].ip) - 1] = '\0';
     g_rate_limits[oldest_idx].window_start = time(NULL);
-    g_rate_limits[oldest_idx].connection_count = 0;
+    g_rate_limits[oldest_idx].recent_connection_count = 0;
+    g_rate_limits[oldest_idx].active_connections = 0;
     g_rate_limits[oldest_idx].auth_failure_count = 0;
     g_rate_limits[oldest_idx].is_blocked = false;
     g_rate_limits[oldest_idx].block_until = 0;
     return &g_rate_limits[oldest_idx];
 }
 
-/* Check rate limit for an IP */
-static bool check_rate_limit(const char *ip) {
-    if (!g_rate_limit_enabled) {
-        return true;
-    }
-
+/* Check rate and concurrency limits for an IP */
+static bool check_ip_connection_policy(const char *ip) {
     time_t now = time(NULL);
 
     pthread_mutex_lock(&g_rate_limit_lock);
     ip_rate_limit_t *entry = get_rate_limit_entry(ip);
 
-    /* Check if blocked */
-    if (entry->is_blocked && now < entry->block_until) {
+    if (entry->active_connections >= g_max_conn_per_ip) {
+        pthread_mutex_unlock(&g_rate_limit_lock);
+        fprintf(stderr, "Concurrent IP limit reached for %s\n", ip);
+        return false;
+    }
+
+    if (g_rate_limit_enabled && entry->is_blocked && now < entry->block_until) {
         pthread_mutex_unlock(&g_rate_limit_lock);
         fprintf(stderr, "Blocked IP %s (blocked until %ld)\n", ip, (long)entry->block_until);
         return false;
     }
 
-    /* Unblock if block duration passed */
-    if (entry->is_blocked && now >= entry->block_until) {
+    if (g_rate_limit_enabled && entry->is_blocked && now >= entry->block_until) {
         entry->is_blocked = false;
         entry->auth_failure_count = 0;
     }
 
-    /* Reset window if expired */
-    if (now - entry->window_start >= RATE_LIMIT_WINDOW) {
-        entry->window_start = now;
-        entry->connection_count = 0;
+    if (g_rate_limit_enabled) {
+        if (now - entry->window_start >= RATE_LIMIT_WINDOW) {
+            entry->window_start = now;
+            entry->recent_connection_count = 0;
+        }
+
+        entry->recent_connection_count++;
+        if (entry->recent_connection_count > g_max_conn_rate_per_ip) {
+            entry->is_blocked = true;
+            entry->block_until = now + BLOCK_DURATION;
+            pthread_mutex_unlock(&g_rate_limit_lock);
+            fprintf(stderr, "Rate limit exceeded for IP %s\n", ip);
+            return false;
+        }
     }
 
-    /* Check connection rate */
-    entry->connection_count++;
-    if (entry->connection_count > g_max_conn_per_ip) {
-        entry->is_blocked = true;
-        entry->block_until = now + BLOCK_DURATION;
-        pthread_mutex_unlock(&g_rate_limit_lock);
-        fprintf(stderr, "Rate limit exceeded for IP %s\n", ip);
-        return false;
-    }
-
+    entry->active_connections++;
     pthread_mutex_unlock(&g_rate_limit_lock);
     return true;
 }
@@ -223,6 +250,10 @@ static bool check_rate_limit(const char *ip) {
 /* Record authentication failure */
 static void record_auth_failure(const char *ip) {
     time_t now = time(NULL);
+
+    if (!g_rate_limit_enabled) {
+        return;
+    }
 
     pthread_mutex_lock(&g_rate_limit_lock);
     ip_rate_limit_t *entry = get_rate_limit_entry(ip);
@@ -234,6 +265,19 @@ static void record_auth_failure(const char *ip) {
         fprintf(stderr, "IP %s blocked due to %d auth failures\n", ip, entry->auth_failure_count);
     }
 
+    pthread_mutex_unlock(&g_rate_limit_lock);
+}
+
+static void release_ip_connection(const char *ip) {
+    if (!ip || ip[0] == '\0') {
+        return;
+    }
+
+    pthread_mutex_lock(&g_rate_limit_lock);
+    ip_rate_limit_t *entry = get_rate_limit_entry(ip);
+    if (entry->active_connections > 0) {
+        entry->active_connections--;
+    }
     pthread_mutex_unlock(&g_rate_limit_lock);
 }
 
@@ -1447,6 +1491,8 @@ cleanup:
         room_broadcast(g_room, &leave_msg);
     }
 
+    release_ip_connection(client->client_ip);
+
     /* Release the main reference - client will be freed when all refs are gone */
     client_release(client);
 
@@ -1566,6 +1612,9 @@ static void cleanup_failed_session(ssh_session session, session_context_t *ctx) 
         ssh_free(session);
     }
 
+    if (ctx) {
+        release_ip_connection(ctx->client_ip);
+    }
     destroy_session_context(ctx);
     decrement_connections();
 }
@@ -1768,23 +1817,32 @@ static void *bootstrap_client_session(void *arg) {
     client_t *client = NULL;
     bool timed_out = false;
     time_t start_time;
+    char accepted_ip[INET6_ADDRSTRLEN] = "";
 
     if (!accepted) {
         return NULL;
     }
 
     session = accepted->session;
+    if (accepted->client_ip[0] != '\0') {
+        snprintf(accepted_ip, sizeof(accepted_ip), "%s", accepted->client_ip);
+    }
     free(accepted);
 
     ctx = calloc(1, sizeof(session_context_t));
     if (!ctx) {
+        release_ip_connection(accepted_ip);
         ssh_disconnect(session);
         ssh_free(session);
         decrement_connections();
         return NULL;
     }
 
-    get_client_ip(session, ctx->client_ip, sizeof(ctx->client_ip));
+    if (accepted_ip[0] != '\0') {
+        snprintf(ctx->client_ip, sizeof(ctx->client_ip), "%s", accepted_ip);
+    } else {
+        get_client_ip(session, ctx->client_ip, sizeof(ctx->client_ip));
+    }
     ctx->pty_width = 80;
     ctx->pty_height = 24;
     ctx->exec_command[0] = '\0';
@@ -1880,6 +1938,10 @@ static void *bootstrap_client_session(void *arg) {
         strncpy(client->ssh_login, ctx->requested_user,
                 sizeof(client->ssh_login) - 1);
         client->ssh_login[sizeof(client->ssh_login) - 1] = '\0';
+    }
+    if (ctx->client_ip[0] != '\0') {
+        snprintf(client->client_ip, sizeof(client->client_ip), "%s",
+                 ctx->client_ip);
     }
     if (ctx->exec_command[0] != '\0') {
         strncpy(client->exec_command, ctx->exec_command,
@@ -1991,13 +2053,6 @@ int ssh_server_start(int unused) {
 
         get_client_ip(session, client_ip, sizeof(client_ip));
 
-        /* Check rate limit */
-        if (!check_rate_limit(client_ip)) {
-            ssh_disconnect(session);
-            ssh_free(session);
-            continue;
-        }
-
         /* Check total connection limit */
         if (!check_and_increment_connections()) {
             fprintf(stderr, "Max connections reached, rejecting %s\n", client_ip);
@@ -2005,8 +2060,17 @@ int ssh_server_start(int unused) {
             ssh_free(session);
             continue;
         }
+
+        if (!check_ip_connection_policy(client_ip)) {
+            decrement_connections();
+            ssh_disconnect(session);
+            ssh_free(session);
+            continue;
+        }
+
         accepted = calloc(1, sizeof(*accepted));
         if (!accepted) {
+            release_ip_connection(client_ip);
             decrement_connections();
             ssh_disconnect(session);
             ssh_free(session);
@@ -2014,10 +2078,13 @@ int ssh_server_start(int unused) {
         }
 
         accepted->session = session;
+        snprintf(accepted->client_ip, sizeof(accepted->client_ip), "%s",
+                 client_ip);
 
         if (pthread_create(&thread, &attr, bootstrap_client_session, accepted) != 0) {
             fprintf(stderr, "Thread creation failed: %s\n", strerror(errno));
             free(accepted);
+            release_ip_connection(client_ip);
             decrement_connections();
             ssh_disconnect(session);
             ssh_free(session);
