@@ -38,13 +38,14 @@ https://github.com/m1ngsama/TNT/releases
 ```sh
 tnt              # default port 2222
 tnt -p 3333      # custom port
+tnt -d /var/lib/tnt
 PORT=3333 tnt    # via env var
 ```
 
 ### Connecting
 
 ```sh
-ssh -p 2222 localhost
+ssh -p 2222 chat.m1ng.space
 ```
 
 **Anonymous access by default**: Users can connect with ANY username/password (or empty password). No SSH keys required. Perfect for public chat servers.
@@ -92,6 +93,12 @@ TNT_BIND_ADDR=127.0.0.1 tnt
 
 # Bind to specific IP
 TNT_BIND_ADDR=192.168.1.100 tnt
+
+# Store host key and logs in an explicit state directory
+TNT_STATE_DIR=/var/lib/tnt tnt
+
+# Show the public SSH endpoint in startup logs
+TNT_PUBLIC_HOST=chat.m1ng.space tnt
 ```
 
 **Rate limiting:**
@@ -99,10 +106,13 @@ TNT_BIND_ADDR=192.168.1.100 tnt
 # Max total connections (default 64)
 TNT_MAX_CONNECTIONS=100 tnt
 
-# Max connections per IP (default 5)
+# Max concurrent sessions per IP (default 5)
 TNT_MAX_CONN_PER_IP=10 tnt
 
-# Disable rate limiting (testing only)
+# Max new connection attempts per IP in 60 seconds (default 10)
+TNT_MAX_CONN_RATE_PER_IP=30 tnt
+
+# Disable connection-rate and auth-failure blocking (testing only)
 TNT_RATE_LIMIT=0 tnt
 ```
 
@@ -117,9 +127,22 @@ TNT_SSH_LOG_LEVEL=3 tnt
 TNT_ACCESS_TOKEN="strong-password-123" \
 TNT_BIND_ADDR=0.0.0.0 \
 TNT_MAX_CONNECTIONS=200 \
-TNT_MAX_CONN_PER_IP=3 \
+TNT_MAX_CONN_PER_IP=30 \
+TNT_MAX_CONN_RATE_PER_IP=60 \
 TNT_SSH_LOG_LEVEL=1 \
 tnt -p 2222
+```
+
+### SSH Exec Interface
+
+TNT also exposes a small non-interactive SSH surface for scripts:
+
+```sh
+ssh -p 2222 chat.m1ng.space health
+ssh -p 2222 chat.m1ng.space stats --json
+ssh -p 2222 chat.m1ng.space users
+ssh -p 2222 chat.m1ng.space "tail -n 20"
+ssh -p 2222 operator@chat.m1ng.space post "service notice"
 ```
 
 ## Development
@@ -144,6 +167,7 @@ cd tests
 ./test_basic.sh              # basic functionality
 ./test_security_features.sh  # security features
 ./test_anonymous_access.sh   # anonymous access
+./test_connection_limits.sh  # per-IP concurrency and rate limits
 ./test_stress.sh             # stress test
 ```
 
@@ -202,6 +226,19 @@ sudo cp tnt.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable tnt
 sudo systemctl start tnt
+
+# Optional: override defaults without editing the unit
+sudo tee /etc/default/tnt >/dev/null <<'EOF'
+PORT=2222
+TNT_BIND_ADDR=0.0.0.0
+TNT_STATE_DIR=/var/lib/tnt
+TNT_MAX_CONNECTIONS=200
+TNT_MAX_CONN_PER_IP=30
+TNT_MAX_CONN_RATE_PER_IP=60
+TNT_RATE_LIMIT=1
+TNT_SSH_LOG_LEVEL=0
+TNT_PUBLIC_HOST=chat.m1ng.space
+EOF
 ```
 
 ### Docker

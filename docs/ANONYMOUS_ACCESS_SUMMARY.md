@@ -47,7 +47,7 @@
 **用户体验：**
 ```bash
 # 用户连接（零配置）
-ssh -p 2222 your.server.ip
+ssh -p 2222 chat.m1ng.space
 # 输入任意内容或直接按回车
 # 开始聊天！
 ```
@@ -143,7 +143,7 @@ ssh -p 2222 your.server.ip
 tnt
 
 # 用户端（任何人）
-ssh -p 2222 server.ip
+ssh -p 2222 chat.m1ng.space
 # 输入任何内容作为密码或直接回车
 # 选择显示名称（可留空）
 # 开始聊天！
@@ -164,8 +164,11 @@ TNT_ACCESS_TOKEN="secret" tnt
 # 限制连接数
 TNT_MAX_CONNECTIONS=100 tnt
 
-# 限制每IP连接数
+# Limit concurrent sessions per IP
 TNT_MAX_CONN_PER_IP=10 tnt
+
+# Limit new connections per IP per 60 seconds
+TNT_MAX_CONN_RATE_PER_IP=30 tnt
 
 # 只允许本地访问
 TNT_BIND_ADDR=127.0.0.1 tnt

@@ -26,7 +26,8 @@ Connect: `sshpass -p "YourSecretPassword" ssh -p 2222 localhost`
 | `TNT_SSH_LOG_LEVEL` | `1` | SSH logging (0-4) | `TNT_SSH_LOG_LEVEL=3` |
 | `TNT_RATE_LIMIT` | `1` | Rate limiting on/off | `TNT_RATE_LIMIT=0` |
 | `TNT_MAX_CONNECTIONS` | `64` | Total connection limit | `TNT_MAX_CONNECTIONS=100` |
-| `TNT_MAX_CONN_PER_IP` | `5` | Per-IP limit | `TNT_MAX_CONN_PER_IP=3` |
+| `TNT_MAX_CONN_PER_IP` | `5` | Concurrent sessions per IP | `TNT_MAX_CONN_PER_IP=3` |
+| `TNT_MAX_CONN_RATE_PER_IP` | `10` | New connections per IP per 60s | `TNT_MAX_CONN_RATE_PER_IP=20` |
 
 ---
 
@@ -75,7 +76,8 @@ TNT_MAX_CONN_PER_IP=2 \
 ## Rate Limiting
 
 ### Defaults
-- **Connection Rate:** 10 connections per IP per 60 seconds
+- **Concurrent Sessions:** 5 per IP
+- **Connection Rate:** 10 new connections per IP per 60 seconds
 - **Auth Failures:** 5 failures → 5 minute IP block
 - **Window:** 60 second rolling window
 
@@ -109,6 +111,12 @@ Rejects new connections when 50 total clients connected.
 TNT_MAX_CONN_PER_IP=3 ./tnt
 ```
 Each IP can have max 3 concurrent connections.
+
+### Per-IP Rate Limit
+```bash
+TNT_MAX_CONN_RATE_PER_IP=20 ./tnt
+```
+Each IP can open at most 20 new connections per 60 seconds before being temporarily blocked.
 
 ### Combined Example
 ```bash

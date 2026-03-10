@@ -15,6 +15,7 @@ typedef struct {
     int client_capacity;
     message_t *messages;
     int message_count;
+    uint64_t update_seq;
 } chat_room_t;
 
 /* Global chat room instance */
@@ -46,5 +47,8 @@ int room_get_message_count(chat_room_t *room);
 
 /* Get online client count */
 int room_get_client_count(chat_room_t *room);
+
+/* Get room update sequence */
+uint64_t room_get_update_seq(chat_room_t *room);
 
 #endif /* CHAT_ROOM_H */

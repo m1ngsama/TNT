@@ -5,6 +5,46 @@
 #include <stdarg.h>
 #include <unistd.h>
 
+static void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
+                                const char *data, size_t len) {
+    size_t available;
+    size_t to_copy;
+
+    if (!buffer || !pos || !data || len == 0 || buf_size == 0 || *pos >= buf_size - 1) {
+        return;
+    }
+
+    available = (buf_size - 1) - *pos;
+    to_copy = (len < available) ? len : available;
+    memcpy(buffer + *pos, data, to_copy);
+    *pos += to_copy;
+    buffer[*pos] = '\0';
+}
+
+static void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
+                           const char *fmt, ...) {
+    va_list args;
+    int written;
+
+    if (!buffer || !pos || !fmt || buf_size == 0 || *pos >= buf_size - 1) {
+        return;
+    }
+
+    va_start(args, fmt);
+    written = vsnprintf(buffer + *pos, buf_size - *pos, fmt, args);
+    va_end(args);
+
+    if (written < 0) {
+        return;
+    }
+
+    if ((size_t)written >= buf_size - *pos) {
+        *pos = buf_size - 1;
+    } else {
+        *pos += (size_t)written;
+    }
+}
+
 /* Clear the screen */
 void tui_clear_screen(client_t *client) {
     if (!client || !client->connected) return;
@@ -21,7 +61,8 @@ void tui_render_screen(client_t *client) {
     const size_t buf_size = 65536;
     char *buffer = malloc(buf_size);
     if (!buffer) return;
-    int pos = 0;
+    size_t pos = 0;
+    buffer[0] = '\0';
 
     /* Acquire all data in one lock to prevent TOCTOU */
     pthread_rwlock_rdlock(&g_room->lock);
@@ -66,7 +107,7 @@ void tui_render_screen(client_t *client) {
     /* Now render using snapshot (no lock held) */
 
     /* Move to top (Home) - Do NOT clear screen to prevent flicker */
-    pos += snprintf(buffer + pos, buf_size - pos, ANSI_HOME);
+    buffer_appendf(buffer, buf_size, &pos, ANSI_HOME);
 
     /* Title bar */
     const char *mode_str = (client->mode == MODE_INSERT) ? "INSERT" :
@@ -82,48 +123,44 @@ void tui_render_screen(client_t *client) {
     int padding = client->width - title_width;
     if (padding < 0) padding = 0;
 
-    pos += snprintf(buffer + pos, buf_size - pos, ANSI_REVERSE "%s", title);
-    for (int i = 0; i < padding && pos < (int)buf_size - 4; i++) {
-        buffer[pos++] = ' ';
+    buffer_appendf(buffer, buf_size, &pos, ANSI_REVERSE "%s", title);
+    for (int i = 0; i < padding; i++) {
+        buffer_append_bytes(buffer, buf_size, &pos, " ", 1);
     }
-    pos += snprintf(buffer + pos, buf_size - pos, ANSI_RESET "\033[K\r\n");
+    buffer_appendf(buffer, buf_size, &pos, ANSI_RESET "\033[K\r\n");
 
     /* Render messages from snapshot */
     if (msg_snapshot) {
         for (int i = 0; i < snapshot_count; i++) {
             char msg_line[1024];
             message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), client->width);
-            pos += snprintf(buffer + pos, buf_size - pos, "%s\033[K\r\n", msg_line);
+            buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
         }
         free(msg_snapshot);
     }
 
     /* Fill empty lines and clear them */
     for (int i = snapshot_count; i < msg_height; i++) {
-        pos += snprintf(buffer + pos, buf_size - pos, "\033[K\r\n");
+        buffer_appendf(buffer, buf_size, &pos, "\033[K\r\n");
     }
 
     /* Separator - use box drawing character */
-    for (int i = 0; i < client->width && pos < (int)buf_size - 10; i++) {
-        const char *line_char = "─";  /* U+2500 box drawing, 3 bytes */
-        int len = strlen(line_char);
-        memcpy(buffer + pos, line_char, len);
-        pos += len;
+    for (int i = 0; i < client->width; i++) {
+        buffer_append_bytes(buffer, buf_size, &pos, "─", strlen("─"));
     }
-    pos += snprintf(buffer + pos, buf_size - pos, "\033[K\r\n");
+    buffer_appendf(buffer, buf_size, &pos, "\033[K\r\n");
 
     /* Status/Input line */
     if (client->mode == MODE_INSERT) {
-        pos += snprintf(buffer + pos, buf_size - pos, "> \033[K");
+        buffer_appendf(buffer, buf_size, &pos, "> \033[K");
     } else if (client->mode == MODE_NORMAL) {
         int total = msg_count;
         int scroll_pos = client->scroll_pos + 1;
         if (total == 0) scroll_pos = 0;
-        pos += snprintf(buffer + pos, buf_size - pos,
+        buffer_appendf(buffer, buf_size, &pos,
                        "-- NORMAL -- (%d/%d)\033[K", scroll_pos, total);
     } else if (client->mode == MODE_COMMAND) {
-        pos += snprintf(buffer + pos, buf_size - pos,
-                       ":%s\033[K", client->command_input);
+        buffer_appendf(buffer, buf_size, &pos, ":%s\033[K", client->command_input);
     }
 
     client_send(client, buffer, pos);
@@ -170,10 +207,11 @@ void tui_render_command_output(client_t *client) {
     if (!client || !client->connected) return;
 
     char buffer[4096];
-    int pos = 0;
+    size_t pos = 0;
+    buffer[0] = '\0';
 
     /* Clear screen */
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_CLEAR ANSI_HOME);
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
     /* Title */
     const char *title = " COMMAND OUTPUT ";
@@ -181,11 +219,11 @@ void tui_render_command_output(client_t *client) {
     int padding = client->width - title_width;
     if (padding < 0) padding = 0;
 
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_REVERSE "%s", title);
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_REVERSE "%s", title);
     for (int i = 0; i < padding; i++) {
-        buffer[pos++] = ' ';
+        buffer_append_bytes(buffer, sizeof(buffer), &pos, " ", 1);
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_RESET "\r\n");
 
     /* Command output - use a copy to avoid strtok corruption */
     char output_copy[2048];
@@ -205,7 +243,7 @@ void tui_render_command_output(client_t *client) {
             utf8_truncate(truncated, client->width);
         }
 
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", truncated);
+        buffer_appendf(buffer, sizeof(buffer), &pos, "%s\r\n", truncated);
         line = strtok(NULL, "\n");
         line_count++;
     }
@@ -315,10 +353,11 @@ void tui_render_help(client_t *client) {
     if (!client || !client->connected) return;
 
     char buffer[8192];
-    int pos = 0;
+    size_t pos = 0;
+    buffer[0] = '\0';
 
     /* Clear screen */
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_CLEAR ANSI_HOME);
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
     /* Title */
     const char *title = " HELP ";
@@ -326,11 +365,11 @@ void tui_render_help(client_t *client) {
     int padding = client->width - title_width;
     if (padding < 0) padding = 0;
 
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_REVERSE "%s", title);
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_REVERSE "%s", title);
     for (int i = 0; i < padding; i++) {
-        buffer[pos++] = ' ';
+        buffer_append_bytes(buffer, sizeof(buffer), &pos, " ", 1);
     }
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos, ANSI_RESET "\r\n");
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_RESET "\r\n");
 
     /* Help content */
     const char *help_text = tui_get_help_text(client->help_lang);
@@ -348,27 +387,27 @@ void tui_render_help(client_t *client) {
     }
 
     int content_height = client->height - 2;
+    if (content_height < 1) content_height = 1;
+    int max_scroll = line_count - content_height + 1;
+    if (max_scroll < 0) max_scroll = 0;
     int start = client->help_scroll_pos;
+    if (start > max_scroll) start = max_scroll;
     int end = start + content_height - 1;
     if (end > line_count) end = line_count;
 
     for (int i = start; i < end && (i - start) < content_height - 1; i++) {
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%s\r\n", lines[i]);
+        buffer_appendf(buffer, sizeof(buffer), &pos, "%s\r\n", lines[i]);
     }
 
     /* Fill remaining lines */
     for (int i = end - start; i < content_height - 1; i++) {
-        buffer[pos++] = '\r';
-        buffer[pos++] = '\n';
+        buffer_append_bytes(buffer, sizeof(buffer), &pos, "\r\n", 2);
     }
 
     /* Status line */
-    int max_scroll = line_count - content_height + 1;
-    if (max_scroll < 0) max_scroll = 0;
-
-    pos += snprintf(buffer + pos, sizeof(buffer) - pos,
+    buffer_appendf(buffer, sizeof(buffer), &pos,
                    "-- HELP -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close",
-                   client->help_scroll_pos + 1, max_scroll + 1);
+                   start + 1, max_scroll + 1);
 
     client_send(client, buffer, pos);
 }

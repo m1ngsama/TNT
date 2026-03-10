@@ -30,4 +30,7 @@ void utf8_remove_last_word(char *str);
 /* Validate a UTF-8 byte sequence */
 bool utf8_is_valid_sequence(const char *bytes, int len);
 
+/* Validate an entire NUL-terminated UTF-8 string */
+bool utf8_is_valid_string(const char *str);
+
 #endif /* UTF8_H */

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-03-10 - SSH Runtime & Unix Interface Update
+
+### Fixed
+- moved SSH handshake/auth/channel setup out of the main accept loop
+- replaced synchronous room-wide fan-out with room update sequencing and per-client refresh
+- switched idle session handling to `ssh_channel_poll_timeout()` plus blocking reads so quiet sessions are not dropped incorrectly
+- made `-d/--state-dir` create the runtime state directory automatically
+
+### Added
+- SSH exec commands: `help`, `health`, `users`, `stats --json`, `tail`, `post`
+- PTY window-change handling for terminal resize
+- `TNT_MAX_CONN_RATE_PER_IP` for per-IP connection-rate control
+- `tests/test_exec_mode.sh`
+- `tests/test_connection_limits.sh`
+
+### Changed
+- `TNT_MAX_CONN_PER_IP` now means concurrent sessions per IP
+- stress tests now disable rate-based blocking so they exercise concurrency instead of self-throttling
+
 ## 2026-01-22 - Security Audit Fixes
 
 Comprehensive security hardening addressing 23 identified vulnerabilities across 6 categories.

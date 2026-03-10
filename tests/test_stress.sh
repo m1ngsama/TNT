@@ -19,7 +19,7 @@ if command -v gtimeout >/dev/null 2>&1; then
 fi
 
 echo "Starting TNT server on port $PORT..."
-$BIN -p $PORT &
+TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=$CLIENTS $BIN -p $PORT &
 SERVER_PID=$!
 sleep 2
 
@@ -47,7 +47,7 @@ kill $SERVER_PID 2>/dev/null
 wait
 
 echo "Stress test complete"
-if ps aux | grep tnt | grep -v grep > /dev/null; then
+if kill -0 $SERVER_PID 2>/dev/null; then
     echo "WARNING: tnt process still running"
 else
     echo "Server shutdown confirmed."

@@ -25,7 +25,7 @@ tnt              # 监听 2222 端口
 用户只需要一个SSH客户端即可，无需任何配置：
 
 ```bash
-ssh -p 2222 your.server.ip
+ssh -p 2222 chat.m1ng.space
 ```
 
 **重要提示**：
@@ -125,7 +125,7 @@ That's it! Your server is now running.
 Users only need an SSH client, no configuration required:
 
 ```bash
-ssh -p 2222 your.server.ip
+ssh -p 2222 chat.m1ng.space
 ```
 
 **Important**:
@@ -181,8 +181,11 @@ PORT=3333 tnt
 # Limit max connections
 TNT_MAX_CONNECTIONS=100 tnt
 
-# Limit connections per IP
+# Limit concurrent sessions per IP
 TNT_MAX_CONN_PER_IP=10 tnt
+
+# Limit new connections per IP per 60 seconds
+TNT_MAX_CONN_RATE_PER_IP=30 tnt
 
 # Bind to localhost only
 TNT_BIND_ADDR=127.0.0.1 tnt
@@ -213,7 +216,7 @@ TNT_ACCESS_TOKEN="your_secret_password" tnt
 tnt
 
 # 用户连接（从任何机器）
-ssh -p 2222 chat.example.com
+ssh -p 2222 chat.m1ng.space
 # 输入任意密码或直接回车
 # 输入显示名称或留空
 # 开始聊天！

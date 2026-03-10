@@ -59,10 +59,10 @@ Branch 4: fix/resource-management (Medium Priority)
 Branch 5: fix/auth-protection (Critical Priority)
 --------------------------------------------------
 ✅ Add optional access token (TNT_ACCESS_TOKEN)
-✅ IP-based rate limiting (10 conn/IP/60s)
+✅ IP-based connection-rate limiting (10 new conn/IP/60s)
 ✅ Auth failure tracking (5 failures → 5 min block)
-✅ Connection counting (total and per-IP)
-✅ Configurable limits (TNT_MAX_CONNECTIONS, TNT_MAX_CONN_PER_IP)
+✅ Connection counting (total, per-IP active sessions, per-IP recent attempts)
+✅ Configurable limits (TNT_MAX_CONNECTIONS, TNT_MAX_CONN_PER_IP, TNT_MAX_CONN_RATE_PER_IP)
 ✅ Rate limit toggle (TNT_RATE_LIMIT)
 
 Branch 6: fix/concurrency-safety (High Priority)
@@ -84,7 +84,8 @@ TNT_BIND_ADDR         - Configurable bind address (default: 0.0.0.0)
 TNT_SSH_LOG_LEVEL     - SSH logging verbosity 0-4 (default: 1)
 TNT_RATE_LIMIT        - Enable/disable rate limiting (default: 1)
 TNT_MAX_CONNECTIONS   - Global connection limit (default: 64)
-TNT_MAX_CONN_PER_IP   - Per-IP connection limit (default: 5)
+TNT_MAX_CONN_PER_IP   - Concurrent sessions allowed per IP (default: 5)
+TNT_MAX_CONN_RATE_PER_IP - New connections allowed per IP per 60s (default: 10)
 
 Security Enhancements:
 ---------------------

@@ -3,6 +3,50 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+static pthread_mutex_t g_message_file_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static time_t parse_rfc3339_utc(const char *timestamp_str) {
+    struct tm tm = {0};
+    char *result;
+    char *old_tz = NULL;
+    time_t parsed;
+
+    if (!timestamp_str) {
+        return (time_t)-1;
+    }
+
+    result = strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ", &tm);
+    if (!result || *result != '\0') {
+        return (time_t)-1;
+    }
+
+    const char *tz = getenv("TZ");
+    if (tz) {
+        old_tz = strdup(tz);
+        if (!old_tz) {
+            return (time_t)-1;
+        }
+    }
+
+    if (setenv("TZ", "UTC0", 1) != 0) {
+        free(old_tz);
+        return (time_t)-1;
+    }
+    tzset();
+
+    parsed = mktime(&tm);
+
+    if (old_tz) {
+        setenv("TZ", old_tz, 1);
+        free(old_tz);
+    } else {
+        unsetenv("TZ");
+    }
+    tzset();
+
+    return parsed;
+}
+
 /* Initialize message subsystem */
 void message_init(void) {
     /* Nothing to initialize for now */
@@ -10,13 +54,20 @@ void message_init(void) {
 
 /* Load messages from log file - Optimized for large files */
 int message_load(message_t **messages, int max_messages) {
+    char log_path[PATH_MAX];
+
     /* Always allocate the message array */
     message_t *msg_array = calloc(max_messages, sizeof(message_t));
     if (!msg_array) {
         return 0;
     }
 
-    FILE *fp = fopen(LOG_FILE, "r");
+    if (tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+        *messages = msg_array;
+        return 0;
+    }
+
+    FILE *fp = fopen(log_path, "r");
     if (!fp) {
         /* File doesn't exist yet, no messages */
         *messages = msg_array;
@@ -117,15 +168,17 @@ read_messages:;
             continue;
         }
 
-        /* Parse ISO 8601 timestamp */
-        struct tm tm = {0};
-        char *result = strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S", &tm);
-        if (!result) {
+        if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) {
+            continue;
+        }
+
+        /* Parse strict UTC RFC3339 timestamp */
+        time_t msg_time = parse_rfc3339_utc(timestamp_str);
+        if (msg_time == (time_t)-1) {
             continue;
         }
 
         /* Validate timestamp is reasonable (not in far future or past) */
-        time_t msg_time = mktime(&tm);
         time_t now = time(NULL);
         if (msg_time > now + 86400 || msg_time < now - 31536000 * 10) {
             continue;
@@ -146,8 +199,18 @@ read_messages:;
 
 /* Save a message to log file */
 int message_save(const message_t *msg) {
-    FILE *fp = fopen(LOG_FILE, "a");
+    char log_path[PATH_MAX];
+    int rc = 0;
+
+    if (tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+        return -1;
+    }
+
+    pthread_mutex_lock(&g_message_file_lock);
+
+    FILE *fp = fopen(log_path, "a");
     if (!fp) {
+        pthread_mutex_unlock(&g_message_file_lock);
         return -1;
     }
 
@@ -180,10 +243,14 @@ int message_save(const message_t *msg) {
     }
 
     /* Write to file: timestamp|username|content */
-    fprintf(fp, "%s|%s|%s\n", timestamp, safe_username, safe_content);
+    if (fprintf(fp, "%s|%s|%s\n", timestamp, safe_username, safe_content) < 0 ||
+        fflush(fp) != 0) {
+        rc = -1;
+    }
 
     fclose(fp);
-    return 0;
+    pthread_mutex_unlock(&g_message_file_lock);
+    return rc;
 }
 
 /* Format a message for display */

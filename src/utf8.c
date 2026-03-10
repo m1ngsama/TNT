@@ -15,6 +15,17 @@ uint32_t utf8_decode(const char *str, int *bytes_read) {
     uint32_t codepoint = 0;
     int len = utf8_byte_length(s[0]);
 
+    if (len < 1 || len > 4) {
+        len = 1;
+    }
+
+    for (int i = 1; i < len; i++) {
+        if (s[i] == '\0') {
+            *bytes_read = 1;
+            return s[0];
+        }
+    }
+
     *bytes_read = len;
 
     switch (len) {
@@ -203,6 +214,35 @@ bool utf8_is_valid_sequence(const char *bytes, int len) {
                        ((b[2] & 0x3F) << 6) | (b[3] & 0x3F);
             if (codepoint < 0x10000 || codepoint > 0x10FFFF) return false;
             break;
+    }
+
+    return true;
+}
+
+bool utf8_is_valid_string(const char *str) {
+    const unsigned char *p = (const unsigned char *)str;
+
+    if (!str) {
+        return false;
+    }
+
+    while (*p != '\0') {
+        int len = utf8_byte_length(*p);
+        if (len < 1 || len > 4) {
+            return false;
+        }
+
+        for (int i = 1; i < len; i++) {
+            if (p[i] == '\0') {
+                return false;
+            }
+        }
+
+        if (!utf8_is_valid_sequence((const char *)p, len)) {
+            return false;
+        }
+
+        p += len;
     }
 
     return true;

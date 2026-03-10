@@ -11,32 +11,41 @@
 static void signal_handler(int sig) {
     (void)sig;
     static const char msg[] = "\nShutting down...\n";
-    (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    ssize_t ignored = write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    (void)ignored;
     _exit(0);
 }
 
 int main(int argc, char **argv) {
     int port = DEFAULT_PORT;
 
+    /* Environment provides defaults; command-line flags override it. */
+    const char *port_env = getenv("PORT");
+    if (port_env) {
+        port = atoi(port_env);
+    }
+
     /* Parse command line arguments */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
             port = atoi(argv[i + 1]);
+            i++;
+        } else if ((strcmp(argv[i], "-d") == 0 ||
+                    strcmp(argv[i], "--state-dir") == 0) && i + 1 < argc) {
+            if (setenv("TNT_STATE_DIR", argv[i + 1], 1) != 0) {
+                perror("setenv TNT_STATE_DIR");
+                return 1;
+            }
             i++;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("TNT - Terminal Network Talk\n");
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
             printf("  -p PORT    Listen on PORT (default: %d)\n", DEFAULT_PORT);
+            printf("  -d DIR     Store host key and logs in DIR\n");
             printf("  -h         Show this help\n");
             return 0;
         }
-    }
-
-    /* Check environment variable for port */
-    const char *port_env = getenv("PORT");
-    if (port_env) {
-        port = atoi(port_env);
     }
 
     /* Setup signal handlers */
@@ -45,6 +54,11 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
 
     /* Initialize subsystems */
+    if (tnt_ensure_state_dir() < 0) {
+        fprintf(stderr, "Failed to create state directory: %s\n", tnt_state_dir());
+        return 1;
+    }
+
     message_init();
 
     /* Create chat room */

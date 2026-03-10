@@ -75,8 +75,8 @@
 | **Crypto** | RSA Key Size | 4096-bit (upgraded from 2048) | ✅ |
 | **Crypto** | Key Permissions | Atomic generation with 0600 perms | ✅ |
 | **Auth** | Access Token | Optional password protection | ✅ |
-| **Auth** | Rate Limiting | IP-based connection throttling | ✅ |
-| **Auth** | Connection Limits | Global and per-IP limits | ✅ |
+| **Auth** | Rate Limiting | Per-IP connection-rate throttling | ✅ |
+| **Auth** | Connection Limits | Global and per-IP concurrent session limits | ✅ |
 | **Input** | Username Validation | Shell metacharacter rejection | ✅ |
 | **Input** | Log Sanitization | Pipe/newline replacement | ✅ |
 | **Input** | UTF-8 Validation | Overlong encoding prevention | ✅ |
@@ -114,9 +114,10 @@ TNT_BIND_ADDR=127.0.0.1 ./tnt
 
 ### Strict Limits
 ```bash
-TNT_MAX_CONNECTIONS=10 TNT_MAX_CONN_PER_IP=2 ./tnt
+TNT_MAX_CONNECTIONS=10 TNT_MAX_CONN_PER_IP=2 TNT_MAX_CONN_RATE_PER_IP=10 ./tnt
 # Max 10 total connections
-# Max 2 connections per IP address
+# Max 2 concurrent sessions per IP address
+# Max 10 new connections per IP per 60 seconds
 ```
 
 ### Disabled Rate Limiting (Testing)
@@ -155,7 +156,7 @@ gcc -fsanitize=thread -g -O1 -c src/chat_room.c
 
 ## Known Limitations
 
-1. **Interactive Only:** Server requires PTY sessions (no command execution via SSH)
+1. **Exec Surface Is Minimal:** The SSH exec interface is intentionally small and currently focused on operational commands
 2. **libssh Deprecations:** Uses deprecated PTY width/height functions (4 warnings)
 3. **UTF-8 Unit Test:** Skipped in automated tests (requires manual compilation)
 
@@ -165,7 +166,7 @@ gcc -fsanitize=thread -g -O1 -c src/chat_room.c
 
 ✅ **All 23 security vulnerabilities fixed and verified**
 
-✅ **100% test pass rate** (10/10 tests)
+✅ **100% security-suite pass rate** (12/12 tests)
 
 ✅ **Backward compatible** - server remains open by default
 
