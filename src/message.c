@@ -1,4 +1,9 @@
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE  /* for timegm() on glibc */
+#endif
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE /* for timegm() on macOS */
+#endif
 #include "message.h"
 #include "utf8.h"
 #include <unistd.h>
