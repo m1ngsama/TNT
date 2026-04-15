@@ -45,6 +45,10 @@ int main(int argc, char **argv) {
             printf("  -d DIR     Store host key and logs in DIR\n");
             printf("  -h         Show this help\n");
             return 0;
+        } else {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            fprintf(stderr, "Usage: %s [-p PORT] [-d DIR] [-h]\n", argv[0]);
+            return 1;
         }
     }
 
