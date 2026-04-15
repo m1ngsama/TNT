@@ -20,7 +20,8 @@ uint32_t utf8_decode(const char *str, int *bytes_read) {
     }
 
     for (int i = 1; i < len; i++) {
-        if (s[i] == '\0') {
+        if (s[i] == '\0' || (s[i] & 0xC0) != 0x80) {
+            /* Truncated or invalid continuation byte — treat as single byte */
             *bytes_read = 1;
             return s[0];
         }

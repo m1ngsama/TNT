@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE  /* for timegm() on glibc */
 #include "message.h"
 #include "utf8.h"
 #include <unistd.h>
@@ -7,44 +8,17 @@ static pthread_mutex_t g_message_file_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static time_t parse_rfc3339_utc(const char *timestamp_str) {
     struct tm tm = {0};
-    char *result;
-    char *old_tz = NULL;
-    time_t parsed;
 
     if (!timestamp_str) {
         return (time_t)-1;
     }
 
-    result = strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ", &tm);
+    char *result = strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ", &tm);
     if (!result || *result != '\0') {
         return (time_t)-1;
     }
 
-    const char *tz = getenv("TZ");
-    if (tz) {
-        old_tz = strdup(tz);
-        if (!old_tz) {
-            return (time_t)-1;
-        }
-    }
-
-    if (setenv("TZ", "UTC0", 1) != 0) {
-        free(old_tz);
-        return (time_t)-1;
-    }
-    tzset();
-
-    parsed = mktime(&tm);
-
-    if (old_tz) {
-        setenv("TZ", old_tz, 1);
-        free(old_tz);
-    } else {
-        unsetenv("TZ");
-    }
-    tzset();
-
-    return parsed;
+    return timegm(&tm);
 }
 
 /* Initialize message subsystem */
@@ -260,9 +234,22 @@ void message_format(const message_t *msg, char *buffer, size_t buf_size, int wid
     char time_str[64];
     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M %Z", &tm_info);
 
-    snprintf(buffer, buf_size, "[%s] %s: %s", time_str, msg->username, msg->content);
+    int written = snprintf(buffer, buf_size, "[%s] %s: %s", time_str, msg->username, msg->content);
 
-    /* Truncate if too long */
+    /* If snprintf truncated, the last UTF-8 character may be incomplete.
+     * Re-validate and trim any trailing partial sequence. */
+    if (written >= (int)buf_size) {
+        size_t len = strlen(buffer);
+        while (len > 0 && (buffer[len - 1] & 0xC0) == 0x80) {
+            len--;  /* walk back continuation bytes */
+        }
+        if (len > 0 && (unsigned char)buffer[len - 1] >= 0xC0) {
+            /* This is a start byte whose sequence was truncated */
+            buffer[len - 1] = '\0';
+        }
+    }
+
+    /* Truncate to terminal width */
     if (utf8_string_width(buffer) > width) {
         utf8_truncate(buffer, width);
     }

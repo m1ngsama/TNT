@@ -64,10 +64,11 @@ void tui_render_screen(client_t *client) {
     size_t pos = 0;
     buffer[0] = '\0';
 
-    /* Acquire all data in one lock to prevent TOCTOU */
+    /* First pass under lock: compute indices and counts */
     pthread_rwlock_rdlock(&g_room->lock);
     int online = g_room->client_count;
     int msg_count = g_room->message_count;
+    pthread_rwlock_unlock(&g_room->lock);
 
     /* Calculate which messages to show */
     int msg_height = client->height - 3;
@@ -90,19 +91,31 @@ void tui_render_screen(client_t *client) {
     int end = start + msg_height;
     if (end > msg_count) end = msg_count;
 
-    /* Create snapshot of messages to display */
+    /* Allocate snapshot outside the lock to avoid blocking writers */
     message_t *msg_snapshot = NULL;
     int snapshot_count = end - start;
 
     if (snapshot_count > 0) {
         msg_snapshot = calloc(snapshot_count, sizeof(message_t));
-        if (msg_snapshot) {
-            memcpy(msg_snapshot, &g_room->messages[start],
-                   snapshot_count * sizeof(message_t));
-        }
     }
 
-    pthread_rwlock_unlock(&g_room->lock);
+    /* Second pass under lock: copy messages */
+    if (msg_snapshot) {
+        pthread_rwlock_rdlock(&g_room->lock);
+        /* Re-clamp in case msg_count changed */
+        int actual_count = g_room->message_count;
+        int actual_end = (end <= actual_count) ? end : actual_count;
+        int actual_start = (start < actual_end) ? start : actual_end;
+        int actual_snapshot = actual_end - actual_start;
+        if (actual_snapshot > 0 && actual_snapshot <= snapshot_count) {
+            memcpy(msg_snapshot, &g_room->messages[actual_start],
+                   actual_snapshot * sizeof(message_t));
+            snapshot_count = actual_snapshot;
+        } else {
+            snapshot_count = 0;
+        }
+        pthread_rwlock_unlock(&g_room->lock);
+    }
 
     /* Now render using snapshot (no lock held) */
 

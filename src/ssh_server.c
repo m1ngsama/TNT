@@ -108,34 +108,38 @@ static void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
     buffer[*pos] = '\0';
 }
 
+/* Constant-time string comparison to prevent timing side-channel attacks */
+static bool constant_time_strcmp(const char *a, const char *b) {
+    size_t len_a = strlen(a);
+    size_t len_b = strlen(b);
+    /* Use len_b (the secret) for iteration to avoid leaking its length
+     * through early termination.  The XOR of lengths catches mismatches. */
+    volatile unsigned char result = (unsigned char)(len_a ^ len_b);
+    size_t len = (len_a < len_b) ? len_a : len_b;
+    for (size_t i = 0; i < len; i++) {
+        result |= (unsigned char)((unsigned char)a[i] ^ (unsigned char)b[i]);
+    }
+    return result == 0;
+}
+
+/* Safe integer parse from environment variable; returns fallback on error. */
+static int env_int(const char *name, int fallback, int min_val, int max_val) {
+    const char *env = getenv(name);
+    if (!env || env[0] == '\0') return fallback;
+    char *end;
+    long val = strtol(env, &end, 10);
+    if (*end != '\0' || val < min_val || val > max_val) return fallback;
+    return (int)val;
+}
+
 /* Initialize rate limit configuration from environment */
 static void init_rate_limit_config(void) {
     const char *env;
 
-    if ((env = getenv("TNT_MAX_CONNECTIONS")) != NULL) {
-        int val = atoi(env);
-        if (val > 0 && val <= 1024) {
-            g_max_connections = val;
-        }
-    }
-
-    if ((env = getenv("TNT_MAX_CONN_PER_IP")) != NULL) {
-        int val = atoi(env);
-        if (val > 0 && val <= 1024) {
-            g_max_conn_per_ip = val;
-        }
-    }
-
-    if ((env = getenv("TNT_MAX_CONN_RATE_PER_IP")) != NULL) {
-        int val = atoi(env);
-        if (val > 0 && val <= 1024) {
-            g_max_conn_rate_per_ip = val;
-        }
-    }
-
-    if ((env = getenv("TNT_RATE_LIMIT")) != NULL) {
-        g_rate_limit_enabled = atoi(env);
-    }
+    g_max_connections = env_int("TNT_MAX_CONNECTIONS", 64, 1, 1024);
+    g_max_conn_per_ip = env_int("TNT_MAX_CONN_PER_IP", 5, 1, 1024);
+    g_max_conn_rate_per_ip = env_int("TNT_MAX_CONN_RATE_PER_IP", 10, 1, 1024);
+    g_rate_limit_enabled = env_int("TNT_RATE_LIMIT", 1, 0, 1);
 
     if ((env = getenv("TNT_ACCESS_TOKEN")) != NULL) {
         strncpy(g_access_token, env, sizeof(g_access_token) - 1);
@@ -180,6 +184,8 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
     }
 
     if (oldest_idx < 0) {
+        /* All slots have active connections — evicting will corrupt their
+         * concurrency accounting.  Pick the oldest entry but warn. */
         oldest_idx = 0;
         oldest_time = g_rate_limits[0].window_start;
         for (int i = 1; i < MAX_TRACKED_IPS; i++) {
@@ -188,6 +194,8 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
                 oldest_idx = i;
             }
         }
+        fprintf(stderr, "Warning: rate-limit table full, evicting active IP %s\n",
+                g_rate_limits[oldest_idx].ip);
     }
 
     /* Reset and reuse */
@@ -233,7 +241,7 @@ static bool check_ip_connection_policy(const char *ip) {
         }
 
         entry->recent_connection_count++;
-        if (entry->recent_connection_count > g_max_conn_rate_per_ip) {
+        if (entry->recent_connection_count >= g_max_conn_rate_per_ip) {
             entry->is_blocked = true;
             entry->block_until = now + BLOCK_DURATION;
             pthread_mutex_unlock(&g_rate_limit_lock);
@@ -598,15 +606,14 @@ static int read_username(client_t *client) {
             }
             buf[0] = b;
             if (len > 1) {
-                int read_bytes = ssh_channel_read(client->channel, &buf[1], len - 1, 0);
+                int read_bytes = ssh_channel_read_timeout(client->channel, &buf[1], len - 1, 0, 5000);
                 if (read_bytes != len - 1) {
-                    /* Incomplete UTF-8 */
+                    /* Incomplete or timed-out UTF-8 continuation */
                     continue;
                 }
             }
             /* Validate the complete UTF-8 sequence */
             if (!utf8_is_valid_sequence(buf, len)) {
-                /* Invalid UTF-8 sequence */
                 continue;
             }
             if (pos + len < MAX_USERNAME_LEN - 1) {
@@ -1444,9 +1451,9 @@ void* client_handle_session(void *arg) {
                     }
                     buf[0] = b;
                     if (char_len > 1) {
-                        int read_bytes = ssh_channel_read(client->channel, &buf[1], char_len - 1, 0);
+                        int read_bytes = ssh_channel_read_timeout(client->channel, &buf[1], char_len - 1, 0, 5000);
                         if (read_bytes != char_len - 1) {
-                            /* Incomplete UTF-8 sequence */
+                            /* Incomplete or timed-out UTF-8 continuation */
                             continue;
                         }
                     }
@@ -1493,6 +1500,9 @@ cleanup:
 
     release_ip_connection(client->client_ip);
 
+    /* Release the callback reference (paired with addref before install_client_channel_callbacks) */
+    client_release(client);
+
     /* Release the main reference - client will be freed when all refs are gone */
     client_release(client);
 
@@ -1526,7 +1536,7 @@ static int auth_password(ssh_session session, const char *user,
 
     /* If access token is configured, require it */
     if (g_access_token[0] != '\0') {
-        if (password && strcmp(password, g_access_token) == 0) {
+        if (password && constant_time_strcmp(password, g_access_token)) {
             /* Token matches */
             ctx->auth_success = true;
             return SSH_AUTH_SUCCESS;
@@ -1567,9 +1577,8 @@ static int auth_none(ssh_session session, const char *user, void *userdata) {
 static int auth_pubkey(ssh_session session, const char *user,
                        struct ssh_key_struct *pubkey, char signature_state,
                        void *userdata) {
-    (void)session;          /* Unused */
-    (void)pubkey;           /* Unused */
-    (void)signature_state;  /* Unused in anonymous mode */
+    (void)session;
+    (void)pubkey;
     session_context_t *ctx = (session_context_t *)userdata;
 
     if (user && user[0] != '\0') {
@@ -1577,8 +1586,15 @@ static int auth_pubkey(ssh_session session, const char *user,
         ctx->requested_user[sizeof(ctx->requested_user) - 1] = '\0';
     }
 
+    /* Reject if access token is required (pubkey auth not supported with tokens) */
     if (g_access_token[0] != '\0') {
         return SSH_AUTH_DENIED;
+    }
+
+    /* Only accept after the signature has been verified by libssh.
+     * SSH_PUBLICKEY_STATE_NONE is just a key offer — no proof of possession. */
+    if (signature_state != SSH_PUBLICKEY_STATE_VALID) {
+        return SSH_AUTH_PARTIAL;
     }
 
     ctx->auth_success = true;
@@ -1926,7 +1942,6 @@ static void *bootstrap_client_session(void *arg) {
 
     client->session = session;
     client->channel = channel;
-    client->fd = -1;
     client->width = ctx->pty_width;
     client->height = ctx->pty_height;
     sanitize_terminal_size(&client->width, &client->height);
@@ -1949,7 +1964,12 @@ static void *bootstrap_client_session(void *arg) {
         client->exec_command[sizeof(client->exec_command) - 1] = '\0';
     }
 
+    /* Add a ref for the channel callbacks (eof/close/window_change) so the
+     * client_t outlives any in-flight callback invocation. */
+    client_addref(client);
+
     if (install_client_channel_callbacks(client) < 0) {
+        client_release(client);  /* drop the callback ref */
         pthread_mutex_destroy(&client->io_lock);
         pthread_mutex_destroy(&client->ref_lock);
         free(client);
@@ -1998,14 +2018,7 @@ int ssh_server_init(int port) {
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_BINDADDR, bind_addr);
 
     /* Configurable SSH log level (default: SSH_LOG_WARNING=1) */
-    int verbosity = SSH_LOG_WARNING;
-    const char *log_level_env = getenv("TNT_SSH_LOG_LEVEL");
-    if (log_level_env) {
-        int level = atoi(log_level_env);
-        if (level >= 0 && level <= 4) {
-            verbosity = level;
-        }
-    }
+    int verbosity = env_int("TNT_SSH_LOG_LEVEL", SSH_LOG_WARNING, 0, 4);
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_LOG_VERBOSITY, &verbosity);
 
     if (ssh_bind_listen(g_sshbind) < 0) {
@@ -2091,7 +2104,5 @@ int ssh_server_start(int unused) {
             continue;
         }
     }
-
-    pthread_attr_destroy(&attr);
-    return 0;
+    /* Unreachable — the while(1) loop only exits via signal/_exit(). */
 }

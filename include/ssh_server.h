@@ -9,7 +9,6 @@
 
 /* Client connection structure */
 typedef struct client {
-    int fd;                          /* Socket file descriptor (not used with SSH) */
     ssh_session session;             /* SSH session */
     ssh_channel channel;             /* SSH channel */
     char username[MAX_USERNAME_LEN];
@@ -25,9 +24,9 @@ typedef struct client {
     char command_output[2048];
     char exec_command[MAX_EXEC_COMMAND_LEN];
     char ssh_login[MAX_USERNAME_LEN];
-    bool redraw_pending;
+    atomic_bool redraw_pending;
     pthread_t thread;
-    bool connected;
+    atomic_bool connected;
     int ref_count;                   /* Reference count for safe cleanup */
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */

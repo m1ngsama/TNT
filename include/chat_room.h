@@ -39,8 +39,8 @@ void room_broadcast(chat_room_t *room, const message_t *msg);
 /* Add message to room history */
 void room_add_message(chat_room_t *room, const message_t *msg);
 
-/* Get message by index */
-const message_t* room_get_message(chat_room_t *room, int index);
+/* Get message by index (thread-safe value copy) */
+bool room_get_message(chat_room_t *room, int index, message_t *out);
 
 /* Get total message count */
 int room_get_message_count(chat_room_t *room);

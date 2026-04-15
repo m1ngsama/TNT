@@ -10,12 +10,13 @@ static int room_capacity_from_env(void) {
         return MAX_CLIENTS;
     }
 
-    int capacity = atoi(env);
-    if (capacity < 1 || capacity > 1024) {
+    char *end;
+    long capacity = strtol(env, &end, 10);
+    if (*end != '\0' || capacity < 1 || capacity > 1024) {
         return MAX_CLIENTS;
     }
 
-    return capacity;
+    return (int)capacity;
 }
 
 /* Initialize chat room */
@@ -111,17 +112,20 @@ void room_add_message(chat_room_t *room, const message_t *msg) {
     room->messages[room->message_count++] = *msg;
 }
 
-/* Get message by index */
-const message_t* room_get_message(chat_room_t *room, int index) {
+/* Get message by index (thread-safe value copy) */
+bool room_get_message(chat_room_t *room, int index, message_t *out) {
+    if (!room || !out) return false;
+
     pthread_rwlock_rdlock(&room->lock);
 
-    const message_t *msg = NULL;
+    bool found = false;
     if (index >= 0 && index < room->message_count) {
-        msg = &room->messages[index];
+        *out = room->messages[index];
+        found = true;
     }
 
     pthread_rwlock_unlock(&room->lock);
-    return msg;
+    return found;
 }
 
 /* Get total message count */

@@ -21,14 +21,24 @@ int main(int argc, char **argv) {
 
     /* Environment provides defaults; command-line flags override it. */
     const char *port_env = getenv("PORT");
-    if (port_env) {
-        port = atoi(port_env);
+    if (port_env && port_env[0] != '\0') {
+        char *end;
+        long val = strtol(port_env, &end, 10);
+        if (*end == '\0' && val > 0 && val <= 65535) {
+            port = (int)val;
+        }
     }
 
     /* Parse command line arguments */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
-            port = atoi(argv[i + 1]);
+            char *end;
+            long val = strtol(argv[i + 1], &end, 10);
+            if (*end != '\0' || val <= 0 || val > 65535) {
+                fprintf(stderr, "Invalid port: %s\n", argv[i + 1]);
+                return 1;
+            }
+            port = (int)val;
             i++;
         } else if ((strcmp(argv[i], "-d") == 0 ||
                     strcmp(argv[i], "--state-dir") == 0) && i + 1 < argc) {
