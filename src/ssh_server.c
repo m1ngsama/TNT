@@ -1009,7 +1009,10 @@ static int exec_command_post(client_t *client, const char *args) {
     if (strncmp(content, "/me ", 4) == 0 && content[4] != '\0') {
         msg.username[0] = '*';
         msg.username[1] = '\0';
-        snprintf(msg.content, sizeof(msg.content), "%s %s", username, content + 4);
+        int n = snprintf(msg.content, sizeof(msg.content), "%s %s", username, content + 4);
+        if (n >= (int)sizeof(msg.content)) {
+            msg.content[sizeof(msg.content) - 1] = '\0';
+        }
     } else {
         strncpy(msg.username, username, sizeof(msg.username) - 1);
         msg.username[sizeof(msg.username) - 1] = '\0';
