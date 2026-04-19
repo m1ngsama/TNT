@@ -84,6 +84,7 @@ ESC	Switch to NORMAL
 Ctrl+W	Delete last word
 Ctrl+U	Clear input line
 Ctrl+C	Switch to NORMAL
+/me \fIaction\fR	Send action message (e.g. /me waves)
 .TE
 .SS NORMAL mode
 .TS
@@ -120,6 +121,7 @@ ssh host \-p 2222 users \-\-json
 ssh host \-p 2222 stats \-\-json
 ssh host \-p 2222 tail 20
 ssh host \-p 2222 post "Hello from a script"
+ssh host \-p 2222 post "/me deploys v2.0"
 ssh host \-p 2222 health
 .fi
 .PP
