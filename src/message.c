@@ -227,7 +227,16 @@ int message_save(const message_t *msg) {
         rc = -1;
     }
 
+    /* Rotate if the log exceeds MAX_LOG_SIZE */
+    long file_size = ftell(fp);
     fclose(fp);
+
+    if (file_size > MAX_LOG_SIZE) {
+        char backup_path[PATH_MAX + 4];
+        snprintf(backup_path, sizeof(backup_path), "%s.1", log_path);
+        rename(log_path, backup_path);
+    }
+
     pthread_mutex_unlock(&g_message_file_lock);
     return rc;
 }

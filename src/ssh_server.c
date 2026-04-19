@@ -895,7 +895,7 @@ static int parse_tail_count(const char *args, int *count) {
         return 0;
     }
 
-    if (strncmp(args, "-n", 2) == 0 && isspace((unsigned char)args[2])) {
+    if (strncmp(args, "-n", 2) == 0) {
         args += 2;
         while (*args && isspace((unsigned char)*args)) {
             args++;
@@ -1170,20 +1170,27 @@ static void execute_command(client_t *client) {
                            "       w <username> <message>\n");
         } else {
             bool found = false;
+            client_t *target = NULL;
             pthread_rwlock_rdlock(&g_room->lock);
             for (int i = 0; i < g_room->client_count; i++) {
                 if (strcmp(g_room->clients[i]->username, target_name) == 0) {
-                    char whisper[MAX_MESSAGE_LEN];
-                    snprintf(whisper, sizeof(whisper),
-                             "\r\n\033[35m[whisper from %s]: %s\033[0m\r\n",
-                             client->username, rest);
-                    client_send(g_room->clients[i], whisper, strlen(whisper));
-                    g_room->clients[i]->redraw_pending = true;
+                    target = g_room->clients[i];
+                    client_addref(target);
                     found = true;
                     break;
                 }
             }
             pthread_rwlock_unlock(&g_room->lock);
+
+            if (target) {
+                char whisper[MAX_MESSAGE_LEN];
+                snprintf(whisper, sizeof(whisper),
+                         "\r\n\033[35m[whisper from %s]: %s\033[0m\r\n",
+                         client->username, rest);
+                client_send(target, whisper, strlen(whisper));
+                target->redraw_pending = true;
+                client_release(target);
+            }
 
             if (found) {
                 buffer_appendf(output, sizeof(output), &pos,
@@ -1647,6 +1654,12 @@ cleanup:
     }
 
     release_ip_connection(client->client_ip);
+
+    /* Remove channel callbacks before releasing refs to prevent use-after-free
+     * if a callback fires between the two releases. */
+    if (client->channel && client->channel_cb) {
+        ssh_remove_channel_callbacks(client->channel, client->channel_cb);
+    }
 
     /* Release the callback reference (paired with addref before install_client_channel_callbacks) */
     client_release(client);

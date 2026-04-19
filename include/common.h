@@ -22,6 +22,7 @@
 #define MAX_EXEC_COMMAND_LEN 1024
 #define MAX_CLIENTS 64
 #define LOG_FILE "messages.log"
+#define MAX_LOG_SIZE (10 * 1024 * 1024)  /* 10 MiB */
 #define HOST_KEY_FILE "host_key"
 #define TNT_DEFAULT_STATE_DIR "."
 
