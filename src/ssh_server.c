@@ -1147,6 +1147,7 @@ static void execute_command(client_t *client) {
                        "        Available Commands\n"
                        "========================================\n"
                        "list, users, who    - Show online users\n"
+                       "nick/name <name>    - Change nickname\n"
                        "msg/w <user> <text> - Whisper to user\n"
                        "help, commands      - Show this help\n"
                        "clear, cls          - Clear command output\n"
@@ -1199,6 +1200,40 @@ static void execute_command(client_t *client) {
                 buffer_appendf(output, sizeof(output), &pos,
                                "User '%s' not found\n", target_name);
             }
+        }
+
+    } else if (strncmp(cmd, "nick ", 5) == 0 || strncmp(cmd, "name ", 5) == 0) {
+        char *new_name = cmd + 5;
+        while (*new_name == ' ') new_name++;
+
+        if (new_name[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Usage: nick <new_username>\n");
+        } else if (!is_valid_username(new_name)) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Invalid username\n");
+        } else {
+            char validated_name[MAX_USERNAME_LEN];
+            snprintf(validated_name, sizeof(validated_name), "%s", new_name);
+            if (utf8_strlen(validated_name) > 20) {
+                utf8_truncate(validated_name, 20);
+            }
+
+            char old_name[MAX_USERNAME_LEN];
+            pthread_rwlock_wrlock(&g_room->lock);
+            snprintf(old_name, sizeof(old_name), "%s", client->username);
+            snprintf(client->username, MAX_USERNAME_LEN, "%s", validated_name);
+            pthread_rwlock_unlock(&g_room->lock);
+
+            message_t nick_msg = { .timestamp = time(NULL) };
+            snprintf(nick_msg.username, MAX_USERNAME_LEN, "系统");
+            snprintf(nick_msg.content, MAX_MESSAGE_LEN,
+                     "%s 更名为 %s", old_name, client->username);
+            room_broadcast(g_room, &nick_msg);
+            message_save(&nick_msg);
+
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Nickname changed: %s -> %s\n", old_name, client->username);
         }
 
     } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0 ||
@@ -1296,8 +1331,18 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     message_t msg = {
                         .timestamp = time(NULL),
                     };
-                    snprintf(msg.username, sizeof(msg.username), "%s", client->username);
-                    snprintf(msg.content, sizeof(msg.content), "%s", input);
+                    if (strncmp(input, "/me ", 4) == 0 && input[4] != '\0') {
+                        msg.username[0] = '*';
+                        msg.username[1] = '\0';
+                        int n = snprintf(msg.content, sizeof(msg.content), "%s %s",
+                                         client->username, input + 4);
+                        if (n >= (int)sizeof(msg.content)) {
+                            msg.content[sizeof(msg.content) - 1] = '\0';
+                        }
+                    } else {
+                        snprintf(msg.username, sizeof(msg.username), "%s", client->username);
+                        snprintf(msg.content, sizeof(msg.content), "%s", input);
+                    }
                     room_broadcast(g_room, &msg);
                     message_save(&msg);
                     input[0] = '\0';
