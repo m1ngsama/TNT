@@ -45,9 +45,12 @@ clean:
 install: $(TARGET)
 	install -d $(DESTDIR)/usr/local/bin
 	install -m 755 $(TARGET) $(DESTDIR)/usr/local/bin/
+	install -d $(DESTDIR)/usr/local/share/man/man1
+	install -m 644 tnt.1 $(DESTDIR)/usr/local/share/man/man1/
 
 uninstall:
 	rm -f $(DESTDIR)/usr/local/bin/$(TARGET)
+	rm -f $(DESTDIR)/usr/local/share/man/man1/tnt.1
 
 # Development targets
 debug: CFLAGS += -g -DDEBUG

@@ -1083,7 +1083,10 @@ static int execute_exec_command(client_t *client) {
 
 /* Execute a command */
 static void execute_command(client_t *client) {
-    char *cmd = client->command_input;
+    char cmd_buf[256];
+    strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
+    cmd_buf[sizeof(cmd_buf) - 1] = '\0';
+    char *cmd = cmd_buf;
     char output[2048] = {0};
     size_t pos = 0;
 
@@ -1096,6 +1099,21 @@ static void execute_command(client_t *client) {
             *end = '\0';
             end--;
         }
+    }
+
+    /* Save to command history */
+    if (cmd[0] != '\0') {
+        int max_hist = 16;
+        if (client->command_history_count >= max_hist) {
+            memmove(&client->command_history[0], &client->command_history[1],
+                    (max_hist - 1) * sizeof(client->command_history[0]));
+            client->command_history_count = max_hist - 1;
+        }
+        strncpy(client->command_history[client->command_history_count],
+                cmd, sizeof(client->command_history[0]) - 1);
+        client->command_history[client->command_history_count][sizeof(client->command_history[0]) - 1] = '\0';
+        client->command_history_count++;
+        client->command_history_pos = client->command_history_count;
     }
 
     if (strcmp(cmd, "list") == 0 || strcmp(cmd, "users") == 0 ||
@@ -1129,10 +1147,58 @@ static void execute_command(client_t *client) {
                        "========================================\n"
                        "        Available Commands\n"
                        "========================================\n"
-                       "list, users, who - Show online users\n"
-                       "help, commands   - Show this help\n"
-                       "clear, cls       - Clear command output\n"
+                       "list, users, who    - Show online users\n"
+                       "msg/w <user> <text> - Whisper to user\n"
+                       "help, commands      - Show this help\n"
+                       "clear, cls          - Clear command output\n"
+                       "q, quit, exit       - Disconnect\n"
+                       "Up/Down arrows      - Command history\n"
                        "========================================\n");
+
+    } else if (strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {
+        char *rest = (cmd[0] == 'w') ? cmd + 2 : cmd + 4;
+        while (*rest == ' ') rest++;
+        char target_name[MAX_USERNAME_LEN] = {0};
+        int ti = 0;
+        while (*rest && *rest != ' ' && ti < MAX_USERNAME_LEN - 1) {
+            target_name[ti++] = *rest++;
+        }
+        while (*rest == ' ') rest++;
+
+        if (target_name[0] == '\0' || rest[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Usage: msg <username> <message>\n"
+                           "       w <username> <message>\n");
+        } else {
+            bool found = false;
+            pthread_rwlock_rdlock(&g_room->lock);
+            for (int i = 0; i < g_room->client_count; i++) {
+                if (strcmp(g_room->clients[i]->username, target_name) == 0) {
+                    char whisper[MAX_MESSAGE_LEN];
+                    snprintf(whisper, sizeof(whisper),
+                             "\r\n\033[35m[whisper from %s]: %s\033[0m\r\n",
+                             client->username, rest);
+                    client_send(g_room->clients[i], whisper, strlen(whisper));
+                    g_room->clients[i]->redraw_pending = true;
+                    found = true;
+                    break;
+                }
+            }
+            pthread_rwlock_unlock(&g_room->lock);
+
+            if (found) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Whisper sent to %s\n", target_name);
+            } else {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "User '%s' not found\n", target_name);
+            }
+        }
+
+    } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0 ||
+               strcmp(cmd, "exit") == 0) {
+        client->connected = false;
+        return;
 
     } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
         buffer_appendf(output, sizeof(output), &pos, "Command output cleared\n");
@@ -1253,62 +1319,111 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             }
             break;
 
-        case MODE_NORMAL:
+        case MODE_NORMAL: {
+            int nm_msg_count = room_get_message_count(g_room);
+            int nm_msg_height = client->height - 3;
+            if (nm_msg_height < 1) nm_msg_height = 1;
+            int nm_max_scroll = nm_msg_count - nm_msg_height;
+            if (nm_max_scroll < 0) nm_max_scroll = 0;
+
             if (key == 'i') {
                 client->mode = MODE_INSERT;
                 tui_render_screen(client);
-                return true;  /* Key consumed */
+                return true;
             } else if (key == ':') {
                 client->mode = MODE_COMMAND;
                 client->command_input[0] = '\0';
                 tui_render_screen(client);
-                return true;  /* Key consumed - prevents double colon */
+                return true;
             } else if (key == 'j') {
-                /* Get message count atomically to prevent TOCTOU */
-                int max_scroll = room_get_message_count(g_room);
-                int msg_height = client->height - 3;
-                if (msg_height < 1) msg_height = 1;
-                max_scroll = max_scroll - msg_height;
-                if (max_scroll < 0) max_scroll = 0;
-
-                if (client->scroll_pos < max_scroll) {
+                if (client->scroll_pos < nm_max_scroll) {
                     client->scroll_pos++;
                     tui_render_screen(client);
                 }
-                return true;  /* Key consumed */
+                return true;
             } else if (key == 'k' && client->scroll_pos > 0) {
                 client->scroll_pos--;
                 tui_render_screen(client);
-                return true;  /* Key consumed */
+                return true;
+            } else if (key == 4) {  /* Ctrl+D: half page down */
+                int half = nm_msg_height / 2;
+                if (half < 1) half = 1;
+                client->scroll_pos += half;
+                if (client->scroll_pos > nm_max_scroll) client->scroll_pos = nm_max_scroll;
+                tui_render_screen(client);
+                return true;
+            } else if (key == 21) {  /* Ctrl+U: half page up */
+                int half = nm_msg_height / 2;
+                if (half < 1) half = 1;
+                client->scroll_pos -= half;
+                if (client->scroll_pos < 0) client->scroll_pos = 0;
+                tui_render_screen(client);
+                return true;
+            } else if (key == 6) {  /* Ctrl+F: full page down */
+                client->scroll_pos += nm_msg_height;
+                if (client->scroll_pos > nm_max_scroll) client->scroll_pos = nm_max_scroll;
+                tui_render_screen(client);
+                return true;
+            } else if (key == 2) {  /* Ctrl+B: full page up */
+                client->scroll_pos -= nm_msg_height;
+                if (client->scroll_pos < 0) client->scroll_pos = 0;
+                tui_render_screen(client);
+                return true;
             } else if (key == 'g') {
                 client->scroll_pos = 0;
                 tui_render_screen(client);
-                return true;  /* Key consumed */
+                return true;
             } else if (key == 'G') {
-                /* Get message count atomically to prevent TOCTOU */
-                int max_scroll = room_get_message_count(g_room);
-                int msg_height = client->height - 3;
-                if (msg_height < 1) msg_height = 1;
-                max_scroll = max_scroll - msg_height;
-                if (max_scroll < 0) max_scroll = 0;
-
-                client->scroll_pos = max_scroll;
+                client->scroll_pos = nm_max_scroll;
                 tui_render_screen(client);
-                return true;  /* Key consumed */
+                return true;
             } else if (key == '?') {
                 client->show_help = true;
                 client->help_scroll_pos = 0;
                 tui_render_help(client);
-                return true;  /* Key consumed */
+                return true;
             }
             break;
+        }
 
         case MODE_COMMAND:
-            if (key == 27) {  /* ESC */
+            if (key == 27) {  /* ESC - check for arrow key sequences */
+                char seq[2];
+                int n = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (n == 1 && seq[0] == '[') {
+                    n = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                    if (n == 1) {
+                        if (seq[1] == 'A') {  /* Up arrow */
+                            if (client->command_history_count > 0 &&
+                                client->command_history_pos > 0) {
+                                client->command_history_pos--;
+                                strncpy(client->command_input,
+                                        client->command_history[client->command_history_pos],
+                                        sizeof(client->command_input) - 1);
+                                client->command_input[sizeof(client->command_input) - 1] = '\0';
+                                tui_render_screen(client);
+                            }
+                            return true;
+                        } else if (seq[1] == 'B') {  /* Down arrow */
+                            if (client->command_history_pos < client->command_history_count - 1) {
+                                client->command_history_pos++;
+                                strncpy(client->command_input,
+                                        client->command_history[client->command_history_pos],
+                                        sizeof(client->command_input) - 1);
+                                client->command_input[sizeof(client->command_input) - 1] = '\0';
+                            } else {
+                                client->command_history_pos = client->command_history_count;
+                                client->command_input[0] = '\0';
+                            }
+                            tui_render_screen(client);
+                            return true;
+                        }
+                    }
+                }
                 client->mode = MODE_NORMAL;
                 client->command_input[0] = '\0';
                 tui_render_screen(client);
-                return true;  /* Key consumed */
+                return true;
             } else if (key == '\r' || key == '\n') {
                 execute_command(client);
                 return true;  /* Key consumed */
@@ -1353,6 +1468,8 @@ void* client_handle_session(void *arg) {
     client->mode = MODE_INSERT;
     client->help_lang = LANG_ZH;
     client->connected = true;
+    client->command_history_count = 0;
+    client->command_history_pos = 0;
 
     /* Check for exec command */
     if (client->exec_command[0] != '\0') {
@@ -1381,6 +1498,7 @@ void* client_handle_session(void *arg) {
     join_msg.username[MAX_USERNAME_LEN - 1] = '\0';
     snprintf(join_msg.content, MAX_MESSAGE_LEN, "%s 加入了聊天室", client->username);
     room_broadcast(g_room, &join_msg);
+    message_save(&join_msg);
 
     /* Render initial screen */
     tui_render_screen(client);
@@ -1526,6 +1644,7 @@ cleanup:
         client->connected = false;
         room_remove_client(g_room, client);
         room_broadcast(g_room, &leave_msg);
+        message_save(&leave_msg);
     }
 
     release_ip_connection(client->client_ip);
@@ -1798,11 +1917,11 @@ static int client_channel_window_change(ssh_session session, ssh_channel channel
         return SSH_ERROR;
     }
 
-    pthread_mutex_lock(&client->io_lock);
-    client->width = width;
-    client->height = height;
-    sanitize_terminal_size(&client->width, &client->height);
-    pthread_mutex_unlock(&client->io_lock);
+    int w = width;
+    int h = height;
+    sanitize_terminal_size(&w, &h);
+    client->width = w;
+    client->height = h;
     client->redraw_pending = true;
     return SSH_OK;
 }
@@ -1974,9 +2093,11 @@ static void *bootstrap_client_session(void *arg) {
 
     client->session = session;
     client->channel = channel;
-    client->width = ctx->pty_width;
-    client->height = ctx->pty_height;
-    sanitize_terminal_size(&client->width, &client->height);
+    int init_w = ctx->pty_width;
+    int init_h = ctx->pty_height;
+    sanitize_terminal_size(&init_w, &init_h);
+    client->width = init_w;
+    client->height = init_h;
     client->ref_count = 1;
     pthread_mutex_init(&client->ref_lock, NULL);
     pthread_mutex_init(&client->io_lock, NULL);
