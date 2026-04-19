@@ -1281,6 +1281,42 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 client->scroll_pos = max_scroll;
                 tui_render_screen(client);
                 return true;  /* Key consumed */
+            } else if (key == 4) {  /* Ctrl+D: half page down */
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                int half = msg_height / 2;
+                if (half < 1) half = 1;
+                int max_scroll = room_get_message_count(g_room) - msg_height;
+                if (max_scroll < 0) max_scroll = 0;
+                client->scroll_pos += half;
+                if (client->scroll_pos > max_scroll) client->scroll_pos = max_scroll;
+                tui_render_screen(client);
+                return true;
+            } else if (key == 21) {  /* Ctrl+U: half page up */
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                int half = msg_height / 2;
+                if (half < 1) half = 1;
+                client->scroll_pos -= half;
+                if (client->scroll_pos < 0) client->scroll_pos = 0;
+                tui_render_screen(client);
+                return true;
+            } else if (key == 6) {  /* Ctrl+F: full page down */
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                int max_scroll = room_get_message_count(g_room) - msg_height;
+                if (max_scroll < 0) max_scroll = 0;
+                client->scroll_pos += msg_height;
+                if (client->scroll_pos > max_scroll) client->scroll_pos = max_scroll;
+                tui_render_screen(client);
+                return true;
+            } else if (key == 2) {  /* Ctrl+B: full page up */
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                client->scroll_pos -= msg_height;
+                if (client->scroll_pos < 0) client->scroll_pos = 0;
+                tui_render_screen(client);
+                return true;
             } else if (key == '?') {
                 client->show_help = true;
                 client->help_scroll_pos = 0;
