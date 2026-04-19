@@ -31,7 +31,8 @@ int main(int argc, char **argv) {
 
     /* Parse command line arguments */
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+        if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) &&
+            i + 1 < argc) {
             char *end;
             long val = strtol(argv[i + 1], &end, 10);
             if (*end != '\0' || val <= 0 || val > 65535) {
@@ -47,13 +48,23 @@ int main(int argc, char **argv) {
                 return 1;
             }
             i++;
+        } else if (strcmp(argv[i], "-V") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("tnt %s\n", TNT_VERSION);
+            return 0;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            printf("TNT - Terminal Network Talk\n");
-            printf("Usage: %s [options]\n", argv[0]);
+            printf("tnt %s - anonymous SSH chat server\n\n", TNT_VERSION);
+            printf("Usage: %s [options]\n\n", argv[0]);
             printf("Options:\n");
-            printf("  -p PORT    Listen on PORT (default: %d)\n", DEFAULT_PORT);
-            printf("  -d DIR     Store host key and logs in DIR\n");
-            printf("  -h         Show this help\n");
+            printf("  -p, --port PORT       Listen on PORT (default: %d)\n", DEFAULT_PORT);
+            printf("  -d, --state-dir DIR   Store host key and logs in DIR\n");
+            printf("  -V, --version         Show version\n");
+            printf("  -h, --help            Show this help\n");
+            printf("\nEnvironment:\n");
+            printf("  PORT                  Default listening port\n");
+            printf("  TNT_STATE_DIR         State directory\n");
+            printf("  TNT_ACCESS_TOKEN      Require this password for SSH auth\n");
+            printf("  TNT_MAX_CONNECTIONS   Global connection limit (default: 64)\n");
+            printf("  TNT_RATE_LIMIT        Set to 0 to disable rate limiting\n");
             return 0;
         } else {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);

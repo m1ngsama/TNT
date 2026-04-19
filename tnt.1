@@ -4,11 +4,12 @@
 tnt \- anonymous SSH chat server with Vim\-style TUI
 .SH SYNOPSIS
 .B tnt
-.RB [ \-p
+.RB [ \-p | \-\-port
 .IR port ]
-.RB [ \-d
+.RB [ \-d | \-\-state\-dir
 .IR dir ]
-.RB [ \-h ]
+.RB [ \-V | \-\-version ]
+.RB [ \-h | \-\-help ]
 .SH DESCRIPTION
 .B tnt
 is a multi\-user anonymous chat server accessed over SSH.
@@ -21,7 +22,7 @@ The server supports CJK and emoji input, rate limiting, access tokens, and
 a non\-interactive exec interface for scripting.
 .SH OPTIONS
 .TP
-.BI \-p " port"
+.BR \-p ", " \-\-port " " \fIport\fR
 Listen on
 .I port
 instead of the default 2222.
@@ -29,7 +30,7 @@ Overrides the
 .B PORT
 environment variable.
 .TP
-.BI \-d " dir"
+.BR \-d ", " \-\-state\-dir " " \fIdir\fR
 Store the host key and message log in
 .IR dir .
 Overrides the
@@ -37,7 +38,10 @@ Overrides the
 environment variable.
 Defaults to the current working directory.
 .TP
-.B \-h
+.BR \-V ", " \-\-version
+Print version and exit.
+.TP
+.BR \-h ", " \-\-help
 Print a short usage summary and exit.
 .SH CONNECTING
 .PP
