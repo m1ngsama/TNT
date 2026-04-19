@@ -21,6 +21,9 @@ typedef struct client {
     int help_scroll_pos;
     bool show_help;
     char command_input[256];
+    char command_history[16][256];
+    int command_history_count;
+    int command_history_pos;
     char command_output[2048];
     char exec_command[MAX_EXEC_COMMAND_LEN];
     char ssh_login[MAX_USERNAME_LEN];

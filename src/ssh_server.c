@@ -1084,6 +1084,21 @@ static void execute_command(client_t *client) {
         }
     }
 
+    /* Save to command history */
+    if (cmd[0] != '\0') {
+        int max_hist = 16;
+        if (client->command_history_count >= max_hist) {
+            memmove(&client->command_history[0], &client->command_history[1],
+                    (max_hist - 1) * sizeof(client->command_history[0]));
+            client->command_history_count = max_hist - 1;
+        }
+        strncpy(client->command_history[client->command_history_count],
+                cmd, sizeof(client->command_history[0]) - 1);
+        client->command_history[client->command_history_count][sizeof(client->command_history[0]) - 1] = '\0';
+        client->command_history_count++;
+        client->command_history_pos = client->command_history_count;
+    }
+
     if (strcmp(cmd, "list") == 0 || strcmp(cmd, "users") == 0 ||
         strcmp(cmd, "who") == 0) {
         buffer_appendf(output, sizeof(output), &pos,
@@ -1116,9 +1131,51 @@ static void execute_command(client_t *client) {
                        "        Available Commands\n"
                        "========================================\n"
                        "list, users, who - Show online users\n"
+                       "msg/w <user> <text> - Whisper to user\n"
                        "help, commands   - Show this help\n"
                        "clear, cls       - Clear command output\n"
+                       "Up/Down arrows   - Command history\n"
                        "========================================\n");
+
+    } else if (strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {
+        char *rest = (cmd[0] == 'w') ? cmd + 2 : cmd + 4;
+        while (*rest == ' ') rest++;
+        char target_name[MAX_USERNAME_LEN] = {0};
+        int ti = 0;
+        while (*rest && *rest != ' ' && ti < MAX_USERNAME_LEN - 1) {
+            target_name[ti++] = *rest++;
+        }
+        while (*rest == ' ') rest++;
+
+        if (target_name[0] == '\0' || rest[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Usage: msg <username> <message>\n"
+                           "       w <username> <message>\n");
+        } else {
+            bool found = false;
+            pthread_rwlock_rdlock(&g_room->lock);
+            for (int i = 0; i < g_room->client_count; i++) {
+                if (strcmp(g_room->clients[i]->username, target_name) == 0) {
+                    char whisper[MAX_MESSAGE_LEN];
+                    snprintf(whisper, sizeof(whisper),
+                             "\r\n\033[35m[whisper from %s]: %s\033[0m\r\n",
+                             client->username, rest);
+                    client_send(g_room->clients[i], whisper, strlen(whisper));
+                    g_room->clients[i]->redraw_pending = true;
+                    found = true;
+                    break;
+                }
+            }
+            pthread_rwlock_unlock(&g_room->lock);
+
+            if (found) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Whisper sent to %s\n", target_name);
+            } else {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "User '%s' not found\n", target_name);
+            }
+        }
 
     } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
         buffer_appendf(output, sizeof(output), &pos, "Command output cleared\n");
@@ -1290,7 +1347,39 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             break;
 
         case MODE_COMMAND:
-            if (key == 27) {  /* ESC */
+            if (key == 27) {  /* ESC - check for arrow key sequences */
+                char seq[2];
+                int n = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (n == 1 && seq[0] == '[') {
+                    n = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                    if (n == 1) {
+                        if (seq[1] == 'A') {  /* Up arrow */
+                            if (client->command_history_count > 0 &&
+                                client->command_history_pos > 0) {
+                                client->command_history_pos--;
+                                strncpy(client->command_input,
+                                        client->command_history[client->command_history_pos],
+                                        sizeof(client->command_input) - 1);
+                                client->command_input[sizeof(client->command_input) - 1] = '\0';
+                                tui_render_screen(client);
+                            }
+                            return true;
+                        } else if (seq[1] == 'B') {  /* Down arrow */
+                            if (client->command_history_pos < client->command_history_count - 1) {
+                                client->command_history_pos++;
+                                strncpy(client->command_input,
+                                        client->command_history[client->command_history_pos],
+                                        sizeof(client->command_input) - 1);
+                                client->command_input[sizeof(client->command_input) - 1] = '\0';
+                            } else {
+                                client->command_history_pos = client->command_history_count;
+                                client->command_input[0] = '\0';
+                            }
+                            tui_render_screen(client);
+                            return true;
+                        }
+                    }
+                }
                 client->mode = MODE_NORMAL;
                 client->command_input[0] = '\0';
                 tui_render_screen(client);
@@ -1339,6 +1428,8 @@ void* client_handle_session(void *arg) {
     client->mode = MODE_INSERT;
     client->help_lang = LANG_ZH;
     client->connected = true;
+    client->command_history_count = 0;
+    client->command_history_pos = 0;
 
     /* Check for exec command */
     if (client->exec_command[0] != '\0') {

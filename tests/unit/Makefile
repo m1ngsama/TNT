@@ -6,6 +6,7 @@ LDFLAGS = -pthread
 # Source files
 UTF8_SRC = ../../src/utf8.c
 MESSAGE_SRC = ../../src/message.c
+COMMON_SRC = ../../src/common.c
 
 TESTS = test_utf8 test_message
 
@@ -16,7 +17,7 @@ all: $(TESTS)
 test_utf8: test_utf8.c $(UTF8_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_message: test_message.c $(MESSAGE_SRC) $(UTF8_SRC)
+test_message: test_message.c $(MESSAGE_SRC) $(UTF8_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 run: all
