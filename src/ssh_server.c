@@ -194,8 +194,10 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
                 oldest_idx = i;
             }
         }
-        fprintf(stderr, "Warning: rate-limit table full, evicting active IP %s\n",
-                g_rate_limits[oldest_idx].ip);
+        fprintf(stderr, "Warning: rate-limit table full, evicting active IP %s "
+                "(%d active connections lost)\n",
+                g_rate_limits[oldest_idx].ip,
+                g_rate_limits[oldest_idx].active_connections);
     }
 
     /* Reset and reuse */
@@ -487,7 +489,9 @@ int client_send(client_t *client, const char *data, size_t len) {
     }
 
     while (total < len) {
-        int sent = ssh_channel_write(client->channel, data + total, len - total);
+        size_t remaining = len - total;
+        uint32_t chunk = (remaining > 32768) ? 32768 : (uint32_t)remaining;
+        int sent = ssh_channel_write(client->channel, data + total, chunk);
         if (sent <= 0) {
             pthread_mutex_unlock(&client->io_lock);
             return -1;
