@@ -27,6 +27,8 @@ typedef struct client {
     char command_output[2048];
     char exec_command[MAX_EXEC_COMMAND_LEN];
     char ssh_login[MAX_USERNAME_LEN];
+    time_t connect_time;
+    time_t last_active;
     atomic_bool redraw_pending;
     pthread_t thread;
     atomic_bool connected;

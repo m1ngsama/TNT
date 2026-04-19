@@ -17,11 +17,24 @@ static const char *username_color(const char *name) {
 }
 
 static void format_message_colored(const message_t *msg, char *buffer,
-                                   size_t buf_size, int width) {
+                                   size_t buf_size, int width,
+                                   const char *my_username) {
     struct tm tm_info;
     localtime_r(&msg->timestamp, &tm_info);
     char time_str[32];
     strftime(time_str, sizeof(time_str), "%H:%M", &tm_info);
+
+    bool mentioned = false;
+    if (my_username && my_username[0] != '\0' &&
+        strcmp(msg->username, "系统") != 0) {
+        char mention[MAX_USERNAME_LEN + 2];
+        snprintf(mention, sizeof(mention), "@%s", my_username);
+        if (strstr(msg->content, mention) != NULL) {
+            mentioned = true;
+        }
+    }
+    const char *hl_start = mentioned ? "\033[1;33m" : "";
+    const char *hl_end = mentioned ? "\033[0m" : "";
 
     if (strcmp(msg->username, "系统") == 0) {
         snprintf(buffer, buf_size,
@@ -32,9 +45,9 @@ static void format_message_colored(const message_t *msg, char *buffer,
                  time_str, msg->content);
     } else {
         snprintf(buffer, buf_size,
-                 "\033[90m%s\033[0m %s%s\033[0m: %s",
+                 "\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
                  time_str, username_color(msg->username),
-                 msg->username, msg->content);
+                 msg->username, hl_start, msg->content, hl_end);
     }
 
     /* Plain-text version for width calculation */
@@ -85,9 +98,9 @@ static void format_message_colored(const message_t *msg, char *buffer,
                      time_str, truncated_content);
         } else {
             snprintf(buffer, buf_size,
-                     "\033[90m%s\033[0m %s%s\033[0m: %s",
+                     "\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
                      time_str, username_color(msg->username),
-                     msg->username, truncated_content);
+                     msg->username, hl_start, truncated_content, hl_end);
         }
     }
 }
@@ -236,7 +249,8 @@ void tui_render_screen(client_t *client) {
     if (msg_snapshot) {
         for (int i = 0; i < snapshot_count; i++) {
             char msg_line[2048];
-            format_message_colored(&msg_snapshot[i], msg_line, sizeof(msg_line), render_width);
+            format_message_colored(&msg_snapshot[i], msg_line, sizeof(msg_line),
+                                   render_width, client->username);
             buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
         }
         free(msg_snapshot);
@@ -411,6 +425,7 @@ const char* tui_get_help_text(help_lang_t lang) {
                "\n"
                "SPECIAL MESSAGES:\n"
                "  /me <action>      - Send action (e.g. /me waves)\n"
+               "  @username         - Mention user (bell + highlight)\n"
                "\n"
                "HELP SCREEN KEYS:\n"
                "  q, ESC     - Close help\n"
@@ -454,6 +469,7 @@ const char* tui_get_help_text(help_lang_t lang) {
                "\n"
                "特殊消息:\n"
                "  /me <动作>        - 发送动作 (如 /me 挥手)\n"
+               "  @用户名           - 提及用户 (响铃+高亮)\n"
                "\n"
                "帮助界面按键:\n"
                "  q, ESC     - 关闭帮助\n"

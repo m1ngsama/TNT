@@ -65,6 +65,7 @@ int main(int argc, char **argv) {
             printf("  TNT_ACCESS_TOKEN      Require this password for SSH auth\n");
             printf("  TNT_MAX_CONNECTIONS   Global connection limit (default: 64)\n");
             printf("  TNT_RATE_LIMIT        Set to 0 to disable rate limiting\n");
+            printf("  TNT_IDLE_TIMEOUT      Idle disconnect timeout in seconds (default: 1800)\n");
             return 0;
         } else {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);

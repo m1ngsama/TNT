@@ -25,6 +25,7 @@
 #define MAX_LOG_SIZE (10 * 1024 * 1024)  /* 10 MiB */
 #define HOST_KEY_FILE "host_key"
 #define TNT_DEFAULT_STATE_DIR "."
+#define DEFAULT_IDLE_TIMEOUT 1800  /* 30 minutes */
 
 /* ANSI color codes */
 #define ANSI_RESET "\033[0m"
