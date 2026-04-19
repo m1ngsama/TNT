@@ -92,6 +92,7 @@ ESC                  - Return to NORMAL mode
 **Special messages (INSERT mode)**
 ```
 /me <action>         - Send action (e.g. /me waves)
+@username            - Mention user (bell + highlight)
 ```
 
 ### Security Configuration
@@ -127,6 +128,9 @@ TNT_MAX_CONN_RATE_PER_IP=30 tnt
 
 # Disable connection-rate and auth-failure blocking (testing only)
 TNT_RATE_LIMIT=0 tnt
+
+# Idle timeout in seconds (default 1800 = 30min, 0 to disable)
+TNT_IDLE_TIMEOUT=3600 tnt
 ```
 
 **SSH logging:**

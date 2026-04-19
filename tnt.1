@@ -85,6 +85,7 @@ Ctrl+W	Delete last word
 Ctrl+U	Clear input line
 Ctrl+C	Switch to NORMAL
 /me \fIaction\fR	Send action message (e.g. /me waves)
+@\fIusername\fR	Mention user (bell notification + highlight)
 .TE
 .SS NORMAL mode
 .TS
@@ -152,6 +153,10 @@ Max new connections per IP per 60\-second window (default: 10).
 .B TNT_RATE_LIMIT
 Set to 0 to disable rate\-based blocking and auth\-failure IP blocking.
 Explicit capacity limits still apply (default: 1).
+.TP
+.B TNT_IDLE_TIMEOUT
+Disconnect clients after this many seconds of inactivity.
+Set to 0 to disable (default: 1800, i.e. 30 minutes).
 .SH FILES
 .TP
 .I messages.log

@@ -66,6 +66,7 @@ static int g_max_conn_per_ip = 5;
 static int g_max_conn_rate_per_ip = 10;
 static int g_rate_limit_enabled = 1;
 static char g_access_token[256] = "";
+static int g_idle_timeout = DEFAULT_IDLE_TIMEOUT;
 
 static void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
                            const char *fmt, ...) {
@@ -141,6 +142,8 @@ static void init_rate_limit_config(void) {
     g_max_conn_per_ip = env_int("TNT_MAX_CONN_PER_IP", 5, 1, 1024);
     g_max_conn_rate_per_ip = env_int("TNT_MAX_CONN_RATE_PER_IP", 10, 1, 1024);
     g_rate_limit_enabled = env_int("TNT_RATE_LIMIT", 1, 0, 1);
+
+    g_idle_timeout = env_int("TNT_IDLE_TIMEOUT", DEFAULT_IDLE_TIMEOUT, 0, 86400);
 
     if ((env = getenv("TNT_ACCESS_TOKEN")) != NULL) {
         strncpy(g_access_token, env, sizeof(g_access_token) - 1);
@@ -979,6 +982,31 @@ static int exec_command_tail(client_t *client, const char *args) {
     return rc;
 }
 
+static void notify_mentions(const char *content, const client_t *sender) {
+    pthread_rwlock_rdlock(&g_room->lock);
+    int count = g_room->client_count;
+    client_t *targets[MAX_CLIENTS];
+    int target_count = 0;
+
+    for (int i = 0; i < count; i++) {
+        client_t *c = g_room->clients[i];
+        if (c == sender) continue;
+        char mention[MAX_USERNAME_LEN + 2];
+        snprintf(mention, sizeof(mention), "@%s", c->username);
+        if (strstr(content, mention) != NULL) {
+            client_addref(c);
+            targets[target_count++] = c;
+        }
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+
+    for (int i = 0; i < target_count; i++) {
+        client_send(targets[i], "\a", 1);
+        targets[i]->redraw_pending = true;
+        client_release(targets[i]);
+    }
+}
+
 static int exec_command_post(client_t *client, const char *args) {
     char content[MAX_MESSAGE_LEN];
     char username[MAX_USERNAME_LEN];
@@ -1022,6 +1050,7 @@ static int exec_command_post(client_t *client, const char *args) {
     }
 
     room_broadcast(g_room, &msg);
+    notify_mentions(msg.content, client);
     if (message_save(&msg) < 0) {
         client_printf(client, "post: failed to persist message\n");
         return 1;
@@ -1138,11 +1167,21 @@ static void execute_command(client_t *client) {
                        "----------------------------------------\n",
                        g_room->client_count);
 
+        time_t now = time(NULL);
         for (int i = 0; i < g_room->client_count; i++) {
             char marker = (g_room->clients[i] == client) ? '*' : ' ';
+            int dur = (int)(now - g_room->clients[i]->connect_time);
+            char dur_str[32];
+            if (dur < 60) {
+                snprintf(dur_str, sizeof(dur_str), "%ds", dur);
+            } else if (dur < 3600) {
+                snprintf(dur_str, sizeof(dur_str), "%dm", dur / 60);
+            } else {
+                snprintf(dur_str, sizeof(dur_str), "%dh%dm", dur / 3600, (dur % 3600) / 60);
+            }
             buffer_appendf(output, sizeof(output), &pos,
-                           "%c %d. %s\n", marker, i + 1,
-                           g_room->clients[i]->username);
+                           "%c %d. %s (%s)\n", marker, i + 1,
+                           g_room->clients[i]->username, dur_str);
         }
 
         pthread_rwlock_unlock(&g_room->lock);
@@ -1166,6 +1205,7 @@ static void execute_command(client_t *client) {
                        "========================================\n"
                        "In INSERT mode:\n"
                        "  /me <action>      - Send action message\n"
+                       "  @username         - Mention (bell notify)\n"
                        "========================================\n");
 
     } else if (strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {
@@ -1357,6 +1397,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                         snprintf(msg.content, sizeof(msg.content), "%s", input);
                     }
                     room_broadcast(g_room, &msg);
+                    notify_mentions(msg.content, client);
                     message_save(&msg);
                     input[0] = '\0';
                 }
@@ -1534,6 +1575,8 @@ void* client_handle_session(void *arg) {
     client->connected = true;
     client->command_history_count = 0;
     client->command_history_pos = 0;
+    client->connect_time = time(NULL);
+    client->last_active = time(NULL);
 
     /* Check for exec command */
     if (client->exec_command[0] != '\0') {
@@ -1610,6 +1653,13 @@ void* client_handle_session(void *arg) {
                 }
                 last_keepalive = time(NULL);
             }
+
+            if (g_idle_timeout > 0 && joined_room &&
+                time(NULL) - client->last_active >= g_idle_timeout) {
+                client_printf(client, "\r\n\033[33mDisconnected: idle timeout (%d min)\033[0m\r\n",
+                              g_idle_timeout / 60);
+                break;
+            }
             continue;
         }
 
@@ -1621,6 +1671,7 @@ void* client_handle_session(void *arg) {
         }
 
         last_keepalive = time(NULL);
+        client->last_active = last_keepalive;
 
         unsigned char b = buf[0];
 
