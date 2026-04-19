@@ -254,8 +254,15 @@ void message_format(const message_t *msg, char *buffer, size_t buf_size, int wid
         }
     }
 
-    /* Truncate to terminal width */
+    /* Truncate to terminal width with ellipsis indicator */
     if (utf8_string_width(buffer) > width) {
-        utf8_truncate(buffer, width);
+        utf8_truncate(buffer, width - 3);
+        size_t len = strlen(buffer);
+        if (len + 3 < buf_size) {
+            buffer[len] = '.';
+            buffer[len + 1] = '.';
+            buffer[len + 2] = '.';
+            buffer[len + 3] = '\0';
+        }
     }
 }

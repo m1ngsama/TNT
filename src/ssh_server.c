@@ -552,100 +552,121 @@ int client_printf(client_t *client, const char *fmt, ...) {
     return client_send(client, buffer, len);
 }
 
-/* Read username from client */
-static int read_username(client_t *client) {
-    char username[MAX_USERNAME_LEN] = {0};
+/* Erase last displayed UTF-8 character (handles CJK double-width) */
+static void erase_last_displayed_char(client_t *client, const char *str) {
+    /* Find the last character's display width */
+    int len = strlen(str);
+    if (len == 0) return;
+    int i = len - 1;
+    while (i > 0 && (str[i] & 0xC0) == 0x80) i--;
+    int bytes_read;
+    uint32_t cp = utf8_decode(str + i, &bytes_read);
+    int w = utf8_char_width(cp);
+    for (int j = 0; j < w; j++) {
+        client_printf(client, "\b \b");
+    }
+}
+
+/* Read a line of input from client, returns bytes in buffer or -1 on disconnect */
+static int read_line_input(client_t *client, char *buffer, int max_len) {
     int pos = 0;
     char buf[4];
-
-    tui_clear_screen(client);
-    client_printf(client, "================================\r\n");
-    client_printf(client, "  欢迎来到 TNT 匿名聊天室\r\n");
-    client_printf(client, "  Welcome to TNT Anonymous Chat\r\n");
-    client_printf(client, "================================\r\n\r\n");
-    client_printf(client, "请输入用户名 (留空默认为 anonymous): ");
+    buffer[0] = '\0';
 
     while (1) {
-        int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 60000); /* 60 sec timeout */
-
+        int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 60000);
         if (n == SSH_AGAIN) {
-            /* Timeout */
-            if (!ssh_channel_is_open(client->channel)) {
-                return -1;
-            }
+            if (!ssh_channel_is_open(client->channel)) return -1;
             continue;
         }
-
         if (n <= 0) return -1;
 
         unsigned char b = buf[0];
 
         if (b == '\r' || b == '\n') {
             break;
-        } else if (b == 127 || b == 8) {  /* Backspace */
+        } else if (b == 127 || b == 8) {
             if (pos > 0) {
-                utf8_remove_last_char(username);
-                pos = strlen(username);
-                client_printf(client, "\b \b");
+                erase_last_displayed_char(client, buffer);
+                utf8_remove_last_char(buffer);
+                pos = strlen(buffer);
+            }
+        } else if (b == 21) { /* Ctrl+U: clear line */
+            while (pos > 0) {
+                erase_last_displayed_char(client, buffer);
+                utf8_remove_last_char(buffer);
+                pos = strlen(buffer);
             }
         } else if (b < 32) {
-            /* Ignore control characters */
+            /* Ignore other control characters */
         } else if (b < 128) {
-            /* ASCII */
-            if (pos < MAX_USERNAME_LEN - 1) {
-                username[pos++] = b;
-                username[pos] = '\0';
+            if (pos < max_len - 1) {
+                buffer[pos++] = b;
+                buffer[pos] = '\0';
                 client_send(client, (char *)&b, 1);
             }
         } else {
-            /* UTF-8 multi-byte */
             int len = utf8_byte_length(b);
-            if (len <= 0 || len > 4) {
-                /* Invalid UTF-8 start byte */
-                continue;
-            }
+            if (len <= 0 || len > 4) continue;
             buf[0] = b;
             if (len > 1) {
                 int read_bytes = ssh_channel_read_timeout(client->channel, &buf[1], len - 1, 0, 5000);
-                if (read_bytes != len - 1) {
-                    /* Incomplete or timed-out UTF-8 continuation */
-                    continue;
-                }
+                if (read_bytes != len - 1) continue;
             }
-            /* Validate the complete UTF-8 sequence */
-            if (!utf8_is_valid_sequence(buf, len)) {
-                continue;
-            }
-            if (pos + len < MAX_USERNAME_LEN - 1) {
-                memcpy(username + pos, buf, len);
+            if (!utf8_is_valid_sequence(buf, len)) continue;
+            if (pos + len < max_len - 1) {
+                memcpy(buffer + pos, buf, len);
                 pos += len;
-                username[pos] = '\0';
+                buffer[pos] = '\0';
                 client_send(client, buf, len);
             }
         }
     }
 
     client_printf(client, "\r\n");
+    return pos;
+}
 
-    if (username[0] == '\0') {
-        strncpy(client->username, "anonymous", MAX_USERNAME_LEN - 1);
-        client->username[MAX_USERNAME_LEN - 1] = '\0';
-    } else {
+/* Read username from client */
+static int read_username(client_t *client) {
+    char username[MAX_USERNAME_LEN] = {0};
+    int max_attempts = 3;
+
+    tui_clear_screen(client);
+    client_printf(client, "================================\r\n");
+    client_printf(client, "  TNT - Terminal Network Talk\r\n");
+    client_printf(client, "================================\r\n\r\n");
+
+    for (int attempt = 0; attempt < max_attempts; attempt++) {
+        client_printf(client, "Username / 用户名 (blank=anonymous): ");
+
+        int len = read_line_input(client, username, MAX_USERNAME_LEN);
+        if (len < 0) return -1;
+
+        if (username[0] == '\0') {
+            strncpy(client->username, "anonymous", MAX_USERNAME_LEN - 1);
+            client->username[MAX_USERNAME_LEN - 1] = '\0';
+            return 0;
+        }
+
+        /* Truncate to 20 display characters */
+        if (utf8_strlen(username) > 20) {
+            utf8_truncate(username, 20);
+        }
+
+        if (!is_valid_username(username)) {
+            client_printf(client, "Invalid name / 无效用户名 (no special chars)\r\n");
+            username[0] = '\0';
+            continue;
+        }
+
         strncpy(client->username, username, MAX_USERNAME_LEN - 1);
         client->username[MAX_USERNAME_LEN - 1] = '\0';
-
-        /* Validate username for security */
-        if (!is_valid_username(client->username)) {
-            client_printf(client, "Invalid username. Using 'anonymous' instead.\r\n");
-            strcpy(client->username, "anonymous");
-        } else {
-            /* Truncate to 20 characters */
-            if (utf8_strlen(client->username) > 20) {
-                utf8_truncate(client->username, 20);
-            }
-        }
+        return 0;
     }
 
+    /* Exhausted retries */
+    strcpy(client->username, "anonymous");
     return 0;
 }
 
@@ -1152,6 +1173,12 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             client->mode = MODE_NORMAL;
             client->command_input[0] = '\0';
             client->show_help = false;
+            /* Start at newest messages */
+            int msg_count = room_get_message_count(g_room);
+            int msg_height = client->height - 3;
+            if (msg_height < 1) msg_height = 1;
+            client->scroll_pos = msg_count - msg_height;
+            if (client->scroll_pos < 0) client->scroll_pos = 0;
             tui_render_screen(client);
         } else {
             /* In NORMAL mode, Ctrl+C exits */
@@ -1162,7 +1189,23 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
 
     /* Handle help screen */
     if (client->show_help) {
-        if (key == 'q' || key == 27) {
+        if (key == 27) {
+            /* Check for arrow key sequence */
+            char seq[2];
+            int nr = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+            if (nr == 1 && seq[0] == '[') {
+                nr = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                if (nr == 1) {
+                    if (seq[1] == 'A') return handle_key(client, 'k', input);
+                    if (seq[1] == 'B') return handle_key(client, 'j', input);
+                }
+                return true;
+            }
+            /* Bare ESC - close help */
+            client->show_help = false;
+            tui_render_screen(client);
+            return true;
+        } else if (key == 'q') {
             client->show_help = false;
             tui_render_screen(client);
         } else if (key == 'e' || key == 'E') {
@@ -1200,9 +1243,27 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Mode-specific handling */
     switch (client->mode) {
         case MODE_INSERT:
-            if (key == 27) {  /* ESC */
+            if (key == 27) {  /* ESC - check for arrow key sequence */
+                /* Try to read next byte with short timeout to distinguish
+                 * bare ESC from escape sequences like \033[A */
+                char seq[2];
+                int nr = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (nr == 1 && seq[0] == '[') {
+                    /* This is an escape sequence, read the final byte */
+                    nr = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                    if (nr == 1) {
+                        /* Arrow keys: A=up, B=down, C=right, D=left - ignore in INSERT */
+                    }
+                    /* Consume the sequence silently */
+                    return true;
+                }
+                /* Bare ESC - switch to NORMAL mode at newest messages */
                 client->mode = MODE_NORMAL;
-                client->scroll_pos = 0;
+                int msg_count = room_get_message_count(g_room);
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                client->scroll_pos = msg_count - msg_height;
+                if (client->scroll_pos < 0) client->scroll_pos = 0;
                 tui_render_screen(client);
                 return true;  /* Key consumed */
             } else if (key == '\r' || key == '\n') {  /* Enter */
@@ -1240,7 +1301,19 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             break;
 
         case MODE_NORMAL:
-            if (key == 'i') {
+            if (key == 27) {  /* ESC - consume arrow key sequences */
+                char seq[2];
+                int nr = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (nr == 1 && seq[0] == '[') {
+                    nr = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                    if (nr == 1) {
+                        /* Map arrow keys: Up→k, Down→j */
+                        if (seq[1] == 'A') return handle_key(client, 'k', input);
+                        if (seq[1] == 'B') return handle_key(client, 'j', input);
+                    }
+                }
+                return true;  /* Consume bare ESC or unknown sequences */
+            } else if (key == 'i') {
                 client->mode = MODE_INSERT;
                 tui_render_screen(client);
                 return true;  /* Key consumed */
@@ -1290,9 +1363,22 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             break;
 
         case MODE_COMMAND:
-            if (key == 27) {  /* ESC */
+            if (key == 27) {  /* ESC - check for arrow key sequence */
+                char seq[2];
+                int nr = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (nr == 1 && seq[0] == '[') {
+                    nr = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                    /* Consume arrow key sequences silently */
+                    return true;
+                }
+                /* Bare ESC - back to NORMAL */
                 client->mode = MODE_NORMAL;
                 client->command_input[0] = '\0';
+                int msg_count = room_get_message_count(g_room);
+                int msg_height = client->height - 3;
+                if (msg_height < 1) msg_height = 1;
+                client->scroll_pos = msg_count - msg_height;
+                if (client->scroll_pos < 0) client->scroll_pos = 0;
                 tui_render_screen(client);
                 return true;  /* Key consumed */
             } else if (key == '\r' || key == '\n') {
@@ -1363,9 +1449,9 @@ void* client_handle_session(void *arg) {
     message_t join_msg = {
         .timestamp = time(NULL),
     };
-    strncpy(join_msg.username, "系统", MAX_USERNAME_LEN - 1);
+    strncpy(join_msg.username, "system", MAX_USERNAME_LEN - 1);
     join_msg.username[MAX_USERNAME_LEN - 1] = '\0';
-    snprintf(join_msg.content, MAX_MESSAGE_LEN, "%s 加入了聊天室", client->username);
+    snprintf(join_msg.content, MAX_MESSAGE_LEN, "%s joined / 加入了聊天室", client->username);
     room_broadcast(g_room, &join_msg);
 
     /* Render initial screen */
@@ -1489,9 +1575,9 @@ cleanup:
         message_t leave_msg = {
             .timestamp = time(NULL),
         };
-        strncpy(leave_msg.username, "系统", MAX_USERNAME_LEN - 1);
+        strncpy(leave_msg.username, "system", MAX_USERNAME_LEN - 1);
         leave_msg.username[MAX_USERNAME_LEN - 1] = '\0';
-        snprintf(leave_msg.content, MAX_MESSAGE_LEN, "%s 离开了聊天室", client->username);
+        snprintf(leave_msg.content, MAX_MESSAGE_LEN, "%s left / 离开了聊天室", client->username);
 
         client->connected = false;
         room_remove_client(g_room, client);

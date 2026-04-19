@@ -77,6 +77,16 @@ int utf8_char_width(uint32_t codepoint) {
     /* Fullwidth forms */
     if (codepoint >= 0xFF00 && codepoint <= 0xFFEF) return 2;
 
+    /* Emoji ranges (wide display) */
+    if ((codepoint >= 0x1F300 && codepoint <= 0x1F9FF) ||  /* Misc Symbols, Emoticons, etc. */
+        (codepoint >= 0x1FA00 && codepoint <= 0x1FA6F) ||  /* Chess Symbols */
+        (codepoint >= 0x1FA70 && codepoint <= 0x1FAFF) ||  /* Symbols and Pictographs Extended-A */
+        (codepoint >= 0x2600 && codepoint <= 0x27BF) ||    /* Misc Symbols, Dingbats */
+        (codepoint >= 0x2300 && codepoint <= 0x23FF) ||    /* Misc Technical */
+        (codepoint >= 0x2B50 && codepoint <= 0x2B55)) {    /* Stars, circles */
+        return 2;
+    }
+
     /* Default to single width */
     return 1;
 }

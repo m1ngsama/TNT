@@ -123,9 +123,18 @@ void tui_render_screen(client_t *client) {
     buffer_appendf(buffer, buf_size, &pos, ANSI_HOME);
 
     /* Title bar */
-    const char *mode_str = (client->mode == MODE_INSERT) ? "INSERT" :
-                          (client->mode == MODE_NORMAL) ? "NORMAL" :
-                          (client->mode == MODE_COMMAND) ? "COMMAND" : "HELP";
+    const char *mode_str;
+    if (client->show_help) {
+        mode_str = "HELP";
+    } else if (client->command_output[0] != '\0') {
+        mode_str = "OUTPUT";
+    } else if (client->mode == MODE_INSERT) {
+        mode_str = "INSERT";
+    } else if (client->mode == MODE_NORMAL) {
+        mode_str = "NORMAL";
+    } else {
+        mode_str = "COMMAND";
+    }
 
     char title[256];
     snprintf(title, sizeof(title),
@@ -168,10 +177,16 @@ void tui_render_screen(client_t *client) {
         buffer_appendf(buffer, buf_size, &pos, "> \033[K");
     } else if (client->mode == MODE_NORMAL) {
         int total = msg_count;
-        int scroll_pos = client->scroll_pos + 1;
-        if (total == 0) scroll_pos = 0;
-        buffer_appendf(buffer, buf_size, &pos,
-                       "-- NORMAL -- (%d/%d)\033[K", scroll_pos, total);
+        if (total == 0) {
+            buffer_appendf(buffer, buf_size, &pos,
+                           "-- NORMAL -- (no messages) i:insert ?:help\033[K");
+        } else {
+            int visible_end = end;  /* already computed above */
+            int pct = (visible_end * 100) / total;
+            if (pct > 100) pct = 100;
+            buffer_appendf(buffer, buf_size, &pos,
+                           "-- NORMAL -- (%d%%) i:insert j/k:scroll ?:help\033[K", pct);
+        }
     } else if (client->mode == MODE_COMMAND) {
         buffer_appendf(buffer, buf_size, &pos, ":%s\033[K", client->command_input);
     }
@@ -417,10 +432,20 @@ void tui_render_help(client_t *client) {
         buffer_append_bytes(buffer, sizeof(buffer), &pos, "\r\n", 2);
     }
 
-    /* Status line */
-    buffer_appendf(buffer, sizeof(buffer), &pos,
-                   "-- HELP -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close",
-                   start + 1, max_scroll + 1);
+    /* Status line - adapt to terminal width */
+    char status[256];
+    if (client->width >= 60) {
+        snprintf(status, sizeof(status),
+                 "-- HELP -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close",
+                 start + 1, max_scroll + 1);
+    } else if (client->width >= 35) {
+        snprintf(status, sizeof(status),
+                 "HELP (%d/%d) j/k e/z q:close",
+                 start + 1, max_scroll + 1);
+    } else {
+        snprintf(status, sizeof(status), "HELP %d/%d", start + 1, max_scroll + 1);
+    }
+    buffer_appendf(buffer, sizeof(buffer), &pos, "%s", status);
 
     client_send(client, buffer, pos);
 }
