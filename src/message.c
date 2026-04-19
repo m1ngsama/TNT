@@ -61,7 +61,7 @@ int message_load(message_t **messages, int max_messages) {
     }
 
     long file_size = ftell(fp);
-    if (file_size == 0) {
+    if (file_size <= 0) {
         fclose(fp);
         *messages = msg_array;
         return 0;

@@ -1069,7 +1069,10 @@ static int execute_exec_command(client_t *client) {
 
 /* Execute a command */
 static void execute_command(client_t *client) {
-    char *cmd = client->command_input;
+    char cmd_buf[256];
+    strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
+    cmd_buf[sizeof(cmd_buf) - 1] = '\0';
+    char *cmd = cmd_buf;
     char output[2048] = {0};
     size_t pos = 0;
 
@@ -1118,7 +1121,13 @@ static void execute_command(client_t *client) {
                        "list, users, who - Show online users\n"
                        "help, commands   - Show this help\n"
                        "clear, cls       - Clear command output\n"
+                       "q, quit, exit    - Disconnect from chat\n"
                        "========================================\n");
+
+    } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0 ||
+               strcmp(cmd, "exit") == 0) {
+        client->connected = false;
+        return;
 
     } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
         buffer_appendf(output, sizeof(output), &pos, "Command output cleared\n");
@@ -1367,6 +1376,7 @@ void* client_handle_session(void *arg) {
     join_msg.username[MAX_USERNAME_LEN - 1] = '\0';
     snprintf(join_msg.content, MAX_MESSAGE_LEN, "%s 加入了聊天室", client->username);
     room_broadcast(g_room, &join_msg);
+    message_save(&join_msg);
 
     /* Render initial screen */
     tui_render_screen(client);
@@ -1496,6 +1506,7 @@ cleanup:
         client->connected = false;
         room_remove_client(g_room, client);
         room_broadcast(g_room, &leave_msg);
+        message_save(&leave_msg);
     }
 
     release_ip_connection(client->client_ip);
@@ -1768,9 +1779,11 @@ static int client_channel_window_change(ssh_session session, ssh_channel channel
         return SSH_ERROR;
     }
 
-    client->width = width;
-    client->height = height;
-    sanitize_terminal_size(&client->width, &client->height);
+    int w = width;
+    int h = height;
+    sanitize_terminal_size(&w, &h);
+    client->width = w;
+    client->height = h;
     client->redraw_pending = true;
     return SSH_OK;
 }
@@ -1942,9 +1955,11 @@ static void *bootstrap_client_session(void *arg) {
 
     client->session = session;
     client->channel = channel;
-    client->width = ctx->pty_width;
-    client->height = ctx->pty_height;
-    sanitize_terminal_size(&client->width, &client->height);
+    int init_w = ctx->pty_width;
+    int init_h = ctx->pty_height;
+    sanitize_terminal_size(&init_w, &init_h);
+    client->width = init_w;
+    client->height = init_h;
     client->ref_count = 1;
     pthread_mutex_init(&client->ref_lock, NULL);
     pthread_mutex_init(&client->io_lock, NULL);

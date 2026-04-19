@@ -386,7 +386,7 @@ void tui_render_help(client_t *client) {
 
     /* Help content */
     const char *help_text = tui_get_help_text(client->help_lang);
-    char help_copy[4096];
+    char help_copy[8192];
     strncpy(help_copy, help_text, sizeof(help_copy) - 1);
     help_copy[sizeof(help_copy) - 1] = '\0';
 

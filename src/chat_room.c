@@ -87,29 +87,25 @@ void room_remove_client(chat_room_t *room, struct client *client) {
     pthread_rwlock_unlock(&room->lock);
 }
 
-/* Broadcast message to all clients */
-void room_broadcast(chat_room_t *room, const message_t *msg) {
-    pthread_rwlock_wrlock(&room->lock);
-
-    /* Add to history */
-    room_add_message(room, msg);
-    room->update_seq++;
-
-    pthread_rwlock_unlock(&room->lock);
-}
-
-/* Add message to room history */
-void room_add_message(chat_room_t *room, const message_t *msg) {
-    /* Caller should hold write lock */
-
+/* Add message to room history (caller must hold write lock) */
+static void room_add_message(chat_room_t *room, const message_t *msg) {
     if (room->message_count >= MAX_MESSAGES) {
-        /* Shift messages to make room */
         memmove(&room->messages[0], &room->messages[1],
                 (MAX_MESSAGES - 1) * sizeof(message_t));
         room->message_count = MAX_MESSAGES - 1;
     }
 
     room->messages[room->message_count++] = *msg;
+}
+
+/* Broadcast message to all clients */
+void room_broadcast(chat_room_t *room, const message_t *msg) {
+    pthread_rwlock_wrlock(&room->lock);
+
+    room_add_message(room, msg);
+    room->update_seq++;
+
+    pthread_rwlock_unlock(&room->lock);
 }
 
 /* Get message by index (thread-safe value copy) */
