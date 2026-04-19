@@ -108,16 +108,17 @@ static void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
     buffer[*pos] = '\0';
 }
 
-/* Constant-time string comparison to prevent timing side-channel attacks */
+/* Constant-time string comparison to prevent timing side-channel attacks.
+ * Always iterates over the full length of the secret (b) to avoid leaking
+ * its length.  When the input (a) is shorter, compares against zero bytes;
+ * the length mismatch is folded into the result separately. */
 static bool constant_time_strcmp(const char *a, const char *b) {
     size_t len_a = strlen(a);
     size_t len_b = strlen(b);
-    /* Use len_b (the secret) for iteration to avoid leaking its length
-     * through early termination.  The XOR of lengths catches mismatches. */
     volatile unsigned char result = (unsigned char)(len_a ^ len_b);
-    size_t len = (len_a < len_b) ? len_a : len_b;
-    for (size_t i = 0; i < len; i++) {
-        result |= (unsigned char)((unsigned char)a[i] ^ (unsigned char)b[i]);
+    for (size_t i = 0; i < len_b; i++) {
+        unsigned char ca = (i < len_a) ? (unsigned char)a[i] : 0;
+        result |= ca ^ (unsigned char)b[i];
     }
     return result == 0;
 }
@@ -1768,9 +1769,11 @@ static int client_channel_window_change(ssh_session session, ssh_channel channel
         return SSH_ERROR;
     }
 
+    pthread_mutex_lock(&client->io_lock);
     client->width = width;
     client->height = height;
     sanitize_terminal_size(&client->width, &client->height);
+    pthread_mutex_unlock(&client->io_lock);
     client->redraw_pending = true;
     return SSH_OK;
 }
@@ -1969,10 +1972,12 @@ static void *bootstrap_client_session(void *arg) {
     client_addref(client);
 
     if (install_client_channel_callbacks(client) < 0) {
-        client_release(client);  /* drop the callback ref */
-        pthread_mutex_destroy(&client->io_lock);
-        pthread_mutex_destroy(&client->ref_lock);
-        free(client);
+        /* Nullify session/channel ownership so client_release won't
+         * double-free what cleanup_failed_session is about to free. */
+        client->session = NULL;
+        client->channel = NULL;
+        client_release(client);  /* drop the callback ref (2 → 1) */
+        client_release(client);  /* drop the main ref (1 → 0, frees client) */
         cleanup_failed_session(session, ctx);
         return NULL;
     }

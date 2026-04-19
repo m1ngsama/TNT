@@ -188,7 +188,7 @@ void tui_render_input(client_t *client, const char *input) {
     int input_width = utf8_string_width(input);
 
     /* Truncate from start if too long */
-    char display[1024];
+    char display[MAX_MESSAGE_LEN];
     strncpy(display, input, sizeof(display) - 1);
     display[sizeof(display) - 1] = '\0';
 
