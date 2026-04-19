@@ -1109,9 +1109,8 @@ static void execute_command(client_t *client) {
                     (max_hist - 1) * sizeof(client->command_history[0]));
             client->command_history_count = max_hist - 1;
         }
-        strncpy(client->command_history[client->command_history_count],
-                cmd, sizeof(client->command_history[0]) - 1);
-        client->command_history[client->command_history_count][sizeof(client->command_history[0]) - 1] = '\0';
+        snprintf(client->command_history[client->command_history_count],
+                 sizeof(client->command_history[0]), "%s", cmd);
         client->command_history_count++;
         client->command_history_pos = client->command_history_count;
     }
@@ -1740,10 +1739,11 @@ static int auth_pubkey(ssh_session session, const char *user,
         return SSH_AUTH_DENIED;
     }
 
-    /* Only accept after the signature has been verified by libssh.
-     * SSH_PUBLICKEY_STATE_NONE is just a key offer — no proof of possession. */
+    /* SSH_PUBLICKEY_STATE_NONE = key offer (no signature yet).
+     * Return SUCCESS to tell libssh "I accept this key, verify the signature."
+     * SSH_PUBLICKEY_STATE_VALID = signature verified by libssh. */
     if (signature_state != SSH_PUBLICKEY_STATE_VALID) {
-        return SSH_AUTH_PARTIAL;
+        return SSH_AUTH_SUCCESS;
     }
 
     ctx->auth_success = true;

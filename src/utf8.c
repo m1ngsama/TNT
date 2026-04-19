@@ -193,9 +193,9 @@ bool utf8_is_valid_sequence(const char *bytes, int len) {
     uint32_t codepoint = 0;
     switch (len) {
         case 1:
-            /* 0xxxxxxx - valid range: 0x00-0x7F */
+            /* 0xxxxxxx - valid range: 0x01-0x7F (reject NUL) */
             codepoint = b[0];
-            if (codepoint > 0x7F) return false;
+            if (codepoint == 0 || codepoint > 0x7F) return false;
             break;
         case 2:
             /* 110xxxxx 10xxxxxx - valid range: 0x80-0x7FF */
