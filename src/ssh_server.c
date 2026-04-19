@@ -584,9 +584,18 @@ static int read_username(client_t *client) {
             break;
         } else if (b == 127 || b == 8) {  /* Backspace */
             if (pos > 0) {
+                /* Compute width of the last character before removing it */
+                int old_pos = pos;
+                int ci = pos - 1;
+                while (ci > 0 && (username[ci] & 0xC0) == 0x80) ci--;
+                int bytes_read;
+                uint32_t cp = utf8_decode(username + ci, &bytes_read);
+                int w = utf8_char_width(cp);
                 utf8_remove_last_char(username);
                 pos = strlen(username);
-                client_printf(client, "\b \b");
+                (void)old_pos;
+                for (int j = 0; j < w; j++)
+                    client_printf(client, "\b \b");
             }
         } else if (b < 32) {
             /* Ignore control characters */
@@ -1478,6 +1487,22 @@ void* client_handle_session(void *arg) {
                         client->command_input[len + 1] = '\0';
                         tui_render_screen(client);
                     }
+                } else if (b >= 128) {  /* UTF-8 multi-byte */
+                    int char_len = utf8_byte_length(b);
+                    if (char_len <= 0 || char_len > 4) continue;
+                    buf[0] = b;
+                    if (char_len > 1) {
+                        int read_bytes = ssh_channel_read_timeout(
+                            client->channel, &buf[1], char_len - 1, 0, 5000);
+                        if (read_bytes != char_len - 1) continue;
+                    }
+                    if (!utf8_is_valid_sequence(buf, char_len)) continue;
+                    size_t len = strlen(client->command_input);
+                    if (len + (size_t)char_len < sizeof(client->command_input) - 1) {
+                        memcpy(client->command_input + len, buf, char_len);
+                        client->command_input[len + char_len] = '\0';
+                        tui_render_screen(client);
+                    }
                 }
             }
         }
@@ -1911,7 +1936,7 @@ static void *bootstrap_client_session(void *arg) {
             break;
         }
 
-        if (time(NULL) - start_time > 30) {
+        if (time(NULL) - start_time > 10) {
             timed_out = true;
         }
     }
