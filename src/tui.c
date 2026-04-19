@@ -5,6 +5,93 @@
 #include <stdarg.h>
 #include <unistd.h>
 
+static const char *username_color(const char *name) {
+    static const char *colors[] = {
+        "\033[31m", "\033[32m", "\033[33m",
+        "\033[34m", "\033[35m", "\033[36m",
+    };
+    unsigned int h = 5381;
+    for (const char *p = name; *p; p++)
+        h = h * 33 + (unsigned char)*p;
+    return colors[h % 6];
+}
+
+static void format_message_colored(const message_t *msg, char *buffer,
+                                   size_t buf_size, int width) {
+    struct tm tm_info;
+    localtime_r(&msg->timestamp, &tm_info);
+    char time_str[32];
+    strftime(time_str, sizeof(time_str), "%H:%M", &tm_info);
+
+    if (strcmp(msg->username, "系统") == 0) {
+        snprintf(buffer, buf_size,
+                 "\033[90m--> %s\033[0m", msg->content);
+    } else if (strcmp(msg->username, "*") == 0) {
+        snprintf(buffer, buf_size,
+                 "\033[90m%s\033[0m \033[3;36m* %s\033[0m",
+                 time_str, msg->content);
+    } else {
+        snprintf(buffer, buf_size,
+                 "\033[90m%s\033[0m %s%s\033[0m: %s",
+                 time_str, username_color(msg->username),
+                 msg->username, msg->content);
+    }
+
+    /* Plain-text version for width calculation */
+    char plain[MAX_MESSAGE_LEN + 128];
+    if (strcmp(msg->username, "系统") == 0) {
+        snprintf(plain, sizeof(plain), "--> %s", msg->content);
+    } else if (strcmp(msg->username, "*") == 0) {
+        snprintf(plain, sizeof(plain), "%s * %s", time_str, msg->content);
+    } else {
+        snprintf(plain, sizeof(plain), "%s %s: %s",
+                 time_str, msg->username, msg->content);
+    }
+
+    if (utf8_string_width(plain) > width) {
+        /* Rebuild with truncated content */
+        int prefix_width;
+        char prefix_plain[256];
+        if (strcmp(msg->username, "系统") == 0) {
+            snprintf(prefix_plain, sizeof(prefix_plain), "--> ");
+        } else if (strcmp(msg->username, "*") == 0) {
+            snprintf(prefix_plain, sizeof(prefix_plain), "%s * ", time_str);
+        } else {
+            snprintf(prefix_plain, sizeof(prefix_plain), "%s %s: ",
+                     time_str, msg->username);
+        }
+        prefix_width = utf8_string_width(prefix_plain);
+        int content_width = width - prefix_width;
+        if (content_width < 4) content_width = 4;
+
+        char truncated_content[MAX_MESSAGE_LEN];
+        if (strcmp(msg->username, "系统") == 0) {
+            strncpy(truncated_content, msg->content, sizeof(truncated_content) - 1);
+            truncated_content[sizeof(truncated_content) - 1] = '\0';
+        } else if (strcmp(msg->username, "*") == 0) {
+            snprintf(truncated_content, sizeof(truncated_content), "* %s", msg->content);
+        } else {
+            strncpy(truncated_content, msg->content, sizeof(truncated_content) - 1);
+            truncated_content[sizeof(truncated_content) - 1] = '\0';
+        }
+        utf8_truncate(truncated_content, content_width);
+
+        if (strcmp(msg->username, "系统") == 0) {
+            snprintf(buffer, buf_size,
+                     "\033[90m--> %s\033[0m", truncated_content);
+        } else if (strcmp(msg->username, "*") == 0) {
+            snprintf(buffer, buf_size,
+                     "\033[90m%s\033[0m \033[3;36m%s\033[0m",
+                     time_str, truncated_content);
+        } else {
+            snprintf(buffer, buf_size,
+                     "\033[90m%s\033[0m %s%s\033[0m: %s",
+                     time_str, username_color(msg->username),
+                     msg->username, truncated_content);
+        }
+    }
+}
+
 static void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
                                 const char *data, size_t len) {
     size_t available;
@@ -148,8 +235,8 @@ void tui_render_screen(client_t *client) {
     /* Render messages from snapshot */
     if (msg_snapshot) {
         for (int i = 0; i < snapshot_count; i++) {
-            char msg_line[1024];
-            message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), render_width);
+            char msg_line[2048];
+            format_message_colored(&msg_snapshot[i], msg_line, sizeof(msg_line), render_width);
             buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
         }
         free(msg_snapshot);
@@ -173,8 +260,15 @@ void tui_render_screen(client_t *client) {
         int total = msg_count;
         int scroll_pos = client->scroll_pos + 1;
         if (total == 0) scroll_pos = 0;
-        buffer_appendf(buffer, buf_size, &pos,
-                       "-- NORMAL -- (%d/%d)\033[K", scroll_pos, total);
+        int unseen = msg_count - end;
+        if (unseen > 0) {
+            buffer_appendf(buffer, buf_size, &pos,
+                           "-- NORMAL -- (%d/%d)  \033[33m↓ %d new\033[0m\033[K",
+                           scroll_pos, total, unseen);
+        } else {
+            buffer_appendf(buffer, buf_size, &pos,
+                           "-- NORMAL -- (%d/%d)\033[K", scroll_pos, total);
+        }
     } else if (client->mode == MODE_COMMAND) {
         buffer_appendf(buffer, buf_size, &pos, ":%s\033[K", client->command_input);
     }
