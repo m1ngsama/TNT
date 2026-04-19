@@ -45,7 +45,7 @@ TEST(room_add_message_single) {
     chat_room_t *room = room_create();
     message_t msg = make_msg("alice", "hello");
 
-    room_add_message(room, &msg);
+    room_broadcast(room, &msg);
     assert(room->message_count == 1);
     assert(strcmp(room->messages[0].username, "alice") == 0);
     assert(strcmp(room->messages[0].content, "hello") == 0);
@@ -60,7 +60,7 @@ TEST(room_add_message_overflow) {
         char content[32];
         snprintf(content, sizeof(content), "msg %d", i);
         message_t msg = make_msg("user", content);
-        room_add_message(room, &msg);
+        room_broadcast(room, &msg);
     }
 
     assert(room->message_count == MAX_MESSAGES);
@@ -94,7 +94,7 @@ TEST(room_broadcast_increments_seq) {
 TEST(room_get_message_valid) {
     chat_room_t *room = room_create();
     message_t msg = make_msg("carol", "test");
-    room_add_message(room, &msg);
+    room_broadcast(room, &msg);
 
     message_t out;
     assert(room_get_message(room, 0, &out) == true);

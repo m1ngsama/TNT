@@ -13,14 +13,17 @@ typedef struct client {
     ssh_channel channel;             /* SSH channel */
     char username[MAX_USERNAME_LEN];
     char client_ip[INET6_ADDRSTRLEN];
-    int width;
-    int height;
+    _Atomic int width;
+    _Atomic int height;
     client_mode_t mode;
     help_lang_t help_lang;
     int scroll_pos;
     int help_scroll_pos;
     bool show_help;
     char command_input[256];
+    char command_history[16][256];
+    int command_history_count;
+    int command_history_pos;
     char command_output[2048];
     char exec_command[MAX_EXEC_COMMAND_LEN];
     char ssh_login[MAX_USERNAME_LEN];

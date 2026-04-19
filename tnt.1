@@ -1,0 +1,210 @@
+.\" tnt(1) - Terminal Network Talk
+.TH TNT 1 "April 2026" "TNT 1.0.0" "User Commands"
+.SH NAME
+tnt \- anonymous SSH chat server with Vim\-style TUI
+.SH SYNOPSIS
+.B tnt
+.RB [ \-p
+.IR port ]
+.RB [ \-d
+.IR dir ]
+.RB [ \-h ]
+.SH DESCRIPTION
+.B tnt
+is a multi\-user anonymous chat server accessed over SSH.
+It provides a Vim\-style terminal user interface with INSERT, NORMAL, and
+COMMAND modes.
+Users connect with any standard SSH client; no account or registration is needed.
+.PP
+Messages are persisted to a log file and restored on server restart.
+The server supports CJK and emoji input, rate limiting, access tokens, and
+a non\-interactive exec interface for scripting.
+.SH OPTIONS
+.TP
+.BI \-p " port"
+Listen on
+.I port
+instead of the default 2222.
+Overrides the
+.B PORT
+environment variable.
+.TP
+.BI \-d " dir"
+Store the host key and message log in
+.IR dir .
+Overrides the
+.B TNT_STATE_DIR
+environment variable.
+Defaults to the current working directory.
+.TP
+.B \-h
+Print a short usage summary and exit.
+.SH CONNECTING
+.PP
+.nf
+ssh any\-username@hostname \-p 2222
+.fi
+.PP
+If an access token is configured, supply it as the SSH password.
+The username entered in the SSH handshake is ignored; a chat\-room
+nickname is chosen interactively after login.
+.SH MODES
+.TP
+.B INSERT
+Type and send messages.
+Press
+.B Enter
+to send,
+.B ESC
+to switch to NORMAL mode.
+.TP
+.B NORMAL
+Scroll through chat history with Vim keybindings.
+Press
+.B i
+to return to INSERT,
+.B :
+to enter COMMAND mode,
+.B ?
+to open the help screen.
+.TP
+.B COMMAND
+Execute commands prefixed with
+.BR : .
+.SH KEYBINDINGS
+.SS INSERT mode
+.TS
+l l.
+Enter	Send message
+ESC	Switch to NORMAL
+Ctrl+W	Delete last word
+Ctrl+U	Clear input line
+Ctrl+C	Switch to NORMAL
+.TE
+.SS NORMAL mode
+.TS
+l l.
+j/k	Scroll down/up one line
+Ctrl+D/Ctrl+U	Scroll half page down/up
+Ctrl+F/Ctrl+B	Scroll full page down/up
+g/G	Jump to top/bottom
+i	Switch to INSERT
+:	Enter COMMAND mode
+?	Open help screen
+Ctrl+C	Disconnect
+.TE
+.SS COMMAND mode
+.TS
+l l.
+:list	Show online users
+:msg \fIuser text\fR	Send private whisper
+:w \fIuser text\fR	Short alias for :msg
+:help	Show available commands
+:clear	Clear command output
+:q, :quit, :exit	Disconnect
+Up/Down	Browse command history
+ESC	Cancel and return to NORMAL
+.TE
+.SH EXEC INTERFACE
+Commands can be run non\-interactively for scripting:
+.PP
+.nf
+ssh host \-p 2222 help
+ssh host \-p 2222 users \-\-json
+ssh host \-p 2222 stats \-\-json
+ssh host \-p 2222 tail 20
+ssh host \-p 2222 post "Hello from a script"
+ssh host \-p 2222 health
+.fi
+.PP
+Exit codes follow
+.BR sysexits (3)
+conventions.
+.SH ENVIRONMENT
+.TP
+.B PORT
+Default listening port (default: 2222).
+.TP
+.B TNT_STATE_DIR
+Directory for host key and message log (default: current directory).
+.TP
+.B TNT_ACCESS_TOKEN
+If set, clients must supply this string as their SSH password.
+Compared in constant time.
+.TP
+.B TNT_MAX_CONNECTIONS
+Global connection limit (default: 64, max: 1024).
+.TP
+.B TNT_MAX_CONN_PER_IP
+Max concurrent sessions from one IP (default: 5).
+.TP
+.B TNT_MAX_CONN_RATE_PER_IP
+Max new connections per IP per 60\-second window (default: 10).
+.TP
+.B TNT_RATE_LIMIT
+Set to 0 to disable rate\-based blocking and auth\-failure IP blocking.
+Explicit capacity limits still apply (default: 1).
+.SH FILES
+.TP
+.I messages.log
+Chat history in RFC\ 3339 pipe\-delimited format
+.RI ( timestamp | username | content ).
+Stored in the state directory.
+.TP
+.I host_key
+RSA 4096\-bit host key, auto\-generated on first run.
+Stored in the state directory with mode 0600.
+.SH SYSTEMD
+A unit file
+.I tnt.service
+is provided.
+Typical setup:
+.PP
+.nf
+sudo useradd \-r \-s /bin/false tnt
+sudo cp tnt.service /etc/systemd/system/
+sudo systemctl daemon\-reload
+sudo systemctl enable \-\-now tnt
+.fi
+.PP
+Runtime overrides can be placed in
+.IR /etc/default/tnt .
+.SH SECURITY
+.IP \(bu 2
+Reference\-counted client lifecycle prevents use\-after\-free.
+.IP \(bu 2
+Per\-IP rate limiting with auth\-failure blocking (5 failures = 5\-minute ban).
+.IP \(bu 2
+Access\-token comparison uses constant\-time algorithm.
+.IP \(bu 2
+Host key created with restrictive permissions (0600).
+.IP \(bu 2
+systemd hardening: NoNewPrivileges, PrivateTmp, ProtectSystem=strict.
+.SH EXAMPLES
+Start on port 3000 with state in /var/lib/tnt:
+.PP
+.nf
+tnt \-p 3000 \-d /var/lib/tnt
+.fi
+.PP
+Start with an access token:
+.PP
+.nf
+TNT_ACCESS_TOKEN=s3cret tnt
+.fi
+.PP
+Connect from another machine:
+.PP
+.nf
+ssh user@chat.example.com \-p 2222
+.fi
+.SH AUTHORS
+m1ngsama <contact@m1ng.space>
+.SH BUGS
+Report bugs at
+.UR https://github.com/m1ngsama/TNT/issues
+.UE .
+.SH SEE ALSO
+.BR ssh (1),
+.BR sshd (8),
+.BR systemctl (1)
