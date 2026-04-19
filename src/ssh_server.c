@@ -1131,15 +1131,79 @@ static void execute_command(client_t *client) {
                        "========================================\n"
                        "* = you / 你\n");
 
+    } else if (strncmp(cmd, "nick ", 5) == 0) {
+        char *new_nick = cmd + 5;
+        while (*new_nick == ' ') new_nick++;
+        if (new_nick[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Usage: nick <name>\n");
+        } else {
+            char trimmed[MAX_USERNAME_LEN];
+            strncpy(trimmed, new_nick, sizeof(trimmed) - 1);
+            trimmed[sizeof(trimmed) - 1] = '\0';
+            if (utf8_strlen(trimmed) > 20) {
+                utf8_truncate(trimmed, 20);
+            }
+            if (!is_valid_username(trimmed)) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Invalid username / 无效用户名\n");
+            } else {
+                char old_name[MAX_USERNAME_LEN];
+                strncpy(old_name, client->username, sizeof(old_name) - 1);
+                old_name[sizeof(old_name) - 1] = '\0';
+                strncpy(client->username, trimmed, MAX_USERNAME_LEN - 1);
+                client->username[MAX_USERNAME_LEN - 1] = '\0';
+                message_t nick_msg = { .timestamp = time(NULL) };
+                strncpy(nick_msg.username, "system", MAX_USERNAME_LEN - 1);
+                snprintf(nick_msg.content, MAX_MESSAGE_LEN,
+                         "%s -> %s", old_name, trimmed);
+                room_broadcast(g_room, &nick_msg);
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Username changed: %s -> %s\n", old_name, trimmed);
+            }
+        }
+
+    } else if (strcmp(cmd, "info") == 0) {
+        time_t now = time(NULL);
+        time_t uptime = now - g_server_start_time;
+        int days = uptime / 86400;
+        int hours = (uptime % 86400) / 3600;
+        int mins = (uptime % 3600) / 60;
+
+        buffer_appendf(output, sizeof(output), &pos,
+                       "========================================\n"
+                       "        Connection Info\n"
+                       "========================================\n"
+                       "Username:   %s\n"
+                       "SSH login:  %s\n"
+                       "Client IP:  %s\n"
+                       "Terminal:   %dx%d\n"
+                       "Server uptime: %dd %dh %dm\n"
+                       "Online:     %d user(s)\n"
+                       "Messages:   %d\n"
+                       "Version:    TNT %s\n"
+                       "========================================\n",
+                       client->username,
+                       client->ssh_login[0] ? client->ssh_login : "(none)",
+                       client->client_ip[0] ? client->client_ip : "(unknown)",
+                       client->width, client->height,
+                       days, hours, mins,
+                       room_get_client_count(g_room),
+                       room_get_message_count(g_room),
+                       TNT_VERSION);
+
     } else if (strcmp(cmd, "help") == 0 || strcmp(cmd, "commands") == 0) {
         buffer_appendf(output, sizeof(output), &pos,
                        "========================================\n"
                        "        Available Commands\n"
                        "========================================\n"
                        "list, users, who - Show online users\n"
+                       "nick <name>      - Change your username\n"
+                       "info             - Show connection info\n"
                        "help, commands   - Show this help\n"
                        "clear, cls       - Clear command output\n"
-                       "========================================\n");
+                       "========================================\n"
+                       "In chat: /me <action> for emotes\n");
 
     } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
         buffer_appendf(output, sizeof(output), &pos, "Command output cleared\n");
@@ -1271,8 +1335,14 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     message_t msg = {
                         .timestamp = time(NULL),
                     };
-                    snprintf(msg.username, sizeof(msg.username), "%s", client->username);
-                    snprintf(msg.content, sizeof(msg.content), "%s", input);
+                    if (strncmp(input, "/me ", 4) == 0) {
+                        snprintf(msg.username, sizeof(msg.username), "*");
+                        snprintf(msg.content, sizeof(msg.content), "%s %s",
+                                 client->username, input + 4);
+                    } else {
+                        snprintf(msg.username, sizeof(msg.username), "%s", client->username);
+                        snprintf(msg.content, sizeof(msg.content), "%s", input);
+                    }
                     room_broadcast(g_room, &msg);
                     message_save(&msg);
                     input[0] = '\0';

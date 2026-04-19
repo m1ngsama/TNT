@@ -153,10 +153,24 @@ void tui_render_screen(client_t *client) {
 
     /* Render messages from snapshot */
     if (msg_snapshot) {
+        char at_mention[MAX_USERNAME_LEN + 2];
+        snprintf(at_mention, sizeof(at_mention), "@%s", client->username);
+
         for (int i = 0; i < snapshot_count; i++) {
             char msg_line[1024];
             message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), client->width);
-            buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
+            bool mentioned = (strstr(msg_snapshot[i].content, at_mention) != NULL);
+            bool is_action = (msg_snapshot[i].username[0] == '*' &&
+                              msg_snapshot[i].username[1] == '\0');
+            if (mentioned) {
+                buffer_appendf(buffer, buf_size, &pos,
+                               ANSI_BOLD "%s" ANSI_RESET "\033[K\r\n", msg_line);
+            } else if (is_action) {
+                buffer_appendf(buffer, buf_size, &pos,
+                               "\033[3m%s\033[0m\033[K\r\n", msg_line);
+            } else {
+                buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
+            }
         }
         free(msg_snapshot);
     }
