@@ -762,6 +762,7 @@ static int exec_command_help(client_t *client) {
         "  tail [N]        Print recent messages\n"
         "  tail -n N       Print recent messages\n"
         "  post MESSAGE    Post a message non-interactively\n"
+        "  post \"/me act\"  Post an action message\n"
         "  exit            Exit successfully\n";
 
     return client_send(client, help_text, sizeof(help_text) - 1) == 0 ? 0 : 1;
@@ -1153,7 +1154,7 @@ static void execute_command(client_t *client) {
     } else if (strcmp(cmd, "help") == 0 || strcmp(cmd, "commands") == 0) {
         buffer_appendf(output, sizeof(output), &pos,
                        "========================================\n"
-                       "        Available Commands\n"
+                       "    Available Commands / 可用命令\n"
                        "========================================\n"
                        "list, users, who    - Show online users\n"
                        "nick/name <name>    - Change nickname\n"
@@ -1162,6 +1163,9 @@ static void execute_command(client_t *client) {
                        "clear, cls          - Clear command output\n"
                        "q, quit, exit       - Disconnect\n"
                        "Up/Down arrows      - Command history\n"
+                       "========================================\n"
+                       "In INSERT mode:\n"
+                       "  /me <action>      - Send action message\n"
                        "========================================\n");
 
     } else if (strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {

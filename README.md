@@ -68,17 +68,30 @@ Ctrl+C     - Enter NORMAL mode
 ```
 i          - Return to INSERT mode
 :          - Enter COMMAND mode
-j/k        - Scroll down/up
-g/G        - Scroll to top/bottom
+j/k        - Scroll down/up one line
+Ctrl+D/U   - Scroll half page down/up
+Ctrl+F/B   - Scroll full page down/up
+g/G        - Jump to top/bottom
 ?          - Show help
+Ctrl+C     - Exit chat
 ```
 
 **COMMAND mode**
 ```
-:list, :users, :who  - Show online users
-:help, :commands     - Show available commands
-:clear, :cls         - Clear command output
+:list, :users        - Show online users
+:nick <name>         - Change nickname
+:msg <user> <text>   - Whisper to user
+:w <user> <text>     - Short alias for :msg
+:help                - Show available commands
+:clear               - Clear command output
+:q, :quit, :exit     - Disconnect
+Up/Down              - Browse command history
 ESC                  - Return to NORMAL mode
+```
+
+**Special messages (INSERT mode)**
+```
+/me <action>         - Send action (e.g. /me waves)
 ```
 
 ### Security Configuration
@@ -143,6 +156,7 @@ ssh -p 2222 chat.m1ng.space stats --json
 ssh -p 2222 chat.m1ng.space users
 ssh -p 2222 chat.m1ng.space "tail -n 20"
 ssh -p 2222 operator@chat.m1ng.space post "service notice"
+ssh -p 2222 chat.m1ng.space post "/me deploys v2.0"
 ```
 
 ## Development
