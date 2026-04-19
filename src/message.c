@@ -134,8 +134,11 @@ read_messages:;
         char *username = strtok(NULL, "|");
         char *content = strtok(NULL, "\n");
 
-        /* Validate all fields exist */
+        /* Validate all fields exist and are non-empty */
         if (!timestamp_str || !username || !content) {
+            continue;
+        }
+        if (username[0] == '\0') {
             continue;
         }
 

@@ -56,9 +56,12 @@ void tui_clear_screen(client_t *client) {
 void tui_render_screen(client_t *client) {
     if (!client || !client->connected) return;
 
-    /* Heap-allocated: worst case is ~200 messages * ~1100 bytes + separator + status.
-     * 64 KiB covers all real terminal sizes without stack risk. */
-    const size_t buf_size = 65536;
+    int render_width = client->width;
+    int render_height = client->height;
+    if (render_width < 10) render_width = 10;
+    if (render_height < 4) render_height = 4;
+
+    const size_t buf_size = (size_t)(render_height + 10) * (MAX_MESSAGE_LEN + 64) + 2048;
     char *buffer = malloc(buf_size);
     if (!buffer) return;
     size_t pos = 0;
@@ -71,7 +74,7 @@ void tui_render_screen(client_t *client) {
     pthread_rwlock_unlock(&g_room->lock);
 
     /* Calculate which messages to show */
-    int msg_height = client->height - 3;
+    int msg_height = render_height - 3;
     if (msg_height < 1) msg_height = 1;
 
     int start = 0;
@@ -129,11 +132,11 @@ void tui_render_screen(client_t *client) {
 
     char title[256];
     snprintf(title, sizeof(title),
-             " 聊天室 | 在线: %d | 模式: %s | Ctrl+C 退出 | ? 帮助 ",
-             online, mode_str);
+             " %s | 在线: %d | 模式: %s | ? 帮助 ",
+             client->username, online, mode_str);
 
     int title_width = utf8_string_width(title);
-    int padding = client->width - title_width;
+    int padding = render_width - title_width;
     if (padding < 0) padding = 0;
 
     buffer_appendf(buffer, buf_size, &pos, ANSI_REVERSE "%s", title);
@@ -146,7 +149,7 @@ void tui_render_screen(client_t *client) {
     if (msg_snapshot) {
         for (int i = 0; i < snapshot_count; i++) {
             char msg_line[1024];
-            message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), client->width);
+            message_format(&msg_snapshot[i], msg_line, sizeof(msg_line), render_width);
             buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
         }
         free(msg_snapshot);
@@ -158,7 +161,7 @@ void tui_render_screen(client_t *client) {
     }
 
     /* Separator - use box drawing character */
-    for (int i = 0; i < client->width; i++) {
+    for (int i = 0; i < render_width; i++) {
         buffer_append_bytes(buffer, buf_size, &pos, "─", strlen("─"));
     }
     buffer_appendf(buffer, buf_size, &pos, "\033[K\r\n");
@@ -184,17 +187,23 @@ void tui_render_screen(client_t *client) {
 void tui_render_input(client_t *client, const char *input) {
     if (!client || !client->connected) return;
 
+    int rw = client->width;
+    int rh = client->height;
+    if (rw < 10) rw = 10;
+    if (rh < 4) rh = 4;
+
     char buffer[2048];
     int input_width = utf8_string_width(input);
+    int avail = rw - 3;
+    if (avail < 1) avail = 1;
 
     /* Truncate from start if too long */
     char display[MAX_MESSAGE_LEN];
     strncpy(display, input, sizeof(display) - 1);
     display[sizeof(display) - 1] = '\0';
 
-    if (input_width > client->width - 3) {
-        /* Find where to start displaying */
-        int excess = input_width - (client->width - 3);
+    if (input_width > avail) {
+        int excess = input_width - avail;
         int skip_width = 0;
         const char *p = input;
         int bytes_read;
@@ -210,7 +219,7 @@ void tui_render_input(client_t *client, const char *input) {
 
     /* Move to input line and clear it, then write input */
     snprintf(buffer, sizeof(buffer), "\033[%d;1H" ANSI_CLEAR_LINE "> %s",
-             client->height, display);
+             rh, display);
 
     client_send(client, buffer, strlen(buffer));
 }
@@ -218,6 +227,11 @@ void tui_render_input(client_t *client, const char *input) {
 /* Render the command output screen */
 void tui_render_command_output(client_t *client) {
     if (!client || !client->connected) return;
+
+    int rw = client->width;
+    int rh = client->height;
+    if (rw < 10) rw = 10;
+    if (rh < 4) rh = 4;
 
     char buffer[4096];
     size_t pos = 0;
@@ -229,7 +243,7 @@ void tui_render_command_output(client_t *client) {
     /* Title */
     const char *title = " COMMAND OUTPUT ";
     int title_width = strlen(title);
-    int padding = client->width - title_width;
+    int padding = rw - title_width;
     if (padding < 0) padding = 0;
 
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_REVERSE "%s", title);
@@ -245,15 +259,15 @@ void tui_render_command_output(client_t *client) {
 
     char *line = strtok(output_copy, "\n");
     int line_count = 0;
-    int max_lines = client->height - 2;
+    int max_lines = rh - 2;
 
     while (line && line_count < max_lines) {
         char truncated[1024];
         strncpy(truncated, line, sizeof(truncated) - 1);
         truncated[sizeof(truncated) - 1] = '\0';
 
-        if (utf8_string_width(truncated) > client->width) {
-            utf8_truncate(truncated, client->width);
+        if (utf8_string_width(truncated) > rw) {
+            utf8_truncate(truncated, rw);
         }
 
         buffer_appendf(buffer, sizeof(buffer), &pos, "%s\r\n", truncated);
@@ -369,6 +383,11 @@ const char* tui_get_help_text(help_lang_t lang) {
 void tui_render_help(client_t *client) {
     if (!client || !client->connected) return;
 
+    int rw = client->width;
+    int rh = client->height;
+    if (rw < 10) rw = 10;
+    if (rh < 4) rh = 4;
+
     char buffer[8192];
     size_t pos = 0;
     buffer[0] = '\0';
@@ -379,7 +398,7 @@ void tui_render_help(client_t *client) {
     /* Title */
     const char *title = " HELP ";
     int title_width = strlen(title);
-    int padding = client->width - title_width;
+    int padding = rw - title_width;
     if (padding < 0) padding = 0;
 
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_REVERSE "%s", title);
@@ -403,7 +422,7 @@ void tui_render_help(client_t *client) {
         line = strtok(NULL, "\n");
     }
 
-    int content_height = client->height - 2;
+    int content_height = rh - 2;
     if (content_height < 1) content_height = 1;
     int max_scroll = line_count - content_height + 1;
     if (max_scroll < 0) max_scroll = 0;

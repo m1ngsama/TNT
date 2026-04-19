@@ -1006,10 +1006,16 @@ static int exec_command_post(client_t *client, const char *args) {
 
     resolve_exec_username(client, username, sizeof(username));
 
-    strncpy(msg.username, username, sizeof(msg.username) - 1);
-    msg.username[sizeof(msg.username) - 1] = '\0';
-    strncpy(msg.content, content, sizeof(msg.content) - 1);
-    msg.content[sizeof(msg.content) - 1] = '\0';
+    if (strncmp(content, "/me ", 4) == 0 && content[4] != '\0') {
+        msg.username[0] = '*';
+        msg.username[1] = '\0';
+        snprintf(msg.content, sizeof(msg.content), "%s %s", username, content + 4);
+    } else {
+        strncpy(msg.username, username, sizeof(msg.username) - 1);
+        msg.username[sizeof(msg.username) - 1] = '\0';
+        strncpy(msg.content, content, sizeof(msg.content) - 1);
+        msg.content[sizeof(msg.content) - 1] = '\0';
+    }
 
     room_broadcast(g_room, &msg);
     if (message_save(&msg) < 0) {
