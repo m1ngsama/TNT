@@ -1,7 +1,7 @@
 #ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE  /* for timegm() on glibc */
 #endif
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
 #define _DARWIN_C_SOURCE /* for timegm() on macOS */
 #endif
 #include "message.h"

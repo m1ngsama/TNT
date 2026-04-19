@@ -71,9 +71,13 @@ check:
 	@command -v clang-tidy >/dev/null 2>&1 && clang-tidy src/*.c -- -Iinclude $(INCLUDES) || echo "clang-tidy not installed"
 
 # Test
-test: all
-	@echo "Running tests..."
+test: all unit-test
+	@echo "Running integration tests..."
 	@cd tests && ./test_basic.sh
+
+unit-test:
+	@echo "Running unit tests..."
+	@$(MAKE) -C tests/unit run
 
 # Show build info
 info:
