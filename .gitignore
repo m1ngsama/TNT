@@ -8,3 +8,6 @@ host_key.pub
 .DS_Store
 test.log
 *.dSYM/
+tests/unit/test_utf8
+tests/unit/test_message
+tests/unit/test_chat_room
