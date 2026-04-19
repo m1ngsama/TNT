@@ -27,6 +27,7 @@ typedef struct client {
     atomic_bool redraw_pending;
     pthread_t thread;
     atomic_bool connected;
+    time_t connected_at;
     int ref_count;                   /* Reference count for safe cleanup */
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */

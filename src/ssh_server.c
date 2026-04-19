@@ -1097,11 +1097,21 @@ static void execute_command(client_t *client) {
                        "----------------------------------------\n",
                        g_room->client_count);
 
+        time_t now = time(NULL);
         for (int i = 0; i < g_room->client_count; i++) {
             char marker = (g_room->clients[i] == client) ? '*' : ' ';
-            buffer_appendf(output, sizeof(output), &pos,
-                           "%c %d. %s\n", marker, i + 1,
-                           g_room->clients[i]->username);
+            time_t dur = now - g_room->clients[i]->connected_at;
+            int dm = (int)(dur / 60);
+            int ds = (int)(dur % 60);
+            if (dm >= 60) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "%c %d. %-20s %dh%dm\n", marker, i + 1,
+                               g_room->clients[i]->username, dm / 60, dm % 60);
+            } else {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "%c %d. %-20s %dm%ds\n", marker, i + 1,
+                               g_room->clients[i]->username, dm, ds);
+            }
         }
 
         pthread_rwlock_unlock(&g_room->lock);
@@ -1110,14 +1120,76 @@ static void execute_command(client_t *client) {
                        "========================================\n"
                        "* = you / 你\n");
 
+    } else if (strncmp(cmd, "search ", 7) == 0) {
+        char *term = cmd + 7;
+        while (*term == ' ') term++;
+        if (term[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Usage: search <keyword>\n");
+        } else {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Search: \"%s\"\n"
+                           "----------------------------------------\n", term);
+            int found = 0;
+            int total = room_get_message_count(g_room);
+            for (int i = 0; i < total && found < 20; i++) {
+                message_t m;
+                if (room_get_message(g_room, i, &m)) {
+                    if (strstr(m.content, term) || strstr(m.username, term)) {
+                        char ts[32];
+                        struct tm ti;
+                        localtime_r(&m.timestamp, &ti);
+                        strftime(ts, sizeof(ts), "%H:%M", &ti);
+                        buffer_appendf(output, sizeof(output), &pos,
+                                       "[%s] %s: %s\n", ts, m.username, m.content);
+                        found++;
+                    }
+                }
+            }
+            if (found == 0) {
+                buffer_appendf(output, sizeof(output), &pos, "(no matches)\n");
+            } else {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "----------------------------------------\n"
+                               "%d result(s)\n", found);
+            }
+        }
+
+    } else if (strncmp(cmd, "last", 4) == 0 &&
+               (cmd[4] == '\0' || cmd[4] == ' ')) {
+        int n = 10;
+        if (cmd[4] == ' ') {
+            int parsed = atoi(cmd + 5);
+            if (parsed > 0 && parsed <= 50) n = parsed;
+        }
+        int total = room_get_message_count(g_room);
+        int start = total - n;
+        if (start < 0) start = 0;
+        buffer_appendf(output, sizeof(output), &pos,
+                       "Last %d message(s):\n"
+                       "----------------------------------------\n", total - start);
+        for (int i = start; i < total; i++) {
+            message_t m;
+            if (room_get_message(g_room, i, &m)) {
+                char ts[32];
+                struct tm ti;
+                localtime_r(&m.timestamp, &ti);
+                strftime(ts, sizeof(ts), "%H:%M", &ti);
+                buffer_appendf(output, sizeof(output), &pos,
+                               "[%s] %s: %s\n", ts, m.username, m.content);
+            }
+        }
+
     } else if (strcmp(cmd, "help") == 0 || strcmp(cmd, "commands") == 0) {
         buffer_appendf(output, sizeof(output), &pos,
                        "========================================\n"
                        "        Available Commands\n"
                        "========================================\n"
-                       "list, users, who - Show online users\n"
-                       "help, commands   - Show this help\n"
-                       "clear, cls       - Clear command output\n"
+                       "list, users, who   - Online users + duration\n"
+                       "search <keyword>   - Search messages\n"
+                       "last [N]           - Show last N messages\n"
+                       "help, commands     - Show this help\n"
+                       "clear, cls         - Clear command output\n"
                        "========================================\n");
 
     } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
@@ -1339,6 +1411,7 @@ void* client_handle_session(void *arg) {
     client->mode = MODE_INSERT;
     client->help_lang = LANG_ZH;
     client->connected = true;
+    client->connected_at = time(NULL);
 
     /* Check for exec command */
     if (client->exec_command[0] != '\0') {
