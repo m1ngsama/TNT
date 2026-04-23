@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-04-23 - Chat UX Commands and MOTD
+
+### Added
+- **`:last [N]`** — show last N messages retrieved directly from the log file (1–50, default 10), bypassing the 100-message in-memory ring buffer limit
+- **`:search <keyword>`** — case-insensitive full-text search across the entire message history on disk; returns the most recent 15 matches
+- **`:mute-joins`** — per-client toggle to silence join/leave system notifications; title bar shows `[静音]` when active
+- **MOTD support** — place `motd.txt` in the state directory; users see it on connect and press any key to enter chat
+- **`message_search()`** — new function in `message.c` / `message.h` for log file keyword search with rolling result collection
+- Updated in-TUI help screens (English and Chinese) with new commands
+
 ## 2026-03-10 - SSH Runtime & Unix Interface Update
 
 ### Fixed

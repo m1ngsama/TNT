@@ -82,6 +82,9 @@ Ctrl+C     - Exit chat
 :nick <name>         - Change nickname
 :msg <user> <text>   - Whisper to user
 :w <user> <text>     - Short alias for :msg
+:last [N]            - Show last N messages from history (max 50, default 10)
+:search <keyword>    - Search full message history (case-insensitive)
+:mute-joins          - Toggle join/leave system notifications
 :help                - Show available commands
 :clear               - Clear command output
 :q, :quit, :exit     - Disconnect
@@ -276,8 +279,23 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 ```
 messages.log    - Chat history (RFC3339 format)
 host_key        - SSH host key (auto-generated, 4096-bit RSA)
+motd.txt        - Message of the Day (optional, shown to users on connect)
 tnt.service     - systemd service unit
 ```
+
+### MOTD (Message of the Day)
+
+Place a `motd.txt` file in the state directory to show a welcome message to every user on connect. Users see the MOTD before entering the chat and press any key to continue.
+
+```sh
+# Example (assuming default state dir)
+cat > motd.txt <<'EOF'
+Welcome to the chat server!
+Be respectful. No spam.
+EOF
+```
+
+Delete `motd.txt` to disable the MOTD.
 
 ## Documentation
 
@@ -300,7 +318,7 @@ tnt.service     - systemd service unit
 ## Known Limitations
 
 - Single chat room (no multi-room support yet)
-- Keeps only last 100 messages in memory
+- TUI displays at most 100 messages at once; use `:last N` or `:search` to access older history from disk
 - Ctrl+W only recognizes ASCII space as word boundary
 
 ## Contributing

@@ -107,6 +107,9 @@ l l.
 :name \fIname\fR	Alias for :nick
 :msg \fIuser text\fR	Send private whisper
 :w \fIuser text\fR	Short alias for :msg
+:last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
+:search \fIkeyword\fR	Case\-insensitive search across full message history
+:mute\-joins	Toggle join/leave system notifications on/off
 :help	Show available commands
 :clear	Clear command output
 :q, :quit, :exit	Disconnect
@@ -167,6 +170,12 @@ Stored in the state directory.
 .I host_key
 RSA 4096\-bit host key, auto\-generated on first run.
 Stored in the state directory with mode 0600.
+.TP
+.I motd.txt
+Optional Message of the Day.
+When present in the state directory, its contents are shown to each user
+immediately on connect before the chat screen appears.
+Delete the file to disable the MOTD.
 .SH SYSTEMD
 A unit file
 .I tnt.service

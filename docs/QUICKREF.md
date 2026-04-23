@@ -17,21 +17,37 @@ DEBUG
   valgrind --leak-check=full ./tnt
   make check
 
+COMMANDS (COMMAND mode, prefix with :)
+  list, users, who       show online users
+  nick <name>            change nickname
+  msg <user> <text>      whisper to user
+  w <user> <text>        alias for msg
+  last [N]               last N messages from log (default 10, max 50)
+  search <keyword>       search full history (case-insensitive, 15 results)
+  mute-joins             toggle join/leave notifications
+  help                   show all commands
+  clear                  clear output
+  q / quit / exit        disconnect
+
+INSERT MODE
+  /me <action>           action message
+  @username              mention (bell + highlight)
+
 STRUCTURE
   src/main.c          entry, signals
-  src/ssh_server.c    SSH, threads
+  src/ssh_server.c    SSH, threads, commands
   src/chat_room.c     broadcast
-  src/message.c       persistence
-  src/tui.c           rendering
+  src/message.c       persistence, search
+  src/tui.c           rendering, help
   src/utf8.c          unicode
 
 LIMITS
-  64 clients max
-  100 messages in RAM
+  64 clients max (configurable)
+  100 messages in RAM; unlimited on disk
   1024 bytes/message
 
 FILES
-  HACKING           dev guide
-  CHANGELOG.md      changes
-  messages.log      chat log
-  host_key          SSH key
+  messages.log      chat log (RFC3339)
+  host_key          SSH key (auto-generated)
+  motd.txt          message of the day (optional)
+  CHANGELOG.md      version history

@@ -59,11 +59,11 @@ Goal: keep the interface efficient for terminal users without sacrificing simpli
 - keep the current modal editing model, but make its behavior precise and documented
 - support resize, cursor movement, command history, and predictable paste behavior
 - add useful chat commands with clear semantics:
-  - `/nick`
-  - `/me`
-  - `/last N`
-  - `/search`
-  - `/mute-joins`
+  - ✅ `:nick` / `:name` — nickname change with broadcast
+  - ✅ `/me` — action messages
+  - ✅ `:last N` — show last N messages from disk history
+  - ✅ `:search <keyword>` — case-insensitive full-text search
+  - ✅ `:mute-joins` — per-client join/leave notification toggle
 - improve discoverability of NORMAL and COMMAND mode actions
 - make status lines and help output concise enough for small terminals
 

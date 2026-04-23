@@ -89,6 +89,24 @@ Recommended interpretation:
 - `TNT_MAX_CONN_RATE_PER_IP`: new connection attempts allowed per IP per 60 seconds
 - `TNT_RATE_LIMIT=0`: disables rate-based blocking and auth-failure IP blocking, but not the explicit capacity limits
 
+## MOTD (Message of the Day)
+
+Place a `motd.txt` file in the state directory. TNT displays it to each user on connect; they press any key to enter the chat.
+
+```bash
+# Systemd deployment (state dir is /var/lib/tnt)
+sudo tee /var/lib/tnt/motd.txt <<'EOF'
+Welcome! Be respectful. No spam.
+Type :help for available commands.
+EOF
+sudo chown tnt:tnt /var/lib/tnt/motd.txt
+
+# Remove to disable
+sudo rm /var/lib/tnt/motd.txt
+```
+
+No restart required — TNT reads the file on each new connection.
+
 ## Firewall
 
 ```bash
