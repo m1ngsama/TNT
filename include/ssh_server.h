@@ -30,6 +30,7 @@ typedef struct client {
     time_t connect_time;
     time_t last_active;
     atomic_bool redraw_pending;
+    bool mute_joins;
     pthread_t thread;
     atomic_bool connected;
     int ref_count;                   /* Reference count for safe cleanup */

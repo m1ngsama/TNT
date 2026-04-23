@@ -244,6 +244,78 @@ int message_save(const message_t *msg) {
     return rc;
 }
 
+/* Search log file for messages whose username or content contains query.
+ * Case-insensitive. Returns the last max_results matches (most recent); caller frees *results. */
+int message_search(const char *query, message_t **results, int max_results) {
+    char log_path[PATH_MAX];
+
+    message_t *res = calloc(max_results, sizeof(message_t));
+    if (!res) return 0;
+
+    if (!query || query[0] == '\0' ||
+        tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+        *results = res;
+        return 0;
+    }
+
+    pthread_mutex_lock(&g_message_file_lock);
+    FILE *fp = fopen(log_path, "r");
+    if (!fp) {
+        pthread_mutex_unlock(&g_message_file_lock);
+        *results = res;
+        return 0;
+    }
+
+    char line[2048];
+    int count = 0;
+
+    while (fgets(line, sizeof(line), fp)) {
+        size_t line_len = strlen(line);
+        if (line_len >= sizeof(line) - 1) {
+            int c;
+            while ((c = fgetc(fp)) != '\n' && c != EOF);
+            continue;
+        }
+
+        char line_copy[2048];
+        strncpy(line_copy, line, sizeof(line_copy) - 1);
+        line_copy[sizeof(line_copy) - 1] = '\0';
+
+        char *timestamp_str = strtok(line_copy, "|");
+        char *username = strtok(NULL, "|");
+        char *content = strtok(NULL, "\n");
+
+        if (!timestamp_str || !username || !content || username[0] == '\0') continue;
+        if (strlen(username) >= MAX_USERNAME_LEN || strlen(content) >= MAX_MESSAGE_LEN) continue;
+        if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) continue;
+
+        if (strcasestr(username, query) == NULL && strcasestr(content, query) == NULL) continue;
+
+        time_t msg_time = parse_rfc3339_utc(timestamp_str);
+        if (msg_time == (time_t)-1) continue;
+
+        message_t m;
+        m.timestamp = msg_time;
+        strncpy(m.username, username, MAX_USERNAME_LEN - 1);
+        m.username[MAX_USERNAME_LEN - 1] = '\0';
+        strncpy(m.content, content, MAX_MESSAGE_LEN - 1);
+        m.content[MAX_MESSAGE_LEN - 1] = '\0';
+
+        if (count < max_results) {
+            res[count++] = m;
+        } else {
+            memmove(&res[0], &res[1], (max_results - 1) * sizeof(message_t));
+            res[max_results - 1] = m;
+            /* count stays at max_results */
+        }
+    }
+
+    fclose(fp);
+    pthread_mutex_unlock(&g_message_file_lock);
+    *results = res;
+    return (count < max_results) ? count : max_results;
+}
+
 /* Format a message for display */
 void message_format(const message_t *msg, char *buffer, size_t buf_size, int width) {
     struct tm tm_info;

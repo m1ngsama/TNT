@@ -1198,6 +1198,9 @@ static void execute_command(client_t *client) {
                        "list, users, who    - Show online users\n"
                        "nick/name <name>    - Change nickname\n"
                        "msg/w <user> <text> - Whisper to user\n"
+                       "last [N]            - Show last N messages\n"
+                       "search <keyword>    - Search message history\n"
+                       "mute-joins          - Toggle join/leave notices\n"
                        "help, commands      - Show this help\n"
                        "clear, cls          - Clear command output\n"
                        "q, quit, exit       - Disconnect\n"
@@ -1289,6 +1292,63 @@ static void execute_command(client_t *client) {
                            "Nickname changed: %s -> %s\n", old_name, client->username);
         }
 
+    } else if (strncmp(cmd, "last", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\0')) {
+        char *arg = cmd + 4;
+        while (*arg == ' ') arg++;
+        int n = 10;
+        if (*arg != '\0') {
+            char *endp;
+            long val = strtol(arg, &endp, 10);
+            if (*endp != '\0' || val < 1 || val > 50) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Usage: last [N]  (N: 1-50, default 10)\n");
+                goto cmd_done;
+            }
+            n = (int)val;
+        }
+
+        message_t *last_msgs = NULL;
+        int last_count = message_load(&last_msgs, n);
+        buffer_appendf(output, sizeof(output), &pos,
+                       "--- Last %d message(s) ---\n", last_count);
+        for (int i = 0; i < last_count; i++) {
+            char ts[20];
+            struct tm tmi;
+            localtime_r(&last_msgs[i].timestamp, &tmi);
+            strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
+            buffer_appendf(output, sizeof(output), &pos,
+                           "[%s] %s: %s\n", ts, last_msgs[i].username, last_msgs[i].content);
+        }
+        free(last_msgs);
+
+    } else if (strncmp(cmd, "search ", 7) == 0) {
+        char *query = cmd + 7;
+        while (*query == ' ') query++;
+        if (*query == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Usage: search <keyword>\n");
+        } else {
+            message_t *found = NULL;
+            int found_count = message_search(query, &found, 15);
+            buffer_appendf(output, sizeof(output), &pos,
+                           "--- Search: \"%s\" (%d match(es)) ---\n", query, found_count);
+            for (int i = 0; i < found_count; i++) {
+                char ts[20];
+                struct tm tmi;
+                localtime_r(&found[i].timestamp, &tmi);
+                strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
+                buffer_appendf(output, sizeof(output), &pos,
+                               "[%s] %s: %s\n", ts, found[i].username, found[i].content);
+            }
+            free(found);
+        }
+
+    } else if (strcmp(cmd, "mute-joins") == 0 || strcmp(cmd, "mute") == 0) {
+        client->mute_joins = !client->mute_joins;
+        buffer_appendf(output, sizeof(output), &pos,
+                       "Join/leave notifications: %s\n",
+                       client->mute_joins ? "muted" : "unmuted");
+
     } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0 ||
                strcmp(cmd, "exit") == 0) {
         client->connected = false;
@@ -1310,6 +1370,7 @@ static void execute_command(client_t *client) {
                        "Type 'help' for available commands\n", cmd);
     }
 
+cmd_done:
     buffer_appendf(output, sizeof(output), &pos,
                    "\nPress any key to continue...");
 
@@ -1607,9 +1668,32 @@ void* client_handle_session(void *arg) {
     room_broadcast(g_room, &join_msg);
     message_save(&join_msg);
 
+    /* Show MOTD if motd.txt exists in state directory */
+    {
+        char motd_path[PATH_MAX];
+        if (tnt_state_path(motd_path, sizeof(motd_path), "motd.txt") == 0) {
+            FILE *motd_fp = fopen(motd_path, "r");
+            if (motd_fp) {
+                char motd_buf[sizeof(client->command_output) - 64];
+                size_t motd_len = fread(motd_buf, 1, sizeof(motd_buf) - 1, motd_fp);
+                fclose(motd_fp);
+                if (motd_len > 0) {
+                    motd_buf[motd_len] = '\0';
+                    snprintf(client->command_output, sizeof(client->command_output),
+                             "=== 公告 / MOTD ===\n%s", motd_buf);
+                    tui_render_command_output(client);
+                    seen_update_seq = room_get_update_seq(g_room);
+                    goto main_loop;
+                }
+            }
+        }
+    }
+
     /* Render initial screen */
     tui_render_screen(client);
     seen_update_seq = room_get_update_seq(g_room);
+
+main_loop:
 
     /* Main input loop */
     while (client->connected && ssh_channel_is_open(client->channel)) {

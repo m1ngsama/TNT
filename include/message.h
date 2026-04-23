@@ -22,4 +22,8 @@ int message_save(const message_t *msg);
 /* Format a message for display */
 void message_format(const message_t *msg, char *buffer, size_t buf_size, int width);
 
+/* Search log file for messages matching query (case-insensitive, username or content).
+ * Returns the last max_results matches in chronological order; caller must free *results. */
+int message_search(const char *query, message_t **results, int max_results);
+
 #endif /* MESSAGE_H */

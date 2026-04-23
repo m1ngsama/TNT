@@ -5,6 +5,12 @@
 #include <stdarg.h>
 #include <unistd.h>
 
+static bool is_join_leave_msg(const message_t *msg) {
+    if (strcmp(msg->username, "系统") != 0) return false;
+    return strstr(msg->content, "加入了聊天室") != NULL ||
+           strstr(msg->content, "离开了聊天室") != NULL;
+}
+
 static const char *username_color(const char *name) {
     static const char *colors[] = {
         "\033[31m", "\033[32m", "\033[33m",
@@ -222,6 +228,17 @@ void tui_render_screen(client_t *client) {
 
     /* Now render using snapshot (no lock held) */
 
+    /* If mute_joins is set, remove join/leave messages from snapshot in place */
+    if (client->mute_joins && msg_snapshot) {
+        int filtered = 0;
+        for (int i = 0; i < snapshot_count; i++) {
+            if (!is_join_leave_msg(&msg_snapshot[i])) {
+                msg_snapshot[filtered++] = msg_snapshot[i];
+            }
+        }
+        snapshot_count = filtered;
+    }
+
     /* Move to top (Home) - Do NOT clear screen to prevent flicker */
     buffer_appendf(buffer, buf_size, &pos, ANSI_HOME);
 
@@ -232,8 +249,9 @@ void tui_render_screen(client_t *client) {
 
     char title[256];
     snprintf(title, sizeof(title),
-             " %s | 在线: %d | 模式: %s | ? 帮助 ",
-             client->username, online, mode_str);
+             " %s | 在线: %d | 模式: %s%s | ? 帮助 ",
+             client->username, online, mode_str,
+             client->mute_joins ? " [静音]" : "");
 
     int title_width = utf8_string_width(title);
     int padding = render_width - title_width;
@@ -415,13 +433,16 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  Ctrl+C     - Exit chat\n"
                "\n"
                "AVAILABLE COMMANDS:\n"
-               "  :list, :users     - Show online users\n"
-               "  :nick <name>      - Change nickname\n"
-               "  :msg <user> <text> - Whisper to user\n"
-               "  :w <user> <text>  - Short alias for :msg\n"
-               "  :help             - Show available commands\n"
-               "  :clear            - Clear command output\n"
-               "  :q, :quit, :exit  - Disconnect\n"
+               "  :list, :users        - Show online users\n"
+               "  :nick <name>         - Change nickname\n"
+               "  :msg <user> <text>   - Whisper to user\n"
+               "  :w <user> <text>     - Short alias for :msg\n"
+               "  :last [N]            - Show last N messages (max 50)\n"
+               "  :search <keyword>    - Search message history\n"
+               "  :mute-joins          - Toggle join/leave notices\n"
+               "  :help                - Show available commands\n"
+               "  :clear               - Clear command output\n"
+               "  :q, :quit, :exit     - Disconnect\n"
                "\n"
                "SPECIAL MESSAGES:\n"
                "  /me <action>      - Send action (e.g. /me waves)\n"
@@ -459,13 +480,16 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  Ctrl+C     - 退出聊天\n"
                "\n"
                "可用命令:\n"
-               "  :list, :users     - 显示在线用户\n"
-               "  :nick <名字>      - 更改昵称\n"
-               "  :msg <用户> <文本> - 私聊\n"
-               "  :w <用户> <文本>   - :msg 的简写\n"
-               "  :help             - 显示可用命令\n"
-               "  :clear            - 清空命令输出\n"
-               "  :q, :quit, :exit  - 断开连接\n"
+               "  :list, :users        - 显示在线用户\n"
+               "  :nick <名字>         - 更改昵称\n"
+               "  :msg <用户> <文本>   - 私聊\n"
+               "  :w <用户> <文本>     - :msg 的简写\n"
+               "  :last [N]            - 显示最后 N 条消息(最多50)\n"
+               "  :search <关键词>     - 搜索消息历史\n"
+               "  :mute-joins          - 切换加入/离开提示\n"
+               "  :help                - 显示可用命令\n"
+               "  :clear               - 清空命令输出\n"
+               "  :q, :quit, :exit     - 断开连接\n"
                "\n"
                "特殊消息:\n"
                "  /me <动作>        - 发送动作 (如 /me 挥手)\n"
