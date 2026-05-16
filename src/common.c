@@ -126,3 +126,12 @@ void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
         *pos += (size_t)written;
     }
 }
+
+int env_int(const char *name, int fallback, int min_val, int max_val) {
+    const char *env = getenv(name);
+    if (!env || env[0] == '\0') return fallback;
+    char *end;
+    long val = strtol(env, &end, 10);
+    if (*end != '\0' || val < min_val || val > max_val) return fallback;
+    return (int)val;
+}

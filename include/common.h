@@ -62,4 +62,9 @@ void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
 void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
                     const char *fmt, ...);
 
+/* Parse an integer from `getenv(name)`, clamping accepted values to
+ * [min_val, max_val].  Returns `fallback` when the variable is unset, empty,
+ * non-numeric, or out of range. */
+int env_int(const char *name, int fallback, int min_val, int max_val);
+
 #endif /* COMMON_H */
