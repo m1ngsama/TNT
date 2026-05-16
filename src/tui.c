@@ -2,7 +2,6 @@
 #include "ssh_server.h"
 #include "chat_room.h"
 #include "utf8.h"
-#include <stdarg.h>
 #include <unistd.h>
 
 static bool is_join_leave_msg(const message_t *msg) {
@@ -108,46 +107,6 @@ static void format_message_colored(const message_t *msg, char *buffer,
                      time_str, username_color(msg->username),
                      msg->username, hl_start, truncated_content, hl_end);
         }
-    }
-}
-
-static void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
-                                const char *data, size_t len) {
-    size_t available;
-    size_t to_copy;
-
-    if (!buffer || !pos || !data || len == 0 || buf_size == 0 || *pos >= buf_size - 1) {
-        return;
-    }
-
-    available = (buf_size - 1) - *pos;
-    to_copy = (len < available) ? len : available;
-    memcpy(buffer + *pos, data, to_copy);
-    *pos += to_copy;
-    buffer[*pos] = '\0';
-}
-
-static void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
-                           const char *fmt, ...) {
-    va_list args;
-    int written;
-
-    if (!buffer || !pos || !fmt || buf_size == 0 || *pos >= buf_size - 1) {
-        return;
-    }
-
-    va_start(args, fmt);
-    written = vsnprintf(buffer + *pos, buf_size - *pos, fmt, args);
-    va_end(args);
-
-    if (written < 0) {
-        return;
-    }
-
-    if ((size_t)written >= buf_size - *pos) {
-        *pos = buf_size - 1;
-    } else {
-        *pos += (size_t)written;
     }
 }
 

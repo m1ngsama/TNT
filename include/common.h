@@ -54,4 +54,12 @@ const char* tnt_state_dir(void);
 int tnt_ensure_state_dir(void);
 int tnt_state_path(char *buffer, size_t buf_size, const char *filename);
 
+/* Bounded string buffer builders. Both append to `buffer[*pos..]`, advance
+ * `*pos`, and always keep the buffer NUL-terminated. They never write past
+ * `buf_size - 1` and become no-ops once the buffer is full. */
+void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
+                         const char *data, size_t len);
+void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
+                    const char *fmt, ...);
+
 #endif /* COMMON_H */

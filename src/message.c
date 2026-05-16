@@ -31,7 +31,9 @@ void message_init(void) {
     /* Nothing to initialize for now */
 }
 
-/* Load messages from log file - Optimized for large files */
+/* Load messages from log file - Optimized for large files.
+ * Holds g_message_file_lock for the duration of the read so concurrent
+ * message_save() calls from chat threads cannot interleave a partial line. */
 int message_load(message_t **messages, int max_messages) {
     char log_path[PATH_MAX];
 
@@ -46,9 +48,12 @@ int message_load(message_t **messages, int max_messages) {
         return 0;
     }
 
+    pthread_mutex_lock(&g_message_file_lock);
+
     FILE *fp = fopen(log_path, "r");
     if (!fp) {
         /* File doesn't exist yet, no messages */
+        pthread_mutex_unlock(&g_message_file_lock);
         *messages = msg_array;
         return 0;
     }
@@ -56,6 +61,7 @@ int message_load(message_t **messages, int max_messages) {
     /* Seek to end */
     if (fseek(fp, 0, SEEK_END) != 0) {
         fclose(fp);
+        pthread_mutex_unlock(&g_message_file_lock);
         *messages = msg_array;
         return 0;
     }
@@ -63,6 +69,7 @@ int message_load(message_t **messages, int max_messages) {
     long file_size = ftell(fp);
     if (file_size <= 0) {
         fclose(fp);
+        pthread_mutex_unlock(&g_message_file_lock);
         *messages = msg_array;
         return 0;
     }
@@ -175,6 +182,7 @@ read_messages:;
     }
 
     fclose(fp);
+    pthread_mutex_unlock(&g_message_file_lock);
     *messages = msg_array;
     return count;
 }

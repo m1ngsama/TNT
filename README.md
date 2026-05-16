@@ -166,6 +166,8 @@ ssh -p 2222 operator@chat.m1ng.space post "service notice"
 ssh -p 2222 chat.m1ng.space post "/me deploys v2.0"
 ```
 
+**`post` identity**: the message is attributed to the SSH login name (the `user@` part of the URL, falling back to `anonymous`). In the default anonymous-access configuration there is no identity check, so any client can post as any name. Set `TNT_ACCESS_TOKEN` if you need authenticated posting.
+
 ## Development
 
 ### Building

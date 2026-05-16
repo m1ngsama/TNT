@@ -68,60 +68,24 @@ static int g_rate_limit_enabled = 1;
 static char g_access_token[256] = "";
 static int g_idle_timeout = DEFAULT_IDLE_TIMEOUT;
 
-static void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
-                           const char *fmt, ...) {
-    va_list args;
-    int written;
-
-    if (!buffer || !pos || !fmt || buf_size == 0 || *pos >= buf_size - 1) {
-        return;
-    }
-
-    va_start(args, fmt);
-    written = vsnprintf(buffer + *pos, buf_size - *pos, fmt, args);
-    va_end(args);
-
-    if (written < 0) {
-        return;
-    }
-
-    if ((size_t)written >= buf_size - *pos) {
-        *pos = buf_size - 1;
-    } else {
-        *pos += (size_t)written;
-    }
-}
-
-static void buffer_append_bytes(char *buffer, size_t buf_size, size_t *pos,
-                                const char *data, size_t len) {
-    size_t available;
-    size_t to_copy;
-
-    if (!buffer || !pos || !data || len == 0 || buf_size == 0 ||
-        *pos >= buf_size - 1) {
-        return;
-    }
-
-    available = (buf_size - 1) - *pos;
-    to_copy = (len < available) ? len : available;
-    memcpy(buffer + *pos, data, to_copy);
-    *pos += to_copy;
-    buffer[*pos] = '\0';
-}
-
 /* Constant-time string comparison to prevent timing side-channel attacks.
  * Always iterates over the full length of the secret (b) to avoid leaking
  * its length.  When the input (a) is shorter, compares against zero bytes;
- * the length mismatch is folded into the result separately. */
+ * the length mismatch is folded into the result separately.
+ *
+ * Note: the length-diff is accumulated in size_t to avoid the bug where a
+ * narrower type (e.g. unsigned char) would collapse pairs like (300, 44) to
+ * 0 because 300 ^ 44 == 256 ^ (44 ^ 44) == 256 which truncates to 0. */
 static bool constant_time_strcmp(const char *a, const char *b) {
     size_t len_a = strlen(a);
     size_t len_b = strlen(b);
-    volatile unsigned char result = (unsigned char)(len_a ^ len_b);
+    volatile size_t length_diff = len_a ^ len_b;
+    volatile unsigned char byte_diff = 0;
     for (size_t i = 0; i < len_b; i++) {
         unsigned char ca = (i < len_a) ? (unsigned char)a[i] : 0;
-        result |= ca ^ (unsigned char)b[i];
+        byte_diff |= ca ^ (unsigned char)b[i];
     }
-    return result == 0;
+    return length_diff == 0 && byte_diff == 0;
 }
 
 /* Safe integer parse from environment variable; returns fallback on error. */
