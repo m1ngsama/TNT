@@ -206,13 +206,62 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Mode-specific handling */
     switch (client->mode) {
         case MODE_INSERT:
-            if (key == 27) {  /* ESC */
+            if (key == 27) {  /* ESC — may also be the start of an arrow seq */
+                char seq[2];
+                int n = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (n == 1 && seq[0] == '[') {
+                    n = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                    if (n == 1) {
+                        if (seq[1] == 'A') {  /* Up — walk back through sent history */
+                            if (client->insert_history_count > 0 &&
+                                client->insert_history_pos > 0) {
+                                client->insert_history_pos--;
+                                strncpy(input,
+                                        client->insert_history[client->insert_history_pos],
+                                        MAX_MESSAGE_LEN - 1);
+                                input[MAX_MESSAGE_LEN - 1] = '\0';
+                                tui_render_input(client, input);
+                            }
+                            return true;
+                        } else if (seq[1] == 'B') {  /* Down — walk forward */
+                            if (client->insert_history_pos <
+                                client->insert_history_count - 1) {
+                                client->insert_history_pos++;
+                                strncpy(input,
+                                        client->insert_history[client->insert_history_pos],
+                                        MAX_MESSAGE_LEN - 1);
+                                input[MAX_MESSAGE_LEN - 1] = '\0';
+                            } else {
+                                client->insert_history_pos =
+                                    client->insert_history_count;
+                                input[0] = '\0';
+                            }
+                            tui_render_input(client, input);
+                            return true;
+                        }
+                    }
+                }
+                /* Plain ESC — fall through to NORMAL mode */
                 client->mode = MODE_NORMAL;
                 client->scroll_pos = 0;
                 tui_render_screen(client);
-                return true;  /* Key consumed */
+                return true;
             } else if (key == '\r' || key == '\n') {  /* Enter */
                 if (input[0] != '\0') {
+                    /* Record into the per-client INSERT history ring */
+                    int max_hist = (int)(sizeof(client->insert_history) /
+                                         sizeof(client->insert_history[0]));
+                    if (client->insert_history_count >= max_hist) {
+                        memmove(&client->insert_history[0],
+                                &client->insert_history[1],
+                                (max_hist - 1) * sizeof(client->insert_history[0]));
+                        client->insert_history_count = max_hist - 1;
+                    }
+                    snprintf(client->insert_history[client->insert_history_count],
+                             sizeof(client->insert_history[0]), "%s", input);
+                    client->insert_history_count++;
+                    client->insert_history_pos = client->insert_history_count;
+
                     message_t msg = {
                         .timestamp = time(NULL),
                     };

@@ -24,6 +24,11 @@ typedef struct client {
     char command_history[16][256];
     int command_history_count;
     int command_history_pos;
+    /* INSERT mode chat-message history.  Last 16 messages this client
+     * sent, oldest first.  Up/Down in INSERT mode walks through it. */
+    char insert_history[16][MAX_MESSAGE_LEN];
+    int insert_history_count;
+    int insert_history_pos;
     char command_output[2048];
     bool show_motd;                  /* command_output holds MOTD text */
     char exec_command[MAX_EXEC_COMMAND_LEN];
