@@ -467,7 +467,11 @@ void tui_render_screen(client_t *client) {
     free(buffer);
 }
 
-/* Render the input line */
+/* Render the input line.
+ *
+ * Format: "› <input>"  with optional right-aligned length indicator
+ * once the buffer is past 80% full.  The indicator turns bold-yellow
+ * past 95% so users can see further keystrokes will be dropped. */
 void tui_render_input(client_t *client, const char *input) {
     if (!client || !client->connected) return;
 
@@ -478,7 +482,25 @@ void tui_render_input(client_t *client, const char *input) {
 
     char buffer[2048];
     int input_width = utf8_string_width(input);
-    int avail = rw - 3;
+    size_t input_bytes = strlen(input);
+
+    /* Decide whether to show the length gauge and how loud. */
+    int gauge_width = 0;
+    char gauge[64] = "";
+    if (input_bytes > (MAX_MESSAGE_LEN * 8) / 10) {  /* > 80 % */
+        size_t remaining = (input_bytes < MAX_MESSAGE_LEN)
+                           ? (MAX_MESSAGE_LEN - 1 - input_bytes) : 0;
+        const char *color =
+            (input_bytes > (MAX_MESSAGE_LEN * 95) / 100) ? "\033[1;33m"
+                                                          : "\033[2;37m";
+        snprintf(gauge, sizeof(gauge), "%s… %zu B\033[0m", color, remaining);
+        /* Plain-text width: " … 1234 B" → 4 + len(digits) + 2 */
+        char digits[12];
+        snprintf(digits, sizeof(digits), "%zu", remaining);
+        gauge_width = 4 + (int)strlen(digits) + 2;  /* "… ", digits, " B" + leading space */
+    }
+
+    int avail = rw - 3 - (gauge_width > 0 ? gauge_width + 1 : 0);
     if (avail < 1) avail = 1;
 
     /* Truncate from start if too long */
@@ -501,10 +523,20 @@ void tui_render_input(client_t *client, const char *input) {
         strncpy(display, p, sizeof(display) - 1);
     }
 
-    /* Move to input line and clear it, then write input */
-    snprintf(buffer, sizeof(buffer),
-             "\033[%d;1H" ANSI_CLEAR_LINE "\033[2;37m›\033[0m %s",
-             rh, display);
+    /* Compose: cursor to input row, clear line, "› " prompt, input.
+     * If a gauge is active, append it right-aligned. */
+    if (gauge_width > 0) {
+        int displayed_width = utf8_string_width(display);
+        int padding = rw - 2 - displayed_width - gauge_width;
+        if (padding < 1) padding = 1;
+        snprintf(buffer, sizeof(buffer),
+                 "\033[%d;1H" ANSI_CLEAR_LINE "\033[2;37m›\033[0m %s%*s%s",
+                 rh, display, padding, "", gauge);
+    } else {
+        snprintf(buffer, sizeof(buffer),
+                 "\033[%d;1H" ANSI_CLEAR_LINE "\033[2;37m›\033[0m %s",
+                 rh, display);
+    }
 
     client_send(client, buffer, strlen(buffer));
 }
