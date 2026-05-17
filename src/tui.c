@@ -320,15 +320,16 @@ void tui_render_screen(client_t *client) {
 
     /* Title bar — segmented chips on a single line, no full-line reverse.
      *
-     * Segments (left to right):
+     * Segments (left to right), each followed by a dim middle-dot:
      *   • bold username
      *   • online count
      *   • mode name (colour matches the mode itself: cyan/yellow/magenta)
      *   • mute marker, only when active
      *   • right-aligned hint
      *
-     * `· ` separators are dim grey so the eye groups segments without
-     * mistaking them for content. */
+     * When the terminal is narrow, drop the optional segments in
+     * reverse priority: hint → mute → mode chip → online count, until
+     * what's left fits.  The bold username is always shown. */
     struct title_chip { const char *value; const char *value_color; };
     struct title_chip chips[3];
     int chip_count = 0;
@@ -355,11 +356,39 @@ void tui_render_screen(client_t *client) {
     chips[chip_count].value_color = mode_color;
     chip_count++;
 
+    const char *hint = "? 帮助";
+    int hint_width = utf8_string_width(hint);
+    int mute_width = client->mute_joins ? 6 : 0;  /* "  静音" = 2 + 4 */
+
+    /* Decide what fits.  Reserve at least 1 col of gap between left and
+     * right halves so they never visually touch. */
+    int show_hint = 1;
+    int show_mute = client->mute_joins ? 1 : 0;
+    int show_chips = chip_count;
+
+    while (show_chips > 1) {
+        int left_w = 1 /*leading space*/;
+        for (int i = 0; i < show_chips; i++) {
+            if (i > 0) left_w += 3;  /* " · " */
+            left_w += utf8_string_width(chips[i].value);
+        }
+        if (show_mute) left_w += mute_width;
+        int right_w = (show_hint ? hint_width + 1 /*trailing space*/ : 0);
+        int needed = left_w + 1 /*min gap*/ + right_w;
+        if (needed <= render_width) break;
+
+        /* Drop in priority order: hint → mute → mode chip → online count. */
+        if (show_hint)         { show_hint = 0; continue; }
+        if (show_mute)         { show_mute = 0; continue; }
+        if (show_chips > 1)    { show_chips--;  continue; }
+        break;
+    }
+
     /* Compose left half. */
     char left[256];
     size_t lpos = 0;
     int left_width = 0;
-    for (int i = 0; i < chip_count; i++) {
+    for (int i = 0; i < show_chips; i++) {
         if (i > 0) {
             buffer_appendf(left, sizeof(left), &lpos, "\033[2;37m · \033[0m");
             left_width += 3;
@@ -368,21 +397,24 @@ void tui_render_screen(client_t *client) {
                        chips[i].value_color, chips[i].value);
         left_width += utf8_string_width(chips[i].value);
     }
-    if (client->mute_joins) {
+    if (show_mute) {
         buffer_appendf(left, sizeof(left), &lpos, "  \033[2;37m静音\033[0m");
-        left_width += 4;
+        left_width += mute_width;
     }
 
-    const char *hint = "? 帮助";
-    int hint_width = utf8_string_width(hint);
-    int gap = render_width - left_width - hint_width - 2;
+    int gap = render_width - left_width - (show_hint ? hint_width + 2 : 1);
     if (gap < 1) gap = 1;
 
     buffer_appendf(buffer, buf_size, &pos, " %s", left);
     for (int i = 0; i < gap; i++) {
         buffer_append_bytes(buffer, buf_size, &pos, " ", 1);
     }
-    buffer_appendf(buffer, buf_size, &pos, "\033[2;37m%s\033[0m \033[K\r\n", hint);
+    if (show_hint) {
+        buffer_appendf(buffer, buf_size, &pos,
+                       "\033[2;37m%s\033[0m \033[K\r\n", hint);
+    } else {
+        buffer_appendf(buffer, buf_size, &pos, "\033[K\r\n");
+    }
 
     /* Render messages from snapshot.  Insert a dim "── YYYY-MM-DD ──" divider
      * before the first message of each new day so the eye can land on dates
