@@ -135,3 +135,29 @@ int env_int(const char *name, int fallback, int min_val, int max_val) {
     if (*end != '\0' || val < min_val || val > max_val) return fallback;
     return (int)val;
 }
+
+bool is_valid_username(const char *username) {
+    if (!username || username[0] == '\0') {
+        return false;
+    }
+
+    /* Reject usernames starting with special characters */
+    if (username[0] == ' ' || username[0] == '.' || username[0] == '-') {
+        return false;
+    }
+
+    /* Check for illegal characters that could cause injection */
+    const char *illegal_chars = "|;&$`\n\r<>(){}[]'\"\\";
+    for (size_t i = 0; i < strlen(username); i++) {
+        /* Reject control characters (except tab) */
+        if (username[i] < 32 && username[i] != 9) {
+            return false;
+        }
+        /* Reject shell metacharacters */
+        if (strchr(illegal_chars, username[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}

@@ -58,4 +58,12 @@ int client_printf(client_t *client, const char *fmt, ...);
 void client_addref(client_t *client);
 void client_release(client_t *client);
 
+/* Bell-notify any clients whose @username appears in the broadcast content,
+ * skipping the sender.  Defined in ssh_server.c (will move to a dedicated
+ * client.c during PR2-M6). */
+void notify_mentions(const char *content, const client_t *sender);
+
+/* Read-only accessor for the server start time (used by exec stats). */
+time_t ssh_server_start_time(void);
+
 #endif /* SSH_SERVER_H */
