@@ -30,6 +30,25 @@ static void format_message_colored(const message_t *msg, char *buffer,
     char time_str[32];
     strftime(time_str, sizeof(time_str), "%H:%M", &tm_info);
 
+    /* Is this message from the local user?  Used to draw a 1-column gutter
+     * marker so they can scan their own contributions when scrolling. */
+    bool is_self = false;
+    if (my_username && my_username[0] != '\0' &&
+        strcmp(msg->username, "系统") != 0) {
+        if (strcmp(msg->username, "*") == 0) {
+            /* /me message: content starts with the actor's username */
+            size_t un_len = strlen(my_username);
+            if (strncmp(msg->content, my_username, un_len) == 0 &&
+                (msg->content[un_len] == ' ' || msg->content[un_len] == '\0')) {
+                is_self = true;
+            }
+        } else if (strcmp(msg->username, my_username) == 0) {
+            is_self = true;
+        }
+    }
+    /* Always 1 column wide so all messages align vertically. */
+    const char *gutter = is_self ? "\033[36m▎\033[0m" : " ";
+
     bool mentioned = false;
     if (my_username && my_username[0] != '\0' &&
         strcmp(msg->username, "系统") != 0) {
@@ -44,39 +63,40 @@ static void format_message_colored(const message_t *msg, char *buffer,
 
     if (strcmp(msg->username, "系统") == 0) {
         snprintf(buffer, buf_size,
-                 "\033[90m--> %s\033[0m", msg->content);
+                 "%s\033[90m--> %s\033[0m", gutter, msg->content);
     } else if (strcmp(msg->username, "*") == 0) {
         snprintf(buffer, buf_size,
-                 "\033[90m%s\033[0m \033[3;36m* %s\033[0m",
-                 time_str, msg->content);
+                 "%s\033[90m%s\033[0m \033[3;36m* %s\033[0m",
+                 gutter, time_str, msg->content);
     } else {
         snprintf(buffer, buf_size,
-                 "\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
-                 time_str, username_color(msg->username),
+                 "%s\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
+                 gutter, time_str, username_color(msg->username),
                  msg->username, hl_start, msg->content, hl_end);
     }
 
-    /* Plain-text version for width calculation */
+    /* Plain-text version for width calculation — gutter is 1 column. */
     char plain[MAX_MESSAGE_LEN + 128];
     if (strcmp(msg->username, "系统") == 0) {
-        snprintf(plain, sizeof(plain), "--> %s", msg->content);
+        snprintf(plain, sizeof(plain), " --> %s", msg->content);
     } else if (strcmp(msg->username, "*") == 0) {
-        snprintf(plain, sizeof(plain), "%s * %s", time_str, msg->content);
+        snprintf(plain, sizeof(plain), " %s * %s", time_str, msg->content);
     } else {
-        snprintf(plain, sizeof(plain), "%s %s: %s",
+        snprintf(plain, sizeof(plain), " %s %s: %s",
                  time_str, msg->username, msg->content);
     }
 
     if (utf8_string_width(plain) > width) {
-        /* Rebuild with truncated content */
+        /* Rebuild with truncated content — prefix_plain also includes the
+         * 1-column gutter so the budget math comes out right. */
         int prefix_width;
         char prefix_plain[256];
         if (strcmp(msg->username, "系统") == 0) {
-            snprintf(prefix_plain, sizeof(prefix_plain), "--> ");
+            snprintf(prefix_plain, sizeof(prefix_plain), " --> ");
         } else if (strcmp(msg->username, "*") == 0) {
-            snprintf(prefix_plain, sizeof(prefix_plain), "%s * ", time_str);
+            snprintf(prefix_plain, sizeof(prefix_plain), " %s * ", time_str);
         } else {
-            snprintf(prefix_plain, sizeof(prefix_plain), "%s %s: ",
+            snprintf(prefix_plain, sizeof(prefix_plain), " %s %s: ",
                      time_str, msg->username);
         }
         prefix_width = utf8_string_width(prefix_plain);
@@ -97,15 +117,15 @@ static void format_message_colored(const message_t *msg, char *buffer,
 
         if (strcmp(msg->username, "系统") == 0) {
             snprintf(buffer, buf_size,
-                     "\033[90m--> %s\033[0m", truncated_content);
+                     "%s\033[90m--> %s\033[0m", gutter, truncated_content);
         } else if (strcmp(msg->username, "*") == 0) {
             snprintf(buffer, buf_size,
-                     "\033[90m%s\033[0m \033[3;36m%s\033[0m",
-                     time_str, truncated_content);
+                     "%s\033[90m%s\033[0m \033[3;36m%s\033[0m",
+                     gutter, time_str, truncated_content);
         } else {
             snprintf(buffer, buf_size,
-                     "\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
-                     time_str, username_color(msg->username),
+                     "%s\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
+                     gutter, time_str, username_color(msg->username),
                      msg->username, hl_start, truncated_content, hl_end);
         }
     }
