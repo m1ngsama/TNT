@@ -371,11 +371,22 @@ void tui_render_screen(client_t *client) {
         unread_width = utf8_string_width(unread_buf) + 2;  /* leading " · " minus initial space accounted later */
     }
 
+    /* Unread whispers chip — bright magenta envelope.  Same priority as
+     * the mentions chip; both signal "you missed something". */
+    int whisper_count = client->unread_whispers;
+    char whisper_buf[32] = "";
+    int whisper_width = 0;
+    if (whisper_count > 0) {
+        snprintf(whisper_buf, sizeof(whisper_buf), "✉ %d", whisper_count);
+        whisper_width = utf8_string_width(whisper_buf) + 2;
+    }
+
     /* Decide what fits.  Reserve at least 1 col of gap between left and
      * right halves so they never visually touch. */
     int show_hint = 1;
     int show_mute = client->mute_joins ? 1 : 0;
     int show_unread = unread_count > 0 ? 1 : 0;
+    int show_whisper = whisper_count > 0 ? 1 : 0;
     int show_chips = chip_count;
 
     while (show_chips > 1) {
@@ -385,16 +396,17 @@ void tui_render_screen(client_t *client) {
             left_w += utf8_string_width(chips[i].value);
         }
         if (show_mute) left_w += mute_width;
-        if (show_unread) left_w += unread_width + 1;  /* + " " separator */
+        if (show_unread) left_w += unread_width + 1;
+        if (show_whisper) left_w += whisper_width + 1;
         int right_w = (show_hint ? hint_width + 1 /*trailing space*/ : 0);
         int needed = left_w + 1 /*min gap*/ + right_w;
         if (needed <= render_width) break;
 
-        /* Drop in priority order: hint → mute → mode chip → online count.
-         * Unread is sticky — only dropped if everything else already is. */
+        /* Drop priority: hint → mute → mode → online → whispers → mentions. */
         if (show_hint)         { show_hint = 0; continue; }
         if (show_mute)         { show_mute = 0; continue; }
         if (show_chips > 1)    { show_chips--;  continue; }
+        if (show_whisper)      { show_whisper = 0; continue; }
         if (show_unread)       { show_unread = 0; continue; }
         break;
     }
@@ -420,6 +432,11 @@ void tui_render_screen(client_t *client) {
         buffer_appendf(left, sizeof(left), &lpos,
                        "  \033[1;33m%s\033[0m", unread_buf);
         left_width += unread_width + 1;
+    }
+    if (show_whisper) {
+        buffer_appendf(left, sizeof(left), &lpos,
+                       "  \033[1;35m%s\033[0m", whisper_buf);
+        left_width += whisper_width + 1;
     }
 
     int gap = render_width - left_width - (show_hint ? hint_width + 2 : 1);

@@ -112,7 +112,8 @@ void commands_dispatch(client_t *client) {
                        "========================================\n"
                        "list, users, who    - Show online users\n"
                        "nick/name <name>    - Change nickname\n"
-                       "msg/w <user> <text> - Whisper to user\n"
+                       "msg/w <user> <text> - Whisper to user (private)\n"
+                       "inbox               - Show whisper history\n"
                        "last [N]            - Show last N messages\n"
                        "search <keyword>    - Search message history\n"
                        "mute-joins          - Toggle join/leave notices\n"
@@ -155,12 +156,33 @@ void commands_dispatch(client_t *client) {
             pthread_rwlock_unlock(&g_room->lock);
 
             if (target) {
-                char whisper[MAX_MESSAGE_LEN];
-                snprintf(whisper, sizeof(whisper),
-                         "\r\n\033[35m[whisper from %s]: %s\033[0m\r\n",
-                         client->username, rest);
-                client_send(target, whisper, strlen(whisper));
+                /* Push into recipient's inbox.  io_lock serialises so two
+                 * senders to the same recipient don't tear the ring. */
+                pthread_mutex_lock(&target->io_lock);
+                int slot;
+                if (target->whisper_inbox_count < WHISPER_INBOX_SIZE) {
+                    slot = target->whisper_inbox_count++;
+                } else {
+                    /* FIFO evict the oldest */
+                    memmove(&target->whisper_inbox[0],
+                            &target->whisper_inbox[1],
+                            (WHISPER_INBOX_SIZE - 1) * sizeof(whisper_t));
+                    slot = WHISPER_INBOX_SIZE - 1;
+                }
+                target->whisper_inbox[slot].timestamp = time(NULL);
+                snprintf(target->whisper_inbox[slot].from,
+                         sizeof(target->whisper_inbox[slot].from),
+                         "%s", client->username);
+                snprintf(target->whisper_inbox[slot].content,
+                         sizeof(target->whisper_inbox[slot].content),
+                         "%s", rest);
+                pthread_mutex_unlock(&target->io_lock);
+
+                target->unread_whispers++;
                 target->redraw_pending = true;
+                /* Audible nudge — the title bar ✉ counter (UX-11 style)
+                 * carries the persistent signal. */
+                client_send(target, "\a", 1);
                 client_release(target);
             }
 
@@ -171,6 +193,35 @@ void commands_dispatch(client_t *client) {
                 buffer_appendf(output, sizeof(output), &pos,
                                "User '%s' not found\n", target_name);
             }
+        }
+
+    } else if (strcmp(cmd, "inbox") == 0) {
+        /* Snapshot the inbox under io_lock so a concurrent sender doesn't
+         * tear what we're rendering.  Counter reset happens after copy. */
+        whisper_t snapshot[WHISPER_INBOX_SIZE];
+        int snap_count;
+        pthread_mutex_lock(&client->io_lock);
+        snap_count = client->whisper_inbox_count;
+        memcpy(snapshot, client->whisper_inbox,
+               snap_count * sizeof(whisper_t));
+        pthread_mutex_unlock(&client->io_lock);
+        client->unread_whispers = 0;
+
+        buffer_appendf(output, sizeof(output), &pos,
+                       "\033[1;36m悄悄话 · whispers\033[0m  "
+                       "\033[2;37m· %d\033[0m\n", snap_count);
+        if (snap_count == 0) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "  \033[2;37m(空)\033[0m\n");
+        }
+        for (int i = 0; i < snap_count; i++) {
+            char ts[20];
+            struct tm tmi;
+            localtime_r(&snapshot[i].timestamp, &tmi);
+            strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
+            buffer_appendf(output, sizeof(output), &pos,
+                           "  \033[90m%s\033[0m  \033[35m%s\033[0m: %s\n",
+                           ts, snapshot[i].from, snapshot[i].content);
         }
 
     } else if (strncmp(cmd, "nick ", 5) == 0 || strncmp(cmd, "name ", 5) == 0) {

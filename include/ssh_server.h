@@ -7,6 +7,16 @@
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 
+/* One stored whisper.  Kept per-recipient, not broadcast to the room
+ * and not persisted to messages.log.  Inbox is bounded; oldest slides
+ * out FIFO. */
+#define WHISPER_INBOX_SIZE 16
+typedef struct {
+    time_t timestamp;
+    char from[MAX_USERNAME_LEN];
+    char content[MAX_MESSAGE_LEN];
+} whisper_t;
+
 /* Client connection structure */
 typedef struct client {
     ssh_session session;             /* SSH session */
@@ -37,6 +47,11 @@ typedef struct client {
     time_t last_active;
     atomic_bool redraw_pending;
     _Atomic int unread_mentions;     /* @-mentions received since last reset */
+    _Atomic int unread_whispers;     /* whispers received since last :inbox view */
+    /* Per-client whisper inbox.  Pushes serialise on io_lock; readers are
+     * the client's own thread inside :inbox handling. */
+    whisper_t whisper_inbox[WHISPER_INBOX_SIZE];
+    int whisper_inbox_count;
     bool mute_joins;
     pthread_t thread;
     atomic_bool connected;
