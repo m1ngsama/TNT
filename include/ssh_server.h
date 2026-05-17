@@ -45,24 +45,6 @@ int ssh_server_init(int port);
 /* Start SSH server (blocking) */
 int ssh_server_start(int listen_fd);
 
-/* Send data to client */
-int client_send(client_t *client, const char *data, size_t len);
-
-/* Send formatted string to client */
-int client_printf(client_t *client, const char *fmt, ...);
-
-/* Reference counting helpers */
-void client_addref(client_t *client);
-void client_release(client_t *client);
-
-/* Install the post-bootstrap channel callbacks (window-change, eof, close)
- * that target this client_t.  Caller MUST have already added one
- * client_addref() to keep the client alive across in-flight callback
- * invocations; the matching client_release() happens during cleanup in
- * input_run_session().  Returns 0 on success, -1 on failure (in which
- * case the caller still owns both refs and must release them). */
-int client_install_channel_callbacks(client_t *client);
-
 /* Read-only accessor for the server start time (used by exec stats). */
 time_t ssh_server_start_time(void);
 

@@ -1,4 +1,5 @@
 #include "bootstrap.h"
+#include "client.h"
 #include "common.h"
 #include "input.h"
 #include "ratelimit.h"

@@ -1,4 +1,5 @@
 #include "tui.h"
+#include "client.h"
 #include "ssh_server.h"
 #include "chat_room.h"
 #include "utf8.h"

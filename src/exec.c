@@ -1,5 +1,6 @@
 #include "exec.h"
 #include "chat_room.h"
+#include "client.h"
 #include "common.h"
 #include "input.h"
 #include "message.h"
