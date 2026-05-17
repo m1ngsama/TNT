@@ -45,9 +45,6 @@ int ssh_server_init(int port);
 /* Start SSH server (blocking) */
 int ssh_server_start(int listen_fd);
 
-/* Handle client session */
-void* client_handle_session(void *arg);
-
 /* Send data to client */
 int client_send(client_t *client, const char *data, size_t len);
 
@@ -62,14 +59,9 @@ void client_release(client_t *client);
  * that target this client_t.  Caller MUST have already added one
  * client_addref() to keep the client alive across in-flight callback
  * invocations; the matching client_release() happens during cleanup in
- * client_handle_session().  Returns 0 on success, -1 on failure (in which
+ * input_run_session().  Returns 0 on success, -1 on failure (in which
  * case the caller still owns both refs and must release them). */
 int client_install_channel_callbacks(client_t *client);
-
-/* Bell-notify any clients whose @username appears in the broadcast content,
- * skipping the sender.  Defined in ssh_server.c (will move to a dedicated
- * client.c during PR2-M6). */
-void notify_mentions(const char *content, const client_t *sender);
 
 /* Read-only accessor for the server start time (used by exec stats). */
 time_t ssh_server_start_time(void);

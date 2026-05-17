@@ -1,5 +1,6 @@
 #include "bootstrap.h"
 #include "common.h"
+#include "input.h"
 #include "ratelimit.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -487,6 +488,6 @@ void *bootstrap_run(void *arg) {
     }
     destroy_session_context(ctx);
 
-    client_handle_session(client);
+    input_run_session(client);
     return NULL;
 }

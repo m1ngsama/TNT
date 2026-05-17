@@ -1,6 +1,7 @@
 #include "exec.h"
 #include "chat_room.h"
 #include "common.h"
+#include "input.h"
 #include "message.h"
 #include "ratelimit.h"
 #include "utf8.h"
@@ -10,9 +11,8 @@
 #include <string.h>
 #include <time.h>
 
-/* `notify_mentions` is shared with the interactive INSERT-mode send path
- * (currently still in ssh_server.c, will move to its own home in PR2-M5/M6).
- * Declared in ssh_server.h. */
+/* `notify_mentions` is shared with the interactive INSERT-mode send path.
+ * Declared in input.h. */
 
 static void format_timestamp_utc(time_t ts, char *buffer, size_t buf_size) {
     struct tm tm_info;

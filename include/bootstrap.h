@@ -25,14 +25,14 @@ void bootstrap_peer_ip(ssh_session session, char *ip_buf, size_t buf_size);
 
 /* pthread entry point for the per-connection bootstrap thread.
  *
- * Steps performed before handing control to client_handle_session():
+ * Steps performed before handing control to input_run_session():
  *   1. SSH key exchange
  *   2. auth (password / none / pubkey, with rate-limit feedback)
  *   3. channel open + PTY/shell-or-exec request
  *   4. construct a client_t and install its lifetime channel callbacks
  *
  * On any failure path the connection is torn down and ratelimit /
- * connection counters are released; client_handle_session() is never
+ * connection counters are released; input_run_session() is never
  * invoked.  Always returns NULL. */
 void *bootstrap_run(void *arg);
 
