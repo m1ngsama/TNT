@@ -388,22 +388,28 @@ void tui_render_screen(client_t *client) {
 
     /* Status/Input line */
     if (client->mode == MODE_INSERT) {
-        buffer_appendf(buffer, buf_size, &pos, "> \033[K");
+        buffer_appendf(buffer, buf_size, &pos, "\033[2;37m›\033[0m \033[K");
     } else if (client->mode == MODE_NORMAL) {
         int total = msg_count;
         int scroll_pos = client->scroll_pos + 1;
         if (total == 0) scroll_pos = 0;
         int unseen = msg_count - end;
+        /* mode reverse-video chip + dim position + optional unseen marker */
         if (unseen > 0) {
             buffer_appendf(buffer, buf_size, &pos,
-                           "-- NORMAL -- (%d/%d)  \033[33m↓ %d new\033[0m\033[K",
+                           "\033[7;33m NORMAL \033[0m"
+                           "  \033[2;37m%d / %d\033[0m"
+                           "   \033[33m▼ %d new\033[0m\033[K",
                            scroll_pos, total, unseen);
         } else {
             buffer_appendf(buffer, buf_size, &pos,
-                           "-- NORMAL -- (%d/%d)\033[K", scroll_pos, total);
+                           "\033[7;33m NORMAL \033[0m"
+                           "  \033[2;37m%d / %d\033[0m\033[K",
+                           scroll_pos, total);
         }
     } else if (client->mode == MODE_COMMAND) {
-        buffer_appendf(buffer, buf_size, &pos, ":%s\033[K", client->command_input);
+        buffer_appendf(buffer, buf_size, &pos,
+                       "\033[35m:\033[0m%s\033[K", client->command_input);
     }
 
     client_send(client, buffer, pos);
@@ -445,7 +451,8 @@ void tui_render_input(client_t *client, const char *input) {
     }
 
     /* Move to input line and clear it, then write input */
-    snprintf(buffer, sizeof(buffer), "\033[%d;1H" ANSI_CLEAR_LINE "> %s",
+    snprintf(buffer, sizeof(buffer),
+             "\033[%d;1H" ANSI_CLEAR_LINE "\033[2;37m›\033[0m %s",
              rh, display);
 
     client_send(client, buffer, strlen(buffer));
