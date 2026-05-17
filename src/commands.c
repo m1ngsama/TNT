@@ -164,21 +164,47 @@ void commands_dispatch(client_t *client) {
                 utf8_truncate(validated_name, 20);
             }
 
+            /* Reject collisions with active room members.  Held under
+             * wrlock so the username swap below races neither read nor
+             * concurrent :nick from another client. */
             char old_name[MAX_USERNAME_LEN];
+            bool taken = false;
             pthread_rwlock_wrlock(&g_room->lock);
             snprintf(old_name, sizeof(old_name), "%s", client->username);
-            snprintf(client->username, MAX_USERNAME_LEN, "%s", validated_name);
+            if (strcmp(validated_name, old_name) != 0) {
+                for (int i = 0; i < g_room->client_count; i++) {
+                    if (g_room->clients[i] == client) continue;
+                    if (strcmp(g_room->clients[i]->username,
+                               validated_name) == 0) {
+                        taken = true;
+                        break;
+                    }
+                }
+            }
+            if (!taken) {
+                snprintf(client->username, MAX_USERNAME_LEN, "%s", validated_name);
+            }
             pthread_rwlock_unlock(&g_room->lock);
 
-            message_t nick_msg = { .timestamp = time(NULL) };
-            snprintf(nick_msg.username, MAX_USERNAME_LEN, "系统");
-            snprintf(nick_msg.content, MAX_MESSAGE_LEN,
-                     "%s 更名为 %s", old_name, client->username);
-            room_broadcast(g_room, &nick_msg);
-            message_save(&nick_msg);
+            if (taken) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Nickname '%s' is already taken\n",
+                               validated_name);
+            } else if (strcmp(validated_name, old_name) == 0) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Nickname unchanged\n");
+            } else {
+                message_t nick_msg = { .timestamp = time(NULL) };
+                snprintf(nick_msg.username, MAX_USERNAME_LEN, "系统");
+                snprintf(nick_msg.content, MAX_MESSAGE_LEN,
+                         "%s 更名为 %s", old_name, client->username);
+                room_broadcast(g_room, &nick_msg);
+                message_save(&nick_msg);
 
-            buffer_appendf(output, sizeof(output), &pos,
-                           "Nickname changed: %s -> %s\n", old_name, client->username);
+                buffer_appendf(output, sizeof(output), &pos,
+                               "Nickname changed: %s -> %s\n",
+                               old_name, client->username);
+            }
         }
 
     } else if (strncmp(cmd, "last", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\0')) {
