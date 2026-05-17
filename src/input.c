@@ -144,6 +144,7 @@ void notify_mentions(const char *content, const client_t *sender) {
 
     for (int i = 0; i < target_count; i++) {
         client_send(targets[i], "\a", 1);
+        targets[i]->unread_mentions++;
         targets[i]->redraw_pending = true;
         client_release(targets[i]);
     }
@@ -382,6 +383,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
 
             if (key == 'i') {
                 client->mode = MODE_INSERT;
+                client->unread_mentions = 0;
                 tui_render_screen(client);
                 return true;
             } else if (key == ':') {
@@ -429,6 +431,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 return true;
             } else if (key == 'G') {
                 client->scroll_pos = nm_max_scroll;
+                client->unread_mentions = 0;
                 tui_render_screen(client);
                 return true;
             } else if (key == '?') {

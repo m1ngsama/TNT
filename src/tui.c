@@ -360,10 +360,22 @@ void tui_render_screen(client_t *client) {
     int hint_width = utf8_string_width(hint);
     int mute_width = client->mute_joins ? 6 : 0;  /* "  静音" = 2 + 4 */
 
+    /* Unread @-mentions chip — high-priority, gets a bright yellow star.
+     * Sits between mode and hint when present, and survives degradation
+     * longer than the hint / mute / mode chips. */
+    int unread_count = client->unread_mentions;
+    char unread_buf[32] = "";
+    int unread_width = 0;
+    if (unread_count > 0) {
+        snprintf(unread_buf, sizeof(unread_buf), "★ %d", unread_count);
+        unread_width = utf8_string_width(unread_buf) + 2;  /* leading " · " minus initial space accounted later */
+    }
+
     /* Decide what fits.  Reserve at least 1 col of gap between left and
      * right halves so they never visually touch. */
     int show_hint = 1;
     int show_mute = client->mute_joins ? 1 : 0;
+    int show_unread = unread_count > 0 ? 1 : 0;
     int show_chips = chip_count;
 
     while (show_chips > 1) {
@@ -373,14 +385,17 @@ void tui_render_screen(client_t *client) {
             left_w += utf8_string_width(chips[i].value);
         }
         if (show_mute) left_w += mute_width;
+        if (show_unread) left_w += unread_width + 1;  /* + " " separator */
         int right_w = (show_hint ? hint_width + 1 /*trailing space*/ : 0);
         int needed = left_w + 1 /*min gap*/ + right_w;
         if (needed <= render_width) break;
 
-        /* Drop in priority order: hint → mute → mode chip → online count. */
+        /* Drop in priority order: hint → mute → mode chip → online count.
+         * Unread is sticky — only dropped if everything else already is. */
         if (show_hint)         { show_hint = 0; continue; }
         if (show_mute)         { show_mute = 0; continue; }
         if (show_chips > 1)    { show_chips--;  continue; }
+        if (show_unread)       { show_unread = 0; continue; }
         break;
     }
 
@@ -400,6 +415,11 @@ void tui_render_screen(client_t *client) {
     if (show_mute) {
         buffer_appendf(left, sizeof(left), &lpos, "  \033[2;37m静音\033[0m");
         left_width += mute_width;
+    }
+    if (show_unread) {
+        buffer_appendf(left, sizeof(left), &lpos,
+                       "  \033[1;33m%s\033[0m", unread_buf);
+        left_width += unread_width + 1;
     }
 
     int gap = render_width - left_width - (show_hint ? hint_width + 2 : 1);
