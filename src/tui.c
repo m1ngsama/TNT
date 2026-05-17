@@ -364,19 +364,50 @@ void tui_render_screen(client_t *client) {
     }
     buffer_appendf(buffer, buf_size, &pos, "\033[2;37m%s\033[0m \033[K\r\n", hint);
 
-    /* Render messages from snapshot */
+    /* Render messages from snapshot.  Insert a dim "── YYYY-MM-DD ──" divider
+     * before the first message of each new day so the eye can land on dates
+     * when scrolling through a long-lived room.
+     *
+     * We track rows_written separately from snapshot index so dividers
+     * compete with messages for the fixed message-area height — they do not
+     * push other content off the bottom. */
+    int rows_written = 0;
     if (msg_snapshot) {
-        for (int i = 0; i < snapshot_count; i++) {
+        char last_date[11] = "";  /* "YYYY-MM-DD" */
+        for (int i = 0; i < snapshot_count && rows_written < msg_height; i++) {
+            char this_date[11];
+            struct tm tmi;
+            localtime_r(&msg_snapshot[i].timestamp, &tmi);
+            strftime(this_date, sizeof(this_date), "%Y-%m-%d", &tmi);
+
+            if (strcmp(this_date, last_date) != 0) {
+                /* Build divider: "── YYYY-MM-DD " then fill the rest with ─ */
+                int prefix_w = 3 + 10 + 1;  /* "── 2026-05-17 " in display columns */
+                int dash_fill = render_width - prefix_w;
+                if (dash_fill < 0) dash_fill = 0;
+
+                buffer_appendf(buffer, buf_size, &pos, "\033[2;37m── %s ", this_date);
+                for (int j = 0; j < dash_fill; j++) {
+                    buffer_append_bytes(buffer, buf_size, &pos, "─", strlen("─"));
+                }
+                buffer_appendf(buffer, buf_size, &pos, "\033[0m\033[K\r\n");
+
+                memcpy(last_date, this_date, sizeof(last_date));
+                rows_written++;
+                if (rows_written >= msg_height) break;
+            }
+
             char msg_line[2048];
             format_message_colored(&msg_snapshot[i], msg_line, sizeof(msg_line),
                                    render_width, client->username);
             buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
+            rows_written++;
         }
         free(msg_snapshot);
     }
 
     /* Fill empty lines and clear them */
-    for (int i = snapshot_count; i < msg_height; i++) {
+    for (int i = rows_written; i < msg_height; i++) {
         buffer_appendf(buffer, buf_size, &pos, "\033[K\r\n");
     }
 
