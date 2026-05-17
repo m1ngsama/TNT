@@ -1,3 +1,9 @@
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE  /* for strcasestr() on glibc */
+#endif
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE /* for strcasestr() on macOS */
+#endif
 #include "commands.h"
 #include "chat_room.h"
 #include "client.h"
@@ -9,6 +15,33 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+/* Append `text` to the output buffer with every case-insensitive match of
+ * `needle` wrapped in a reverse-yellow ANSI chip.  Preserves the original
+ * casing of the matched substring.  needle == NULL or empty appends raw. */
+static void append_highlighted(char *output, size_t buf_size, size_t *pos,
+                               const char *text, const char *needle) {
+    if (!needle || !*needle) {
+        buffer_appendf(output, buf_size, pos, "%s", text);
+        return;
+    }
+    size_t nlen = strlen(needle);
+    const char *p = text;
+    while (*p) {
+        const char *hit = strcasestr(p, needle);
+        if (!hit) {
+            buffer_appendf(output, buf_size, pos, "%s", p);
+            return;
+        }
+        if (hit > p) {
+            buffer_append_bytes(output, buf_size, pos, p, (size_t)(hit - p));
+        }
+        buffer_append_bytes(output, buf_size, pos, "\033[7;33m", 7);
+        buffer_append_bytes(output, buf_size, pos, hit, nlen);
+        buffer_append_bytes(output, buf_size, pos, "\033[0m", 4);
+        p = hit + nlen;
+    }
+}
 
 void commands_dispatch(client_t *client) {
     char cmd_buf[256];
@@ -253,7 +286,13 @@ void commands_dispatch(client_t *client) {
                 localtime_r(&found[i].timestamp, &tmi);
                 strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
                 buffer_appendf(output, sizeof(output), &pos,
-                               "[%s] %s: %s\n", ts, found[i].username, found[i].content);
+                               "[%s] ", ts);
+                append_highlighted(output, sizeof(output), &pos,
+                                   found[i].username, query);
+                buffer_appendf(output, sizeof(output), &pos, ": ");
+                append_highlighted(output, sizeof(output), &pos,
+                                   found[i].content, query);
+                buffer_appendf(output, sizeof(output), &pos, "\n");
             }
             free(found);
         }
