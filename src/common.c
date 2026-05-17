@@ -161,3 +161,16 @@ bool is_valid_username(const char *username) {
 
     return true;
 }
+
+void sanitize_terminal_size(int *width, int *height) {
+    if (!width || !height) {
+        return;
+    }
+
+    if (*width <= 0 || *width > 500) {
+        *width = 80;
+    }
+    if (*height <= 0 || *height > 200) {
+        *height = 24;
+    }
+}

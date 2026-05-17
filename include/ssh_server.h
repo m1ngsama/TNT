@@ -58,6 +58,14 @@ int client_printf(client_t *client, const char *fmt, ...);
 void client_addref(client_t *client);
 void client_release(client_t *client);
 
+/* Install the post-bootstrap channel callbacks (window-change, eof, close)
+ * that target this client_t.  Caller MUST have already added one
+ * client_addref() to keep the client alive across in-flight callback
+ * invocations; the matching client_release() happens during cleanup in
+ * client_handle_session().  Returns 0 on success, -1 on failure (in which
+ * case the caller still owns both refs and must release them). */
+int client_install_channel_callbacks(client_t *client);
+
 /* Bell-notify any clients whose @username appears in the broadcast content,
  * skipping the sender.  Defined in ssh_server.c (will move to a dedicated
  * client.c during PR2-M6). */

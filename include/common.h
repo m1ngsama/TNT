@@ -72,4 +72,9 @@ int env_int(const char *name, int fallback, int min_val, int max_val);
  * author), and the :nick command. */
 bool is_valid_username(const char *username);
 
+/* Clamp a terminal size to sensible bounds (1..500 cols, 1..200 rows).
+ * Replaces zero/negative/oversize values with 80x24.  Used by the PTY
+ * request callback and the window-change callback. */
+void sanitize_terminal_size(int *width, int *height);
+
 #endif /* COMMON_H */
