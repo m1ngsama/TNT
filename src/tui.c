@@ -298,26 +298,71 @@ void tui_render_screen(client_t *client) {
     /* Move to top (Home) - Do NOT clear screen to prevent flicker */
     buffer_appendf(buffer, buf_size, &pos, ANSI_HOME);
 
-    /* Title bar */
-    const char *mode_str = (client->mode == MODE_INSERT) ? "INSERT" :
-                          (client->mode == MODE_NORMAL) ? "NORMAL" :
-                          (client->mode == MODE_COMMAND) ? "COMMAND" : "HELP";
+    /* Title bar — segmented chips on a single line, no full-line reverse.
+     *
+     * Segments (left to right):
+     *   • bold username
+     *   • online count
+     *   • mode name (colour matches the mode itself: cyan/yellow/magenta)
+     *   • mute marker, only when active
+     *   • right-aligned hint
+     *
+     * `· ` separators are dim grey so the eye groups segments without
+     * mistaking them for content. */
+    struct title_chip { const char *value; const char *value_color; };
+    struct title_chip chips[3];
+    int chip_count = 0;
 
-    char title[256];
-    snprintf(title, sizeof(title),
-             " %s | 在线: %d | 模式: %s%s | ? 帮助 ",
-             client->username, online, mode_str,
-             client->mute_joins ? " [静音]" : "");
+    chips[chip_count].value = client->username;
+    chips[chip_count].value_color = "\033[1;37m";
+    chip_count++;
 
-    int title_width = utf8_string_width(title);
-    int padding = render_width - title_width;
-    if (padding < 0) padding = 0;
+    char online_buf[32];
+    snprintf(online_buf, sizeof(online_buf), "在线 %d", online);
+    chips[chip_count].value = online_buf;
+    chips[chip_count].value_color = "\033[37m";
+    chip_count++;
 
-    buffer_appendf(buffer, buf_size, &pos, ANSI_REVERSE "%s", title);
-    for (int i = 0; i < padding; i++) {
+    const char *mode_str;
+    const char *mode_color;
+    switch (client->mode) {
+        case MODE_INSERT:  mode_str = "INSERT";  mode_color = "\033[36m"; break;
+        case MODE_NORMAL:  mode_str = "NORMAL";  mode_color = "\033[33m"; break;
+        case MODE_COMMAND: mode_str = "COMMAND"; mode_color = "\033[35m"; break;
+        default:           mode_str = "HELP";    mode_color = "\033[34m"; break;
+    }
+    chips[chip_count].value = mode_str;
+    chips[chip_count].value_color = mode_color;
+    chip_count++;
+
+    /* Compose left half. */
+    char left[256];
+    size_t lpos = 0;
+    int left_width = 0;
+    for (int i = 0; i < chip_count; i++) {
+        if (i > 0) {
+            buffer_appendf(left, sizeof(left), &lpos, "\033[2;37m · \033[0m");
+            left_width += 3;
+        }
+        buffer_appendf(left, sizeof(left), &lpos, "%s%s\033[0m",
+                       chips[i].value_color, chips[i].value);
+        left_width += utf8_string_width(chips[i].value);
+    }
+    if (client->mute_joins) {
+        buffer_appendf(left, sizeof(left), &lpos, "  \033[2;37m静音\033[0m");
+        left_width += 4;
+    }
+
+    const char *hint = "? 帮助";
+    int hint_width = utf8_string_width(hint);
+    int gap = render_width - left_width - hint_width - 2;
+    if (gap < 1) gap = 1;
+
+    buffer_appendf(buffer, buf_size, &pos, " %s", left);
+    for (int i = 0; i < gap; i++) {
         buffer_append_bytes(buffer, buf_size, &pos, " ", 1);
     }
-    buffer_appendf(buffer, buf_size, &pos, ANSI_RESET "\033[K\r\n");
+    buffer_appendf(buffer, buf_size, &pos, "\033[2;37m%s\033[0m \033[K\r\n", hint);
 
     /* Render messages from snapshot */
     if (msg_snapshot) {
