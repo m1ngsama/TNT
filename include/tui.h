@@ -22,6 +22,11 @@ void tui_render_input(struct client *client, const char *input);
 /* Clear the screen */
 void tui_clear_screen(struct client *client);
 
+/* Render the pre-login welcome banner.  Centered, framed, shown once before
+ * the username prompt.  Caller is responsible for printing the prompt
+ * itself afterwards. */
+void tui_render_welcome(struct client *client);
+
 /* Get help text based on language */
 const char* tui_get_help_text(help_lang_t lang);
 

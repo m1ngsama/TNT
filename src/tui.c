@@ -118,6 +118,102 @@ void tui_clear_screen(client_t *client) {
     client_send(client, clear, strlen(clear));
 }
 
+/* Render the pre-login welcome banner.
+ *
+ * Centred horizontally; vertically positioned about a third of the way down
+ * the available height so the user's eye lands naturally on it before the
+ * prompt below.  Uses light box-drawing characters (U+256D / U+2570) so the
+ * frame matches the rest of the TUI's aesthetic instead of the older ASCII
+ * `==` rules. */
+void tui_render_welcome(client_t *client) {
+    if (!client || !client->connected) return;
+
+    int rw = client->width;
+    int rh = client->height;
+    if (rw < 10) rw = 10;
+    if (rh < 4) rh = 4;
+
+    /* Lines, in display order.  Width is computed in display columns. */
+    const char *line1 = "TNT · " TNT_VERSION;
+    const char *line2 = "匿名聊天室 · SSH";
+    const char *line3 = "Anonymous chat over SSH";
+
+    int inner_w = utf8_string_width(line1);
+    int w2 = utf8_string_width(line2);
+    int w3 = utf8_string_width(line3);
+    if (w2 > inner_w) inner_w = w2;
+    if (w3 > inner_w) inner_w = w3;
+    inner_w += 4;  /* 2 columns padding on each side */
+
+    /* Fall back to plain prompt if the terminal is too narrow for the frame. */
+    if (inner_w + 2 > rw) {
+        char fallback[128];
+        int n = snprintf(fallback, sizeof(fallback),
+                         ANSI_CLEAR ANSI_HOME
+                         "TNT %s — anonymous chat over SSH\r\n\r\n",
+                         TNT_VERSION);
+        if (n > 0) client_send(client, fallback, (size_t)n);
+        return;
+    }
+
+    int top_pad = rh / 3;
+    if (top_pad < 1) top_pad = 1;
+    int left_pad = (rw - (inner_w + 2)) / 2;
+    if (left_pad < 0) left_pad = 0;
+
+    /* ~5 KiB is plenty for the framed banner even on the largest terminals. */
+    char buf[4096];
+    size_t pos = 0;
+
+    buffer_appendf(buf, sizeof(buf), &pos, ANSI_CLEAR ANSI_HOME);
+    for (int i = 0; i < top_pad; i++) {
+        buffer_appendf(buf, sizeof(buf), &pos, "\r\n");
+    }
+
+    /* Top border: ╭───…───╮ */
+    for (int i = 0; i < left_pad; i++) buffer_append_bytes(buf, sizeof(buf), &pos, " ", 1);
+    buffer_append_bytes(buf, sizeof(buf), &pos, "\033[36m", 5);
+    buffer_append_bytes(buf, sizeof(buf), &pos, "╭", strlen("╭"));
+    for (int i = 0; i < inner_w; i++) buffer_append_bytes(buf, sizeof(buf), &pos, "─", strlen("─"));
+    buffer_append_bytes(buf, sizeof(buf), &pos, "╮", strlen("╮"));
+    buffer_append_bytes(buf, sizeof(buf), &pos, "\033[0m", 4);
+    buffer_appendf(buf, sizeof(buf), &pos, "\r\n");
+
+    /* Three content lines with surrounding │ borders, centred inside the frame. */
+    const char *lines[3] = {line1, line2, line3};
+    int widths[3] = {utf8_string_width(line1), w2, w3};
+    const char *line_color[3] = {"\033[1;36m", "\033[0m", "\033[2;37m"};
+    for (int li = 0; li < 3; li++) {
+        for (int i = 0; i < left_pad; i++) buffer_append_bytes(buf, sizeof(buf), &pos, " ", 1);
+        buffer_append_bytes(buf, sizeof(buf), &pos, "\033[36m", 5);
+        buffer_append_bytes(buf, sizeof(buf), &pos, "│", strlen("│"));
+        buffer_append_bytes(buf, sizeof(buf), &pos, "\033[0m", 4);
+
+        int pad_total = inner_w - widths[li];
+        int pad_left = pad_total / 2;
+        int pad_right = pad_total - pad_left;
+        for (int i = 0; i < pad_left; i++) buffer_append_bytes(buf, sizeof(buf), &pos, " ", 1);
+        buffer_appendf(buf, sizeof(buf), &pos, "%s%s\033[0m", line_color[li], lines[li]);
+        for (int i = 0; i < pad_right; i++) buffer_append_bytes(buf, sizeof(buf), &pos, " ", 1);
+
+        buffer_append_bytes(buf, sizeof(buf), &pos, "\033[36m", 5);
+        buffer_append_bytes(buf, sizeof(buf), &pos, "│", strlen("│"));
+        buffer_append_bytes(buf, sizeof(buf), &pos, "\033[0m", 4);
+        buffer_appendf(buf, sizeof(buf), &pos, "\r\n");
+    }
+
+    /* Bottom border: ╰───…───╯ */
+    for (int i = 0; i < left_pad; i++) buffer_append_bytes(buf, sizeof(buf), &pos, " ", 1);
+    buffer_append_bytes(buf, sizeof(buf), &pos, "\033[36m", 5);
+    buffer_append_bytes(buf, sizeof(buf), &pos, "╰", strlen("╰"));
+    for (int i = 0; i < inner_w; i++) buffer_append_bytes(buf, sizeof(buf), &pos, "─", strlen("─"));
+    buffer_append_bytes(buf, sizeof(buf), &pos, "╯", strlen("╯"));
+    buffer_append_bytes(buf, sizeof(buf), &pos, "\033[0m", 4);
+    buffer_appendf(buf, sizeof(buf), &pos, "\r\n\r\n");
+
+    client_send(client, buf, pos);
+}
+
 /* Render the main screen */
 void tui_render_screen(client_t *client) {
     if (!client || !client->connected) return;

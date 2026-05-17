@@ -27,12 +27,8 @@ static int read_username(client_t *client) {
     int pos = 0;
     char buf[4];
 
-    tui_clear_screen(client);
-    client_printf(client, "================================\r\n");
-    client_printf(client, "  欢迎来到 TNT 匿名聊天室\r\n");
-    client_printf(client, "  Welcome to TNT Anonymous Chat\r\n");
-    client_printf(client, "================================\r\n\r\n");
-    client_printf(client, "请输入用户名 (留空默认为 anonymous): ");
+    tui_render_welcome(client);
+    client_printf(client, "  请输入用户名 (留空 anonymous): ");
 
     while (1) {
         int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 60000); /* 60 sec timeout */
