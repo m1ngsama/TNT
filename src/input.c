@@ -11,6 +11,7 @@
 #include <libssh/callbacks.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
+#include <strings.h>  /* strncasecmp */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -320,6 +321,53 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 if (input[0] != '\0') {
                     input[0] = '\0';
                     tui_render_input(client, input);
+                }
+                return true;
+            } else if (key == 9) { /* Tab: complete @mention */
+                /* Walk back from end to find the start of the trailing
+                 * "@…" token (an '@' not preceded by an alphanumeric).
+                 * If found, scan g_room for the first case-insensitive
+                 * username prefix-match (cycling past self) and replace
+                 * the token. */
+                size_t in_len = strlen(input);
+                ssize_t at_idx = -1;
+                for (ssize_t i = (ssize_t)in_len - 1; i >= 0; i--) {
+                    unsigned char c = (unsigned char)input[i];
+                    if (c == '@') {
+                        if (i == 0 || input[i - 1] == ' ') at_idx = i;
+                        break;
+                    }
+                    if (c == ' ') break;
+                }
+                if (at_idx >= 0) {
+                    const char *prefix = input + at_idx + 1;
+                    size_t plen = strlen(prefix);
+                    char match[MAX_USERNAME_LEN] = "";
+                    pthread_rwlock_rdlock(&g_room->lock);
+                    for (int i = 0; i < g_room->client_count; i++) {
+                        const char *uname = g_room->clients[i]->username;
+                        if (plen == 0
+                                ? strcmp(uname, client->username) != 0
+                                : strncasecmp(uname, prefix, plen) == 0) {
+                            strncpy(match, uname, sizeof(match) - 1);
+                            match[sizeof(match) - 1] = '\0';
+                            break;
+                        }
+                    }
+                    pthread_rwlock_unlock(&g_room->lock);
+                    if (match[0] != '\0') {
+                        /* Replace "@<prefix>" with "@<match> " (trailing
+                         * space so the next word starts cleanly). */
+                        size_t avail = MAX_MESSAGE_LEN - 1
+                                       - (size_t)at_idx - 1;
+                        size_t mlen = strlen(match);
+                        if (mlen + 1 <= avail) {
+                            input[at_idx + 1] = '\0';
+                            strncat(input, match, avail);
+                            strncat(input, " ", 1);
+                            tui_render_input(client, input);
+                        }
+                    }
                 }
                 return true;
             }
