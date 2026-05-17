@@ -317,6 +317,32 @@ Delete `motd.txt` to disable the MOTD.
 - **Concurrency**: Supports 100+ concurrent connections
 - **Throughput**: 1000+ messages/second
 
+## Troubleshooting
+
+### "Connection closed by remote host" right after `ssh -p 2222 host`
+
+TNT has very little it can say to the SSH client before disconnecting,
+so any pre-auth rejection just looks like a generic close.  Common
+causes, fastest to slowest fix:
+
+| Likely cause | Why | Fix |
+|---|---|---|
+| Per-IP concurrent limit | `TNT_MAX_CONN_PER_IP` (default 5) | Close other sessions, or raise the env var |
+| Per-IP connection rate | More than `TNT_MAX_CONN_RATE_PER_IP` attempts in 60 s | Wait 5 min (block window), or raise the limit |
+| Auth-failure ban | 5 wrong passwords / failed kex in a row | Wait 5 min |
+| Global cap | `TNT_MAX_CONNECTIONS` (default 64) is full | Wait for someone to leave |
+| Firewall | The host's ufw / iptables doesn't open 2222 | Open the port |
+
+The server admin can confirm which by checking the systemd journal
+(`sudo journalctl -u tnt -n 50 --no-pager`) — the rejection reason is
+logged to stderr with the offending IP.
+
+### Idle disconnect
+
+After `TNT_IDLE_TIMEOUT` seconds (default 1800 = 30 min) of no
+keystrokes, TNT prints `Disconnected: idle timeout (N min)` and closes
+the channel.  Set the env var to `0` to disable.
+
 ## Known Limitations
 
 - Single chat room (no multi-room support yet)
