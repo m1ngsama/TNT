@@ -543,7 +543,95 @@ void tui_render_command_output(client_t *client) {
     client_send(client, buffer, pos);
 }
 
-/* Get help text based on language */
+/* Render the MOTD screen.
+ *
+ * A framed banner with a title chip embedded in the top border and an
+ * "any key to continue" hint embedded in the bottom border, MOTD body
+ * left-padded inside.  Dismissed by handle_key like any other modal
+ * (sets command_output[0]='\0' and show_motd=false).
+ *
+ * Lighter aesthetic than tui_render_command_output: no full-line reverse,
+ * dim borders, two blank lines of breathing room above and below the
+ * body so the announcement reads as a notice rather than a console dump. */
+void tui_render_motd(client_t *client) {
+    if (!client || !client->connected) return;
+
+    int rw = client->width;
+    int rh = client->height;
+    if (rw < 10) rw = 10;
+    if (rh < 4) rh = 4;
+
+    char buffer[4096];
+    size_t pos = 0;
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
+
+    /* Top border: ╭─ 公告 / MOTD ──...──╮ */
+    const char *title = " 公告 / MOTD ";
+    int title_w = utf8_string_width(title);
+    int top_dash_fill = rw - 2 - title_w - 1;  /* 2 corners, 1 leading ─ */
+    if (top_dash_fill < 0) top_dash_fill = 0;
+
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[2;36m╭─");
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[0;1;36m%s\033[2;36m", title);
+    for (int i = 0; i < top_dash_fill; i++) {
+        buffer_append_bytes(buffer, sizeof(buffer), &pos, "─", strlen("─"));
+    }
+    buffer_appendf(buffer, sizeof(buffer), &pos, "╮\033[0m\r\n");
+
+    /* Top breathing-room line */
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\r\n");
+
+    /* Body lines (left-pad 2 cols, truncate to inner width) */
+    char body_copy[2048];
+    strncpy(body_copy, client->command_output, sizeof(body_copy) - 1);
+    body_copy[sizeof(body_copy) - 1] = '\0';
+
+    int body_lines = 0;
+    int max_body_lines = rh - 4;  /* top border + top pad + bottom pad + bottom border */
+    if (max_body_lines < 1) max_body_lines = 1;
+
+    char *line = strtok(body_copy, "\n");
+    while (line && body_lines < max_body_lines) {
+        char truncated[1024];
+        strncpy(truncated, line, sizeof(truncated) - 1);
+        truncated[sizeof(truncated) - 1] = '\0';
+
+        int avail = rw - 4;  /* 2 cols padding each side */
+        if (avail < 4) avail = 4;
+        if (utf8_string_width(truncated) > avail) {
+            utf8_truncate(truncated, avail);
+        }
+        buffer_appendf(buffer, sizeof(buffer), &pos, "  %s\r\n", truncated);
+        body_lines++;
+        line = strtok(NULL, "\n");
+    }
+
+    /* Fill empty space up to the bottom border */
+    int used_rows = 1 /*top*/ + 1 /*pad*/ + body_lines + 1 /*pad*/ + 1 /*bottom*/;
+    int filler_rows = rh - used_rows;
+    if (filler_rows < 0) filler_rows = 0;
+    for (int i = 0; i < filler_rows; i++) {
+        buffer_appendf(buffer, sizeof(buffer), &pos, "\r\n");
+    }
+
+    /* Bottom breathing-room line */
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\r\n");
+
+    /* Bottom border: ╰─ 按任意键继续 ─...─╯ */
+    const char *footer = " 按任意键继续 / press any key ";
+    int footer_w = utf8_string_width(footer);
+    int bot_dash_fill = rw - 2 - footer_w - 1;
+    if (bot_dash_fill < 0) bot_dash_fill = 0;
+
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[2;36m╰─");
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[0;2;37m%s\033[2;36m", footer);
+    for (int i = 0; i < bot_dash_fill; i++) {
+        buffer_append_bytes(buffer, sizeof(buffer), &pos, "─", strlen("─"));
+    }
+    buffer_appendf(buffer, sizeof(buffer), &pos, "╯\033[0m");
+
+    client_send(client, buffer, pos);
+}
 const char* tui_get_help_text(help_lang_t lang) {
     if (lang == LANG_EN) {
         return "TERMINAL CHAT ROOM - HELP\n"

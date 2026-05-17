@@ -194,9 +194,10 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
         return true;  /* Key consumed */
     }
 
-    /* Handle command output display */
+    /* Handle command output / MOTD display: any key dismisses */
     if (client->command_output[0] != '\0') {
         client->command_output[0] = '\0';
+        client->show_motd = false;
         client->mode = MODE_NORMAL;
         tui_render_screen(client);
         return true;  /* Key consumed */
@@ -447,9 +448,11 @@ void input_run_session(client_t *client) {
                 fclose(motd_fp);
                 if (motd_len > 0) {
                     motd_buf[motd_len] = '\0';
-                    snprintf(client->command_output, sizeof(client->command_output),
-                             "=== 公告 / MOTD ===\n%s", motd_buf);
-                    tui_render_command_output(client);
+                    snprintf(client->command_output,
+                             sizeof(client->command_output),
+                             "%s", motd_buf);
+                    client->show_motd = true;
+                    tui_render_motd(client);
                     seen_update_seq = room_get_update_seq(g_room);
                     goto main_loop;
                 }
@@ -491,6 +494,8 @@ main_loop:
 
                 if (client->show_help) {
                     tui_render_help(client);
+                } else if (client->show_motd) {
+                    tui_render_motd(client);
                 } else if (client->command_output[0] != '\0') {
                     tui_render_command_output(client);
                 } else {

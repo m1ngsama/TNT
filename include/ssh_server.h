@@ -25,6 +25,7 @@ typedef struct client {
     int command_history_count;
     int command_history_pos;
     char command_output[2048];
+    bool show_motd;                  /* command_output holds MOTD text */
     char exec_command[MAX_EXEC_COMMAND_LEN];
     char ssh_login[MAX_USERNAME_LEN];
     time_t connect_time;

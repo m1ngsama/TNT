@@ -16,6 +16,11 @@ void tui_render_help(struct client *client);
 /* Render the command output screen */
 void tui_render_command_output(struct client *client);
 
+/* Render the MOTD screen.  Reads the message text from
+ * client->command_output (shared storage); the show_motd flag selects
+ * this renderer over tui_render_command_output. */
+void tui_render_motd(struct client *client);
+
 /* Render the input line */
 void tui_render_input(struct client *client, const char *input);
 
