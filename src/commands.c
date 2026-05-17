@@ -78,20 +78,15 @@ void commands_dispatch(client_t *client) {
 
     if (strcmp(cmd, "list") == 0 || strcmp(cmd, "users") == 0 ||
         strcmp(cmd, "who") == 0) {
-        buffer_appendf(output, sizeof(output), &pos,
-                       "========================================\n"
-                       "     Online Users / 在线用户\n"
-                       "========================================\n");
-
         pthread_rwlock_rdlock(&g_room->lock);
+        int total = g_room->client_count;
         buffer_appendf(output, sizeof(output), &pos,
-                       "Total / 总数: %d\n"
-                       "----------------------------------------\n",
-                       g_room->client_count);
+                       "\033[1;36m在线用户 · online\033[0m  "
+                       "\033[2;37m· %d\033[0m\n", total);
 
         time_t now = time(NULL);
-        for (int i = 0; i < g_room->client_count; i++) {
-            char marker = (g_room->clients[i] == client) ? '*' : ' ';
+        for (int i = 0; i < total; i++) {
+            bool is_self = (g_room->clients[i] == client);
             int dur = (int)(now - g_room->clients[i]->connect_time);
             char dur_str[32];
             if (dur < 60) {
@@ -99,18 +94,16 @@ void commands_dispatch(client_t *client) {
             } else if (dur < 3600) {
                 snprintf(dur_str, sizeof(dur_str), "%dm", dur / 60);
             } else {
-                snprintf(dur_str, sizeof(dur_str), "%dh%dm", dur / 3600, (dur % 3600) / 60);
+                snprintf(dur_str, sizeof(dur_str), "%dh%dm",
+                         dur / 3600, (dur % 3600) / 60);
             }
+            /* 1-column gutter: ▎ for you, blank for others */
             buffer_appendf(output, sizeof(output), &pos,
-                           "%c %d. %s (%s)\n", marker, i + 1,
+                           "%s  \033[37m%s\033[0m  \033[2;37m· %s\033[0m\n",
+                           is_self ? "\033[36m▎\033[0m" : " ",
                            g_room->clients[i]->username, dur_str);
         }
-
         pthread_rwlock_unlock(&g_room->lock);
-
-        buffer_appendf(output, sizeof(output), &pos,
-                       "========================================\n"
-                       "* = you / 你\n");
 
     } else if (strcmp(cmd, "help") == 0 || strcmp(cmd, "commands") == 0) {
         buffer_appendf(output, sizeof(output), &pos,
