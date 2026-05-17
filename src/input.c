@@ -167,6 +167,12 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
 
     /* Handle help screen */
     if (client->show_help) {
+        /* Page size: roughly the visible help body region. */
+        int page = client->height - 2;
+        if (page < 1) page = 1;
+        int half = page / 2;
+        if (half < 1) half = 1;
+
         if (key == 'q' || key == 27) {
             client->show_help = false;
             tui_render_screen(client);
@@ -183,6 +189,20 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             tui_render_help(client);
         } else if (key == 'k' && client->help_scroll_pos > 0) {
             client->help_scroll_pos--;
+            tui_render_help(client);
+        } else if (key == 4) {  /* Ctrl+D: half page down */
+            client->help_scroll_pos += half;
+            tui_render_help(client);
+        } else if (key == 21) {  /* Ctrl+U: half page up */
+            client->help_scroll_pos -= half;
+            if (client->help_scroll_pos < 0) client->help_scroll_pos = 0;
+            tui_render_help(client);
+        } else if (key == 6) {  /* Ctrl+F: full page down */
+            client->help_scroll_pos += page;
+            tui_render_help(client);
+        } else if (key == 2) {  /* Ctrl+B: full page up */
+            client->help_scroll_pos -= page;
+            if (client->help_scroll_pos < 0) client->help_scroll_pos = 0;
             tui_render_help(client);
         } else if (key == 'g') {
             client->help_scroll_pos = 0;

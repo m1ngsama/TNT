@@ -730,6 +730,8 @@ const char* tui_get_help_text(help_lang_t lang) {
                "HELP SCREEN KEYS:\n"
                "  q, ESC     - Close help\n"
                "  j/k        - Scroll down/up\n"
+               "  Ctrl+D/U   - Scroll half page down/up\n"
+               "  Ctrl+F/B   - Scroll full page down/up\n"
                "  g/G        - Jump to top/bottom\n"
                "  e/z        - Switch English/Chinese\n";
     } else {
@@ -777,6 +779,8 @@ const char* tui_get_help_text(help_lang_t lang) {
                "帮助界面按键:\n"
                "  q, ESC     - 关闭帮助\n"
                "  j/k        - 向下/上滚动\n"
+               "  Ctrl+D/U   - 向下/上滚动半页\n"
+               "  Ctrl+F/B   - 向下/上滚动整页\n"
                "  g/G        - 跳到顶部/底部\n"
                "  e/z        - 切换英文/中文\n";
     }
