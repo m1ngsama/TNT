@@ -12,16 +12,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: linux-amd64
             artifact: tnt-linux-amd64
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             target: linux-arm64
             artifact: tnt-linux-arm64
-          - os: macos-latest
+          - os: macos-15-intel
             target: darwin-amd64
             artifact: tnt-darwin-amd64
-          - os: macos-latest
+          - os: macos-15
             target: darwin-arm64
             artifact: tnt-darwin-arm64
 
@@ -34,19 +34,34 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libssh-dev
 
-    - name: Install cross-compilation tools (Ubuntu ARM64)
-      if: matrix.target == 'linux-arm64'
-      run: |
-        sudo apt-get install -y gcc-aarch64-linux-gnu
-        sudo dpkg --add-architecture arm64
-
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
         brew install libssh
 
+    - name: Run release preflight
+      run: make release-check
+
     - name: Build release binary
       run: make release
+
+    - name: Verify artifact architecture
+      run: |
+        file tnt
+        case "${{ matrix.target }}" in
+          linux-amd64)
+            file tnt | grep -E 'ELF 64-bit.*x86-64'
+            ;;
+          linux-arm64)
+            file tnt | grep -E 'ELF 64-bit.*(aarch64|ARM aarch64)'
+            ;;
+          darwin-amd64)
+            file tnt | grep -E 'Mach-O 64-bit.*x86_64'
+            ;;
+          darwin-arm64)
+            file tnt | grep -E 'Mach-O 64-bit.*arm64'
+            ;;
+        esac
 
     - name: Rename binary
       run: mv tnt ${{ matrix.artifact }}
@@ -74,19 +89,18 @@ jobs:
     - name: Create checksums
       run: |
         cd artifacts
-        for dir in */; do
-          cd "$dir"
-          sha256sum * > checksums.txt
-          cd ..
+        : > checksums.txt
+        for artifact in */tnt-*; do
+          sha256sum "$artifact" | sed "s#  $artifact#  $(basename "$artifact")#" >> checksums.txt
         done
-        cd ..
+        cat checksums.txt
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
           artifacts/*/tnt-*
-          artifacts/*/checksums.txt
+          artifacts/checksums.txt
         body: |
           ## Installation
 
@@ -126,8 +140,8 @@ jobs:
           ```
 
           ## What's Changed
-          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md)
-        draft: false
+          See [docs/CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/CHANGELOG.md)
+        draft: true
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

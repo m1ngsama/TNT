@@ -34,6 +34,9 @@
   without tagging, publishing, or deploying.
 - CI now installs `expect` on Ubuntu so interactive integration tests run
   instead of being skipped, and runs `make release-check` on every push/PR.
+- The tag-triggered release workflow now builds on native x64/arm64 runners,
+  verifies artifact architecture, emits one checksum file, and creates a draft
+  release for manual review instead of publishing immediately.
 
 ## 2026-05-18 - Interactive input polish
 

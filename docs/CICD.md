@@ -37,11 +37,15 @@ CREATING RELEASES
 
 5. GitHub Actions automatically:
    - Builds binaries (Linux/macOS, AMD64/ARM64)
-   - Creates release
+   - Creates a draft release
    - Uploads binaries
-   - Generates checksums
+   - Generates one `checksums.txt` file
+   - Verifies that artifact architecture matches the asset name
 
-6. Release appears at:
+6. Review the draft release, smoke-test downloaded assets, then publish it
+   manually from GitHub.
+
+7. Release appears at:
    https://github.com/m1ngsama/TNT/releases
 
 
