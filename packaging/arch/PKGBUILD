@@ -1,0 +1,25 @@
+# Maintainer: M1ng <REPLACE_WITH_EMAIL>
+
+pkgname=tnt-chat
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='SSH-native terminal chat server with a Vim-style interface'
+arch=('x86_64' 'aarch64')
+url='https://github.com/m1ngsama/TNT'
+license=('MIT')
+depends=('libssh')
+makedepends=('gcc' 'make')
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "TNT-${pkgver}"
+  make
+}
+
+package() {
+  cd "TNT-${pkgver}"
+  make DESTDIR="${pkgdir}" PREFIX=/usr install
+  make DESTDIR="${pkgdir}" PREFIX=/usr install-systemd
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

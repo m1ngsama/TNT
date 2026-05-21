@@ -25,7 +25,12 @@ OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 DEPS = $(OBJECTS:.o=.d)
 TARGET = tnt
 
-.PHONY: all clean install uninstall debug release asan valgrind check test unit-test info
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+MANDIR ?= $(PREFIX)/share/man
+SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
+
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release asan valgrind check test unit-test info
 
 all: $(TARGET)
 
@@ -45,14 +50,21 @@ clean:
 	@echo "Clean complete"
 
 install: $(TARGET)
-	install -d $(DESTDIR)/usr/local/bin
-	install -m 755 $(TARGET) $(DESTDIR)/usr/local/bin/
-	install -d $(DESTDIR)/usr/local/share/man/man1
-	install -m 644 tnt.1 $(DESTDIR)/usr/local/share/man/man1/
+	install -d $(DESTDIR)$(BINDIR)
+	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/
+	install -d $(DESTDIR)$(MANDIR)/man1
+	install -m 644 tnt.1 $(DESTDIR)$(MANDIR)/man1/
+
+install-systemd:
+	install -d $(DESTDIR)$(SYSTEMD_UNIT_DIR)
+	install -m 644 tnt.service $(DESTDIR)$(SYSTEMD_UNIT_DIR)/
 
 uninstall:
-	rm -f $(DESTDIR)/usr/local/bin/$(TARGET)
-	rm -f $(DESTDIR)/usr/local/share/man/man1/tnt.1
+	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -f $(DESTDIR)$(MANDIR)/man1/tnt.1
+
+uninstall-systemd:
+	rm -f $(DESTDIR)$(SYSTEMD_UNIT_DIR)/tnt.service
 
 # Development targets
 debug: CFLAGS += -g -DDEBUG
