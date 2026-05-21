@@ -186,6 +186,7 @@ ssh -p 2222 chat.m1ng.space post "/me deploys v2.0"
 make              # standard build
 make debug        # debug build (with symbols)
 make asan         # AddressSanitizer build
+make release-check # local release/package preflight
 make check        # static analysis (cppcheck)
 make clean        # clean build artifacts
 ```
@@ -248,6 +249,7 @@ TNT/
 ├── include/          # header files
 ├── tests/            # test scripts
 ├── docs/             # documentation
+├── packaging/        # package-manager drafts and release checklist
 ├── scripts/          # operational scripts
 ├── Makefile          # build configuration
 └── README.md         # this file
@@ -288,6 +290,23 @@ CMD ["tnt"]
 ```
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
+
+## Packaging
+
+Package-manager drafts live in [packaging/](packaging/). Current targets are
+Arch/AUR (`tnt-chat`), Homebrew tap formula, and Ubuntu PPA notes.
+
+Before preparing a release locally:
+
+```sh
+make release-check
+```
+
+Before publishing package recipes, replace placeholder checksums and run:
+
+```sh
+make release-check-strict
+```
 
 ## Files
 

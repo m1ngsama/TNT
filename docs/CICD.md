@@ -17,19 +17,30 @@ into production or restart services on push.
 
 CREATING RELEASES
 -----------------
-1. Update version in CHANGELOG.md
+1. Update version metadata:
+   - include/common.h
+   - tnt.1
+   - docs/CHANGELOG.md
+   - packaging/arch/PKGBUILD
+   - packaging/homebrew/tnt-chat.rb
 
-2. Create and push tag:
+2. Run the local preflight:
+   make release-check
+
+3. Replace package checksum placeholders and run:
+   make release-check-strict
+
+4. Create and push tag:
    git tag v1.0.0
    git push origin v1.0.0
 
-3. GitHub Actions automatically:
+5. GitHub Actions automatically:
    - Builds binaries (Linux/macOS, AMD64/ARM64)
    - Creates release
    - Uploads binaries
    - Generates checksums
 
-4. Release appears at:
+6. Release appears at:
    https://github.com/m1ngsama/TNT/releases
 
 
@@ -84,7 +95,7 @@ PLATFORMS SUPPORTED
 EXAMPLE WORKFLOW
 ----------------
 # Local development
-make && make asan
+make && make asan && make release-check
 ./tnt
 
 # Create release

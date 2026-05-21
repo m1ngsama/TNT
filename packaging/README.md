@@ -19,14 +19,16 @@ any public registry.
 5. Verify package contents in an isolated directory:
 
    ```sh
-   make clean
-   make
-   tmpdir="$(mktemp -d)"
-   make DESTDIR="$tmpdir" PREFIX=/usr install
-   find "$tmpdir" -type f | sort
+   make release-check
    ```
 
-6. Submit packages manually:
+6. Before submitting package recipes, replace checksum placeholders and run:
+
+   ```sh
+   make release-check-strict
+   ```
+
+7. Submit packages manually:
    - Arch: upload `PKGBUILD` and generated `.SRCINFO` to AUR.
    - Homebrew: open a PR to the project tap, or later Homebrew core if eligible.
    - Ubuntu: build Debian source packages and upload to a Launchpad PPA.

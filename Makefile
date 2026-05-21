@@ -30,7 +30,7 @@ BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release asan valgrind check test unit-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test unit-test info
 
 all: $(TARGET)
 
@@ -73,6 +73,12 @@ debug: clean $(TARGET)
 release: CFLAGS += -O3 -DNDEBUG
 release: clean $(TARGET)
 	strip $(TARGET)
+
+release-check:
+	./scripts/release_check.sh
+
+release-check-strict:
+	./scripts/release_check.sh --strict
 
 asan: CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
 asan: LDFLAGS += -fsanitize=address

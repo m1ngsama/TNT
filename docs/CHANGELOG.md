@@ -30,6 +30,8 @@
   and `:support`.
 - `:support` is now task-oriented around common user goals, and mistyped
   commands suggest the nearest known command when possible.
+- Added a local `make release-check` preflight for release/package validation
+  without tagging, publishing, or deploying.
 
 ## 2026-05-18 - Interactive input polish
 
