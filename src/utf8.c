@@ -96,6 +96,49 @@ int utf8_string_width(const char *str) {
     return width;
 }
 
+static const char *skip_ansi_sequence(const char *p) {
+    if (!p || *p != '\033') {
+        return p;
+    }
+
+    if (p[1] == '[') {
+        const char *q = p + 2;
+        while (*q) {
+            unsigned char c = (unsigned char)*q;
+            if (c >= 0x40 && c <= 0x7E) {
+                return q + 1;
+            }
+            q++;
+        }
+        return p + 1;
+    }
+
+    return p[1] ? p + 2 : p + 1;
+}
+
+int utf8_ansi_string_width(const char *str) {
+    int width = 0;
+    int bytes_read;
+    const char *p = str;
+
+    if (!str) {
+        return 0;
+    }
+
+    while (*p != '\0') {
+        if (*p == '\033') {
+            p = skip_ansi_sequence(p);
+            continue;
+        }
+
+        uint32_t codepoint = utf8_decode(p, &bytes_read);
+        width += utf8_char_width(codepoint);
+        p += bytes_read;
+    }
+
+    return width;
+}
+
 /* Count the number of UTF-8 characters in a string */
 int utf8_strlen(const char *str) {
     int count = 0;
@@ -132,6 +175,72 @@ void utf8_truncate(char *str, int max_width) {
     }
 
     *last_valid = '\0';
+}
+
+void utf8_ansi_truncate(const char *src, char *dst, size_t dst_size,
+                        int max_width) {
+    int width = 0;
+    int bytes_read;
+    size_t pos = 0;
+    bool copied_ansi = false;
+    bool last_ansi_was_reset = false;
+    bool truncated = false;
+    const char *p = src;
+
+    if (!dst || dst_size == 0) {
+        return;
+    }
+
+    dst[0] = '\0';
+    if (!src || max_width <= 0) {
+        return;
+    }
+
+    while (*p != '\0') {
+        if (*p == '\033') {
+            const char *end = skip_ansi_sequence(p);
+            size_t len = (size_t)(end - p);
+
+            if (pos + len >= dst_size) {
+                truncated = true;
+                break;
+            }
+            memcpy(dst + pos, p, len);
+            pos += len;
+            copied_ansi = true;
+            last_ansi_was_reset =
+                len == strlen(ANSI_RESET) && memcmp(p, ANSI_RESET, len) == 0;
+            p = end;
+            continue;
+        }
+
+        uint32_t codepoint = utf8_decode(p, &bytes_read);
+        int char_width = utf8_char_width(codepoint);
+
+        if (width + char_width > max_width) {
+            truncated = true;
+            break;
+        }
+        if (pos + (size_t)bytes_read >= dst_size) {
+            truncated = true;
+            break;
+        }
+
+        memcpy(dst + pos, p, (size_t)bytes_read);
+        pos += (size_t)bytes_read;
+        width += char_width;
+        p += bytes_read;
+    }
+
+    if (truncated && copied_ansi && !last_ansi_was_reset) {
+        size_t reset_len = strlen(ANSI_RESET);
+        if (pos + reset_len < dst_size) {
+            memcpy(dst + pos, ANSI_RESET, reset_len);
+            pos += reset_len;
+        }
+    }
+
+    dst[pos] = '\0';
 }
 
 /* Remove last UTF-8 character from string */

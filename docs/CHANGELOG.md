@@ -22,6 +22,8 @@
   clients can discover common actions and troubleshooting paths in-product.
 - The GitHub workflow formerly named deploy now runs CI only; production
   deployment remains a manual operator action.
+- Command output rendering now truncates ANSI-styled UTF-8 text without
+  counting escape sequences as visible width or cutting color codes.
 
 ## 2026-05-18 - Interactive input polish
 

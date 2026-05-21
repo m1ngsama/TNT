@@ -621,11 +621,14 @@ void tui_render_command_output(client_t *client) {
 
     /* Title */
     const char *title = " COMMAND OUTPUT ";
-    int title_width = strlen(title);
+    char title_display[64];
+    utf8_ansi_truncate(title, title_display, sizeof(title_display), rw);
+    int title_width = utf8_ansi_string_width(title_display);
     int padding = rw - title_width;
     if (padding < 0) padding = 0;
 
-    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_REVERSE "%s", title);
+    buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_REVERSE "%s",
+                   title_display);
     for (int i = 0; i < padding; i++) {
         buffer_append_bytes(buffer, sizeof(buffer), &pos, " ", 1);
     }
@@ -642,12 +645,7 @@ void tui_render_command_output(client_t *client) {
 
     while (line && line_count < max_lines) {
         char truncated[1024];
-        strncpy(truncated, line, sizeof(truncated) - 1);
-        truncated[sizeof(truncated) - 1] = '\0';
-
-        if (utf8_string_width(truncated) > rw) {
-            utf8_truncate(truncated, rw);
-        }
+        utf8_ansi_truncate(line, truncated, sizeof(truncated), rw);
 
         buffer_appendf(buffer, sizeof(buffer), &pos, "%s\r\n", truncated);
         line = strtok(NULL, "\n");

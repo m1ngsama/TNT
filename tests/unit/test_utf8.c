@@ -114,6 +114,22 @@ TEST(utf8_string_width_cjk_only) {
     assert(utf8_string_width("中文字符") == 8);
 }
 
+TEST(utf8_ansi_string_width_ignores_escape_sequences) {
+    assert(utf8_ansi_string_width("\033[1;36mHello\033[0m") == 5);
+    assert(utf8_ansi_string_width("\033[31m支持\033[0m") == 4);
+    assert(utf8_ansi_string_width("A\033[7;33m中\033[0mB") == 4);
+}
+
+TEST(utf8_ansi_truncate_preserves_escape_sequences) {
+    char out[64];
+
+    utf8_ansi_truncate("\033[31mHello世界\033[0m", out, sizeof(out), 7);
+    assert(strcmp(out, "\033[31mHello世\033[0m") == 0);
+
+    utf8_ansi_truncate("A\033[7;33m中文\033[0mB", out, sizeof(out), 5);
+    assert(strcmp(out, "A\033[7;33m中文\033[0m") == 0);
+}
+
 /* Test backspace handling */
 TEST(utf8_remove_last_char) {
     char buffer[256];
@@ -228,6 +244,8 @@ int main(void) {
     RUN_TEST(utf8_string_width_ascii);
     RUN_TEST(utf8_string_width_mixed);
     RUN_TEST(utf8_string_width_cjk_only);
+    RUN_TEST(utf8_ansi_string_width_ignores_escape_sequences);
+    RUN_TEST(utf8_ansi_truncate_preserves_escape_sequences);
     RUN_TEST(utf8_remove_last_char);
     RUN_TEST(utf8_remove_last_char_multibyte);
     RUN_TEST(utf8_remove_last_word);

@@ -15,8 +15,15 @@ uint32_t utf8_decode(const char *str, int *bytes_read);
 /* Calculate display width of a UTF-8 string (considering CJK double-width) */
 int utf8_string_width(const char *str);
 
+/* Calculate display width while treating ANSI escape sequences as zero-width */
+int utf8_ansi_string_width(const char *str);
+
 /* Truncate string to fit within max_width display characters */
 void utf8_truncate(char *str, int max_width);
+
+/* Truncate ANSI-styled UTF-8 text without cutting escape sequences */
+void utf8_ansi_truncate(const char *src, char *dst, size_t dst_size,
+                        int max_width);
 
 /* Count the number of UTF-8 characters in a string */
 int utf8_strlen(const char *str);
