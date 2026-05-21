@@ -14,6 +14,7 @@ Default checks:
   - clean build
   - unit tests
   - staged install layout with PREFIX=/usr and DESTDIR
+  - installer shell syntax
   - Arch/Homebrew packaging syntax
 
 Environment:
@@ -96,6 +97,9 @@ make DESTDIR="$tmpdir" PREFIX=/usr install-systemd
 [ -f "$tmpdir/usr/share/man/man1/tnt.1" ] || fail "missing manpage: /usr/share/man/man1/tnt.1"
 [ -f "$tmpdir/usr/lib/systemd/system/tnt.service" ] ||
     fail "missing systemd unit: /usr/lib/systemd/system/tnt.service"
+
+step "checking installer syntax"
+sh -n install.sh
 
 step "checking packaging syntax"
 if command -v bash >/dev/null 2>&1; then

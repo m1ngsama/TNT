@@ -37,6 +37,8 @@
 - The tag-triggered release workflow now builds on native x64/arm64 runners,
   verifies artifact architecture, emits one checksum file, and creates a draft
   release for manual review instead of publishing immediately.
+- The one-line installer now downloads `checksums.txt`, verifies the selected
+  binary before installation, and fails fast on missing release assets.
 
 ## 2026-05-18 - Interactive input polish
 

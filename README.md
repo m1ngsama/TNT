@@ -21,6 +21,8 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 ```sh
 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
+The installer verifies the downloaded release binary against `checksums.txt`
+before installing it.
 
 **From source:**
 ```sh
