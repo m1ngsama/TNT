@@ -44,6 +44,64 @@ static void append_highlighted(char *output, size_t buf_size, size_t *pos,
     }
 }
 
+static int min3(int a, int b, int c) {
+    int m = a < b ? a : b;
+    return m < c ? m : c;
+}
+
+static int command_edit_distance(const char *a, const char *b) {
+    size_t la = strlen(a);
+    size_t lb = strlen(b);
+    int prev[32];
+    int curr[32];
+
+    if (la >= 32 || lb >= 32) {
+        return 99;
+    }
+
+    for (size_t j = 0; j <= lb; j++) {
+        prev[j] = (int)j;
+    }
+
+    for (size_t i = 1; i <= la; i++) {
+        curr[0] = (int)i;
+        for (size_t j = 1; j <= lb; j++) {
+            int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+            curr[j] = min3(prev[j] + 1, curr[j - 1] + 1,
+                           prev[j - 1] + cost);
+        }
+        for (size_t j = 0; j <= lb; j++) {
+            prev[j] = curr[j];
+        }
+    }
+
+    return prev[lb];
+}
+
+static const char *suggest_command(const char *cmd) {
+    static const char *commands[] = {
+        "list", "users", "who", "nick", "name", "msg", "w", "inbox",
+        "last", "search", "mute-joins", "mute", "support", "guide",
+        "help", "commands", "clear", "cls", "q", "quit", "exit"
+    };
+    const char *best = NULL;
+    int best_distance = 99;
+
+    if (!cmd || !*cmd) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
+        int distance = command_edit_distance(cmd, commands[i]);
+        if (distance < best_distance) {
+            best_distance = distance;
+            best = commands[i];
+        }
+    }
+
+    return best_distance <= 2 ? best : NULL;
+}
+
 void commands_dispatch(client_t *client) {
     char cmd_buf[256];
     strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
@@ -368,9 +426,15 @@ void commands_dispatch(client_t *client) {
         return;
 
     } else {
+        const char *suggestion = suggest_command(cmd);
         buffer_appendf(output, sizeof(output), &pos,
-                       "Unknown command: %s\n"
-                       "Type 'help' for available commands\n", cmd);
+                       "Unknown command: %s\n", cmd);
+        if (suggestion) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Did you mean :%s?\n", suggestion);
+        }
+        buffer_appendf(output, sizeof(output), &pos,
+                       "Type :support for guidance or :help for commands\n");
     }
 
 cmd_done:

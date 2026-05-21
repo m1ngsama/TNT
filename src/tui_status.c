@@ -7,7 +7,18 @@ void tui_status_append(char *buffer, size_t buf_size, size_t *pos,
     if (!buffer || !pos || !client) return;
 
     if (client->mode == MODE_INSERT) {
-        buffer_appendf(buffer, buf_size, pos, "\033[2;37m›\033[0m \033[K");
+        if (client->width >= 58) {
+            buffer_appendf(buffer, buf_size, pos,
+                           "\033[2;37m›\033[0m  "
+                           "\033[2;37mEnter send · Esc browse · :support\033[0m"
+                           "\033[K");
+        } else if (client->width >= 36) {
+            buffer_appendf(buffer, buf_size, pos,
+                           "\033[2;37m›\033[0m  "
+                           "\033[2;37mEnter · Esc · :support\033[0m\033[K");
+        } else {
+            buffer_appendf(buffer, buf_size, pos, "\033[2;37m›\033[0m \033[K");
+        }
     } else if (client->mode == MODE_NORMAL) {
         int total = msg_count;
         int range_start = total == 0 ? 0 : start + 1;

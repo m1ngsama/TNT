@@ -26,6 +26,10 @@
   counting escape sequences as visible width or cutting color codes.
 - Host-key generation now uses the non-deprecated libssh PKI API on libssh
   0.12+ while keeping compatibility with older libssh releases.
+- INSERT mode now shows a lightweight first-use hint for sending, browsing,
+  and `:support`.
+- `:support` is now task-oriented around common user goals, and mistyped
+  commands suggest the nearest known command when possible.
 
 ## 2026-05-18 - Interactive input polish
 

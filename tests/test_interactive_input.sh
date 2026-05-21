@@ -64,7 +64,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "tester\r"
-expect "›"
+expect ":support"
 send -- "\033\[200~"
 send -- "line1\nline2\nline3"
 send -- "\033\[201~"
@@ -139,7 +139,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "supporter\r"
-expect "›"
+expect ":support"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -161,6 +161,38 @@ if expect "$SUPPORT_SCRIPT" >"$STATE_DIR/support.log" 2>&1; then
 else
     echo "x :support command failed"
     sed -n '1,160p' "$STATE_DIR/support.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+UNKNOWN_SCRIPT="$STATE_DIR/unknown-command.expect"
+cat >"$UNKNOWN_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "mistype\r"
+expect ":support"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "suport\r"
+expect "Did you mean :support"
+expect "Press any key"
+send -- "q"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$UNKNOWN_SCRIPT" >"$STATE_DIR/unknown-command.log" 2>&1; then
+    echo "✓ mistyped command suggests nearest command"
+    PASS=$((PASS + 1))
+else
+    echo "x mistyped command suggestion failed"
+    sed -n '1,160p' "$STATE_DIR/unknown-command.log"
     sed -n '1,120p' "$STATE_DIR/server.log"
     FAIL=$((FAIL + 1))
 fi
