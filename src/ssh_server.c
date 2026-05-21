@@ -7,6 +7,7 @@
 #include "tui.h"
 #include "utf8.h"
 #include <libssh/libssh.h>
+#include <libssh/libssh_version.h>
 #include <libssh/server.h>
 #include <libssh/callbacks.h>
 #include <sys/socket.h>
@@ -32,6 +33,29 @@ time_t ssh_server_start_time(void) {
 
 /* Configuration from environment variables.  Rate-limiting moved to ratelimit.{c,h},
  * the access token to bootstrap.{c,h}, and the idle timeout to input.{c,h}. */
+
+static int generate_rsa_host_key(ssh_key *key) {
+#if defined(LIBSSH_VERSION_INT) && LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 12, 0)
+    ssh_pki_ctx pki_ctx = ssh_pki_ctx_new();
+    int rsa_bits = 4096;
+    int rc;
+
+    if (!pki_ctx) {
+        return -1;
+    }
+    if (ssh_pki_ctx_options_set(pki_ctx, SSH_PKI_OPTION_RSA_KEY_SIZE,
+                                &rsa_bits) < 0) {
+        ssh_pki_ctx_free(pki_ctx);
+        return -1;
+    }
+
+    rc = ssh_pki_generate_key(SSH_KEYTYPE_RSA, pki_ctx, key);
+    ssh_pki_ctx_free(pki_ctx);
+    return rc;
+#else
+    return ssh_pki_generate(SSH_KEYTYPE_RSA, 4096, key);
+#endif
+}
 
 /* Generate or load SSH host key */
 static int setup_host_key(ssh_bind sshbind) {
@@ -73,7 +97,7 @@ static int setup_host_key(ssh_bind sshbind) {
     /* Generate new key */
     printf("Generating new RSA 4096-bit host key...\n");
     ssh_key key;
-    if (ssh_pki_generate(SSH_KEYTYPE_RSA, 4096, &key) < 0) {
+    if (generate_rsa_host_key(&key) < 0) {
         fprintf(stderr, "Failed to generate RSA key\n");
         return -1;
     }

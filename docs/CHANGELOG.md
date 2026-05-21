@@ -24,6 +24,8 @@
   deployment remains a manual operator action.
 - Command output rendering now truncates ANSI-styled UTF-8 text without
   counting escape sequences as visible width or cutting color codes.
+- Host-key generation now uses the non-deprecated libssh PKI API on libssh
+  0.12+ while keeping compatibility with older libssh releases.
 
 ## 2026-05-18 - Interactive input polish
 
