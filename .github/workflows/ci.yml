@@ -20,7 +20,7 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libssh-dev
+        sudo apt-get install -y expect libssh-dev
 
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
@@ -40,6 +40,9 @@ jobs:
         ./test_security_features.sh
         # Skipping anonymous access test in CI as it requires interactive pty handling which might be flaky
         # ./test_anonymous_access.sh
+
+    - name: Run release preflight
+      run: make release-check
 
     - name: Check for memory leaks
       if: runner.os == 'Linux'

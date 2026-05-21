@@ -32,6 +32,8 @@
   commands suggest the nearest known command when possible.
 - Added a local `make release-check` preflight for release/package validation
   without tagging, publishing, or deploying.
+- CI now installs `expect` on Ubuntu so interactive integration tests run
+  instead of being skipped, and runs `make release-check` on every push/PR.
 
 ## 2026-05-18 - Interactive input polish
 

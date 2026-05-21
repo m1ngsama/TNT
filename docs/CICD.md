@@ -7,6 +7,7 @@ Every push or PR automatically runs:
   - Build on Ubuntu
   - AddressSanitizer build
   - Unit and integration tests
+  - Release/package preflight (`make release-check`)
 
 Check status:
   https://github.com/m1ngsama/TNT/actions
