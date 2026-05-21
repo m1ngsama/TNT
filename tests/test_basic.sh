@@ -5,34 +5,36 @@
 PORT=${PORT:-2222}
 PASS=0
 FAIL=0
+BIN="../tnt"
+SERVER_PID=""
+STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-basic-test.XXXXXX")
 
 cleanup() {
-    kill $SERVER_PID 2>/dev/null
-    rm -f test.log
+    if [ -n "$SERVER_PID" ]; then
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    rm -rf "$STATE_DIR"
 }
 
 trap cleanup EXIT
 
-# Detect timeout command
-TIMEOUT_CMD="timeout"
-if command -v gtimeout >/dev/null 2>&1; then
-    TIMEOUT_CMD="gtimeout"
-fi
-
 echo "=== TNT Basic Tests ==="
-
-# Path to binary
-BIN="../tnt"
 
 if [ ! -f "$BIN" ]; then
     echo "Error: Binary $BIN not found. Run make first."
     exit 1
 fi
 
+if ! command -v expect >/dev/null 2>&1; then
+    echo "expect not installed; skipping basic interactive tests"
+    exit 0
+fi
+
 # Start server
-$BIN -p $PORT >test.log 2>&1 &
+"$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
-sleep 5
+sleep 2
 
 # Test 1: Server started
 if kill -0 $SERVER_PID 2>/dev/null; then
@@ -40,29 +42,58 @@ if kill -0 $SERVER_PID 2>/dev/null; then
     PASS=$((PASS + 1))
 else
     echo "✗ Server failed to start"
+    sed -n '1,120p' "$STATE_DIR/server.log"
     FAIL=$((FAIL + 1))
     exit 1
 fi
 
 # Test 2: SSH connection
-if $TIMEOUT_CMD 5 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o BatchMode=yes -p $PORT localhost exit 2>/dev/null; then
+CONNECT_SCRIPT="$STATE_DIR/connect.expect"
+cat >"$CONNECT_SCRIPT" <<EOF
+set timeout 10
+spawn ssh -e none -p $PORT -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR anonymous@127.0.0.1
+sleep 1
+send -- "basic\r"
+expect "›"
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$CONNECT_SCRIPT" >"$STATE_DIR/connect.log" 2>&1; then
     echo "✓ SSH connection works"
     PASS=$((PASS + 1))
 else
     echo "✗ SSH connection failed"
+    sed -n '1,120p' "$STATE_DIR/connect.log"
     FAIL=$((FAIL + 1))
 fi
 
 # Test 3: Message logging
-(echo "testuser"; echo "test message"; sleep 1) | $TIMEOUT_CMD 5 ssh -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null -p $PORT localhost >/dev/null 2>&1 &
-sleep 3
-if [ -f messages.log ]; then
+MESSAGE_SCRIPT="$STATE_DIR/message.expect"
+cat >"$MESSAGE_SCRIPT" <<EOF
+set timeout 10
+spawn ssh -e none -p $PORT -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR anonymous@127.0.0.1
+sleep 1
+send -- "testuser\r"
+expect "›"
+send -- "test message\r"
+sleep 1
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$MESSAGE_SCRIPT" >"$STATE_DIR/message.log.out" 2>&1 &&
+   grep -q 'testuser|test message' "$STATE_DIR/messages.log"; then
     echo "✓ Message logging works"
     PASS=$((PASS + 1))
 else
     echo "✗ Message logging failed"
+    sed -n '1,120p' "$STATE_DIR/message.log.out"
+    cat "$STATE_DIR/messages.log" 2>/dev/null || true
     FAIL=$((FAIL + 1))
 fi
 

@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-05-21 - Message browsing polish
+
+### Changed
+- NORMAL mode now opens at the latest visible messages instead of the oldest
+  in-memory message. Use `k`/PageUp to browse older history and `G`/End to
+  return to the latest messages.
+- NORMAL mode status now shows the visible message range and points users to
+  `G latest` when new messages arrive while they are browsing.
+- NORMAL mode now keeps following the latest messages while the view is pinned
+  to the bottom; scrolling upward switches into history browsing.
+- NORMAL mode now accepts arrow keys, PageUp/PageDown, and Home/End in addition
+  to the existing Vim-style keys.
+- Message viewport and scroll-state rules now live in a focused
+  `history_view` module instead of being split across input and rendering code.
+- Added unit coverage for `history_view` scroll boundaries, live-follow state,
+  and date-divider-aware latest windows.
+- Status/input line rendering now lives in a focused `tui_status` module,
+  keeping the main TUI renderer closer to layout orchestration.
+- Added `:support` / `support` quick guides so interactive users and SSH exec
+  clients can discover common actions and troubleshooting paths in-product.
+- The GitHub workflow formerly named deploy now runs CI only; production
+  deployment remains a manual operator action.
+
+## 2026-05-18 - Interactive input polish
+
+### Added
+- Bracketed paste handling keeps multi-line pasted text in the input buffer
+  until the user presses Enter, then sends it as one message.
+- Input and paste overflow now rings the terminal bell when the 1023-byte
+  message limit is reached.
+- Added an interactive `expect` regression test for basic TTY input,
+  bracketed paste, and overlong paste capping.
+- Added the exec-mode regression test to the main `make test` path.
+
+### Fixed
+- SSH exec clients now survive stdin EOF long enough to flush stdout, exit
+  status, EOF, and channel close. This fixes non-interactive commands such as
+  `ssh localhost health` and `ssh user@host post "message"`.
+
 ## 2026-05-16 - Internal cleanup
 
 ### Fixed

@@ -9,6 +9,7 @@
 #include "client.h"
 #include "common.h"
 #include "message.h"
+#include "support.h"
 #include "tui.h"
 #include "utf8.h"
 #include <stdio.h>
@@ -117,6 +118,7 @@ void commands_dispatch(client_t *client) {
                        "last [N]            - Show last N messages\n"
                        "search <keyword>    - Search message history\n"
                        "mute-joins          - Toggle join/leave notices\n"
+                       "support             - Show quick support guide\n"
                        "help, commands      - Show this help\n"
                        "clear, cls          - Clear command output\n"
                        "q, quit, exit       - Disconnect\n"
@@ -126,6 +128,9 @@ void commands_dispatch(client_t *client) {
                        "  /me <action>      - Send action message\n"
                        "  @username         - Mention (bell notify)\n"
                        "========================================\n");
+
+    } else if (strcmp(cmd, "support") == 0 || strcmp(cmd, "guide") == 0) {
+        support_append_interactive_panel(output, sizeof(output), &pos);
 
     } else if (strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {
         char *rest = (cmd[0] == 'w') ? cmd + 2 : cmd + 4;

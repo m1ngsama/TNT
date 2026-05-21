@@ -1,15 +1,18 @@
-CI/CD USAGE GUIDE
-=================
+CI / RELEASE GUIDE
+==================
 
 AUTOMATIC TESTING
 -----------------
 Every push or PR automatically runs:
-  - Build on Ubuntu and macOS
-  - AddressSanitizer checks
-  - Valgrind memory leak detection
+  - Build on Ubuntu
+  - AddressSanitizer build
+  - Unit and integration tests
 
 Check status:
   https://github.com/m1ngsama/TNT/actions
+
+Production deployment is intentionally manual. The CI workflow must not SSH
+into production or restart services on push.
 
 
 CREATING RELEASES
@@ -32,11 +35,16 @@ CREATING RELEASES
 
 DEPLOYING TO SERVERS
 --------------------
-Single command on any server:
-  curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+Deployments are operator-driven:
+  1. Build and test locally or in a temporary server directory.
+  2. Back up the installed binary.
+  3. Install the new binary.
+  4. Restart the service.
+  5. Run black-box checks (`health`, `stats --json`, `users --json`,
+     `support`, and a post/tail smoke test).
 
-Or with specific version:
-  VERSION=v1.0.0 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+The installer can still be used manually on a server:
+  curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 
 
 PRODUCTION SETUP (systemd)
@@ -58,14 +66,11 @@ PRODUCTION SETUP (systemd)
 
 UPDATING SERVERS
 ----------------
-Stop service:
-  sudo systemctl stop tnt
-
-Run installer again:
-  curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
-
-Restart:
-  sudo systemctl start tnt
+Manual binary replacement pattern:
+  backup=/usr/local/bin/tnt.bak-$(date +%Y%m%d%H%M%S)
+  sudo cp -a /usr/local/bin/tnt "$backup"
+  sudo install -m 755 ./tnt /usr/local/bin/tnt
+  sudo systemctl restart tnt
 
 
 PLATFORMS SUPPORTED
@@ -87,8 +92,7 @@ git tag v1.0.1
 git push origin v1.0.1
 # Wait 5 minutes for builds
 
-# Deploy to production servers
-for server in server1 server2 server3; do
-  ssh $server "curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | VERSION=v1.0.1 sh"
-  ssh $server "sudo systemctl restart tnt"
-done
+# Deploy to production manually after validation
+ssh server "sudo install -m 755 /tmp/tnt-build/tnt /usr/local/bin/tnt"
+ssh server "sudo systemctl restart tnt"
+ssh -p 2222 server health

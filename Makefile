@@ -5,6 +5,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c11 -D_XOPEN_SOURCE=700
 LDFLAGS = -pthread -lssh
 INCLUDES = -Iinclude
+DEPFLAGS = -MMD -MP
 
 # Detect libssh location (homebrew on macOS)
 ifeq ($(shell uname), Darwin)
@@ -21,9 +22,10 @@ OBJ_DIR = obj
 
 SOURCES = $(wildcard $(SRC_DIR)/*.c)
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+DEPS = $(OBJECTS:.o=.d)
 TARGET = tnt
 
-.PHONY: all clean install uninstall debug release asan valgrind check info
+.PHONY: all clean install uninstall debug release asan valgrind check test unit-test info
 
 all: $(TARGET)
 
@@ -32,7 +34,7 @@ $(TARGET): $(OBJECTS)
 	@echo "Build complete: $(TARGET)"
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) $(DEPFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
@@ -76,7 +78,9 @@ check:
 # Test
 test: all unit-test
 	@echo "Running integration tests..."
-	@cd tests && ./test_basic.sh || echo "(integration tests are advisory)"
+	@cd tests && PORT=$${PORT:-2222} ./test_basic.sh || echo "(basic integration tests are advisory)"
+	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh || echo "(exec mode tests are advisory)"
+	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh || echo "(interactive input tests are advisory)"
 
 unit-test:
 	@echo "Running unit tests..."
@@ -88,3 +92,5 @@ info:
 	@echo "Flags: $(CFLAGS)"
 	@echo "Sources: $(SOURCES)"
 	@echo "Objects: $(OBJECTS)"
+
+-include $(DEPS)

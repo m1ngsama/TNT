@@ -22,18 +22,6 @@ static void cleanup_test_log(void) {
     unlink(test_log);
 }
 
-/* Helper: Create test log with N messages */
-static void create_test_log(int count) {
-    FILE *fp = fopen(test_log, "w");
-    assert(fp != NULL);
-
-    for (int i = 0; i < count; i++) {
-        fprintf(fp, "2026-02-08T10:00:%02d+08:00|user%d|Test message %d\n",
-                i, i, i);
-    }
-    fclose(fp);
-}
-
 /* Test message initialization */
 TEST(message_init) {
     message_init();
@@ -48,7 +36,6 @@ TEST(message_load_empty) {
     FILE *fp = fopen(test_log, "w");
     fclose(fp);
 
-    message_t *messages = NULL;
     /* Can't easily override LOG_FILE constant, so this is a documentation test */
 
     cleanup_test_log();

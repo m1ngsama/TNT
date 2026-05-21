@@ -4,6 +4,7 @@
 #include "commands.h"
 #include "common.h"
 #include "exec.h"
+#include "history_view.h"
 #include "message.h"
 #include "ratelimit.h"
 #include "tui.h"
@@ -150,15 +151,67 @@ void notify_mentions(const char *content, const client_t *sender) {
     }
 }
 
+static int read_channel_exact(client_t *client, char *buf, size_t len,
+                              int timeout_ms) {
+    size_t got = 0;
+
+    while (got < len) {
+        int n = ssh_channel_read_timeout(client->channel, buf + got,
+                                         len - got, 0, timeout_ms);
+        if (n == SSH_AGAIN || n <= 0) {
+            break;
+        }
+        got += (size_t)n;
+    }
+
+    return (int)got;
+}
+
+static bool append_paste_byte(char *input, unsigned char b) {
+    if (b == '\r' || b == '\n' || b == '\t') {
+        b = ' ';
+    }
+    if (b < 32) {
+        return true;
+    }
+
+    size_t cur = strlen(input);
+    if (cur < MAX_MESSAGE_LEN - 1) {
+        input[cur] = (char)b;
+        input[cur + 1] = '\0';
+        return true;
+    }
+
+    return false;
+}
+
+static void normal_scroll_to_latest(client_t *client) {
+    if (!client) return;
+    history_view_scroll_to_latest(&client->scroll_pos, &client->follow_tail,
+                                  room_get_message_count(g_room),
+                                  history_view_height(client->height));
+}
+
+static void normal_scroll_by(client_t *client, int delta) {
+    if (!client) return;
+    history_view_scroll_by(&client->scroll_pos, &client->follow_tail,
+                           room_get_message_count(g_room),
+                           history_view_height(client->height), delta);
+}
+
 /* Handle a single key press.  Returns true if the key was fully consumed
  * (no further character buffering needed). */
 static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Handle Ctrl+C (Exit or switch to NORMAL) */
     if (key == 3) {
-        if (client->mode != MODE_NORMAL) {
+        client_mode_t previous_mode = client->mode;
+        if (previous_mode != MODE_NORMAL) {
             client->mode = MODE_NORMAL;
             client->command_input[0] = '\0';
             client->show_help = false;
+            if (previous_mode == MODE_INSERT) {
+                normal_scroll_to_latest(client);
+            }
             tui_render_screen(client);
         } else {
             /* In NORMAL mode, Ctrl+C exits */
@@ -218,9 +271,13 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
 
     /* Handle command output / MOTD display: any key dismisses */
     if (client->command_output[0] != '\0') {
+        bool was_motd = client->show_motd;
         client->command_output[0] = '\0';
         client->show_motd = false;
         client->mode = MODE_NORMAL;
+        if (was_motd) {
+            normal_scroll_to_latest(client);
+        }
         tui_render_screen(client);
         return true;  /* Key consumed */
     }
@@ -260,12 +317,64 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                             }
                             tui_render_input(client, input);
                             return true;
+                        } else if (seq[1] == '2') {
+                            /* Could be bracketed-paste start "ESC[200~".
+                             * Read the next 3 bytes and confirm. */
+                            char rest[3];
+                            int m = read_channel_exact(client, rest,
+                                                       sizeof(rest), 500);
+                            if (m == 3 && rest[0] == '0' && rest[1] == '0'
+                                       && rest[2] == '~') {
+                                /* Drain bytes into `input` until we see
+                                 * the end marker ESC[201~.  Newlines become
+                                 * spaces so a multi-line paste stays a
+                                 * single message instead of N sends. */
+                                bool overflow = false;
+                                while (1) {
+                                    char b;
+                                    int k = ssh_channel_read_timeout(
+                                        client->channel, &b, 1, 0, 5000);
+                                    if (k != 1) break;
+                                    if (b == '\033') {
+                                        char tail[5];
+                                        int t = read_channel_exact(
+                                            client, tail, sizeof(tail), 500);
+                                        if (t == 5 && tail[0] == '['
+                                                && tail[1] == '2'
+                                                && tail[2] == '0'
+                                                && tail[3] == '1'
+                                                && tail[4] == '~') {
+                                            break;  /* end of paste */
+                                        }
+                                        /* Stray ESC inside paste: drop the ESC
+                                         * but keep printable bytes that
+                                         * followed it. */
+                                        for (int i = 0; i < t; i++) {
+                                            if (!append_paste_byte(
+                                                    input,
+                                                    (unsigned char)tail[i])) {
+                                                overflow = true;
+                                            }
+                                        }
+                                        continue;
+                                    }
+                                    if (!append_paste_byte(input,
+                                                           (unsigned char)b)) {
+                                        overflow = true;
+                                    }
+                                }
+                                tui_render_input(client, input);
+                                if (overflow) {
+                                    client_send(client, "\a", 1);
+                                }
+                            }
+                            return true;
                         }
                     }
                 }
                 /* Plain ESC — fall through to NORMAL mode */
                 client->mode = MODE_NORMAL;
-                client->scroll_pos = 0;
+                normal_scroll_to_latest(client);
                 tui_render_screen(client);
                 return true;
             } else if (key == '\r' || key == '\n') {  /* Enter */
@@ -350,8 +459,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                         if (plen == 0
                                 ? strcmp(uname, client->username) != 0
                                 : strncasecmp(uname, prefix, plen) == 0) {
-                            strncpy(match, uname, sizeof(match) - 1);
-                            match[sizeof(match) - 1] = '\0';
+                            snprintf(match, sizeof(match), "%s", uname);
                             break;
                         }
                     }
@@ -375,14 +483,11 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             break;
 
         case MODE_NORMAL: {
-            int nm_msg_count = room_get_message_count(g_room);
-            int nm_msg_height = client->height - 3;
-            if (nm_msg_height < 1) nm_msg_height = 1;
-            int nm_max_scroll = nm_msg_count - nm_msg_height;
-            if (nm_max_scroll < 0) nm_max_scroll = 0;
+            int nm_msg_height = history_view_height(client->height);
 
             if (key == 'i') {
                 client->mode = MODE_INSERT;
+                client->follow_tail = true;
                 client->unread_mentions = 0;
                 tui_render_screen(client);
                 return true;
@@ -392,47 +497,78 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 tui_render_screen(client);
                 return true;
             } else if (key == 'j') {
-                if (client->scroll_pos < nm_max_scroll) {
-                    client->scroll_pos++;
-                    tui_render_screen(client);
-                }
+                normal_scroll_by(client, 1);
+                tui_render_screen(client);
                 return true;
             } else if (key == 'k' && client->scroll_pos > 0) {
-                client->scroll_pos--;
+                normal_scroll_by(client, -1);
                 tui_render_screen(client);
                 return true;
             } else if (key == 4) {  /* Ctrl+D: half page down */
                 int half = nm_msg_height / 2;
                 if (half < 1) half = 1;
-                client->scroll_pos += half;
-                if (client->scroll_pos > nm_max_scroll) client->scroll_pos = nm_max_scroll;
+                normal_scroll_by(client, half);
                 tui_render_screen(client);
                 return true;
             } else if (key == 21) {  /* Ctrl+U: half page up */
                 int half = nm_msg_height / 2;
                 if (half < 1) half = 1;
-                client->scroll_pos -= half;
-                if (client->scroll_pos < 0) client->scroll_pos = 0;
+                normal_scroll_by(client, -half);
                 tui_render_screen(client);
                 return true;
             } else if (key == 6) {  /* Ctrl+F: full page down */
-                client->scroll_pos += nm_msg_height;
-                if (client->scroll_pos > nm_max_scroll) client->scroll_pos = nm_max_scroll;
+                normal_scroll_by(client, nm_msg_height);
                 tui_render_screen(client);
                 return true;
             } else if (key == 2) {  /* Ctrl+B: full page up */
-                client->scroll_pos -= nm_msg_height;
-                if (client->scroll_pos < 0) client->scroll_pos = 0;
+                normal_scroll_by(client, -nm_msg_height);
                 tui_render_screen(client);
                 return true;
             } else if (key == 'g') {
-                client->scroll_pos = 0;
+                history_view_scroll_to_oldest(&client->scroll_pos,
+                                              &client->follow_tail);
                 tui_render_screen(client);
                 return true;
             } else if (key == 'G') {
-                client->scroll_pos = nm_max_scroll;
+                normal_scroll_to_latest(client);
                 client->unread_mentions = 0;
                 tui_render_screen(client);
+                return true;
+            } else if (key == 27) {
+                char seq[4];
+                int n = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (n == 1 && seq[0] == '[') {
+                    n = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+                    if (n == 1) {
+                        if (seq[1] == 'A') {          /* Up arrow */
+                            normal_scroll_by(client, -1);
+                        } else if (seq[1] == 'B') {   /* Down arrow */
+                            normal_scroll_by(client, 1);
+                        } else if (seq[1] == 'H') {   /* Home */
+                            history_view_scroll_to_oldest(&client->scroll_pos,
+                                                          &client->follow_tail);
+                        } else if (seq[1] == 'F') {   /* End */
+                            normal_scroll_to_latest(client);
+                        } else if (seq[1] >= '1' && seq[1] <= '6') {
+                            n = ssh_channel_read_timeout(client->channel,
+                                                         &seq[2], 1, 0, 50);
+                            if (n == 1 && seq[2] == '~') {
+                                if (seq[1] == '5') {        /* PageUp */
+                                    normal_scroll_by(client, -nm_msg_height);
+                                } else if (seq[1] == '6') { /* PageDown */
+                                    normal_scroll_by(client, nm_msg_height);
+                                } else if (seq[1] == '1') { /* Home */
+                                    history_view_scroll_to_oldest(
+                                        &client->scroll_pos,
+                                        &client->follow_tail);
+                                } else if (seq[1] == '4') { /* End */
+                                    normal_scroll_to_latest(client);
+                                }
+                            }
+                        }
+                        tui_render_screen(client);
+                    }
+                }
                 return true;
             } else if (key == '?') {
                 client->show_help = true;
@@ -516,11 +652,13 @@ void input_run_session(client_t *client) {
     char input[MAX_MESSAGE_LEN] = {0};
     char buf[4];
     bool joined_room = false;
+    bool bracketed_paste_enabled = false;
     uint64_t seen_update_seq;
     time_t last_keepalive = time(NULL);
 
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
+    client->follow_tail = true;
     client->help_lang = LANG_ZH;
     client->connected = true;
     client->command_history_count = 0;
@@ -532,6 +670,9 @@ void input_run_session(client_t *client) {
     if (client->exec_command[0] != '\0') {
         int exit_status = exec_dispatch(client);
         ssh_channel_request_send_exit_status(client->channel, exit_status);
+        ssh_channel_send_eof(client->channel);
+        ssh_blocking_flush(client->session, 1000);
+        ssh_channel_close(client->channel);
         goto cleanup;
     }
 
@@ -546,6 +687,12 @@ void input_run_session(client_t *client) {
         goto cleanup;
     }
     joined_room = true;
+
+    /* Enable xterm bracketed-paste mode only for interactive chat, so
+     * multi-line pastes arrive framed by ESC[200~...ESC[201~ instead of
+     * as a stream of Enters.  Terminals that don't recognise it ignore it. */
+    client_send(client, "\033[?2004h", 8);
+    bracketed_paste_enabled = true;
 
     /* Broadcast join message */
     message_t join_msg = {
@@ -619,6 +766,10 @@ main_loop:
                 } else if (client->command_output[0] != '\0') {
                     tui_render_command_output(client);
                 } else {
+                    if (room_updated && client->mode == MODE_NORMAL &&
+                        client->follow_tail) {
+                        normal_scroll_to_latest(client);
+                    }
                     tui_render_screen(client);
                     if (client->mode == MODE_INSERT && input[0] != '\0') {
                         tui_render_input(client, input);
@@ -666,6 +817,8 @@ main_loop:
                         input[len] = b;
                         input[len + 1] = '\0';
                         tui_render_input(client, input);
+                    } else {
+                        client_send(client, "\a", 1);
                     }
                 } else if (b >= 128) {  /* UTF-8 multi-byte */
                     int char_len = utf8_byte_length(b);
@@ -687,10 +840,12 @@ main_loop:
                         continue;
                     }
                     int len = strlen(input);
-                    if (len + char_len < MAX_MESSAGE_LEN - 1) {
+                    if (len + char_len <= MAX_MESSAGE_LEN - 1) {
                         memcpy(input + len, buf, char_len);
                         input[len + char_len] = '\0';
                         tui_render_input(client, input);
+                    } else {
+                        client_send(client, "\a", 1);
                     }
                 }
             } else if (client->mode == MODE_COMMAND && !client->show_help &&
@@ -724,6 +879,11 @@ main_loop:
     }
 
 cleanup:
+    if (bracketed_paste_enabled && client->channel &&
+        ssh_channel_is_open(client->channel)) {
+        client_send(client, "\033[?2004l", 8);
+    }
+
     /* Broadcast leave message */
     if (joined_room) {
         message_t leave_msg = {

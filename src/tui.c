@@ -2,6 +2,8 @@
 #include "client.h"
 #include "ssh_server.h"
 #include "chat_room.h"
+#include "history_view.h"
+#include "tui_status.h"
 #include "utf8.h"
 #include <unistd.h>
 
@@ -255,22 +257,25 @@ void tui_render_screen(client_t *client) {
     int msg_count = g_room->message_count;
     pthread_rwlock_unlock(&g_room->lock);
 
-    /* Calculate which messages to show */
-    int msg_height = render_height - 3;
-    if (msg_height < 1) msg_height = 1;
+    /* Calculate which messages to show.  The initial slice is capped by
+     * message count; the lock-held copy below tightens "latest" slices so
+     * date dividers cannot push the newest messages off-screen. */
+    int msg_height = history_view_height(render_height);
 
     int start = 0;
+    int latest_scroll_start = history_view_max_scroll(msg_count, msg_height);
+    bool anchor_latest = client->mode != MODE_NORMAL ||
+                         client->follow_tail ||
+                         client->scroll_pos >= latest_scroll_start;
     if (client->mode == MODE_NORMAL) {
         start = client->scroll_pos;
-        if (start > msg_count - msg_height) {
-            start = msg_count - msg_height;
+        if (start > latest_scroll_start) {
+            start = latest_scroll_start;
         }
         if (start < 0) start = 0;
     } else {
         /* INSERT mode: show latest */
-        if (msg_count > msg_height) {
-            start = msg_count - msg_height;
-        }
+        start = latest_scroll_start;
     }
 
     int end = start + msg_height;
@@ -278,10 +283,11 @@ void tui_render_screen(client_t *client) {
 
     /* Allocate snapshot outside the lock to avoid blocking writers */
     message_t *msg_snapshot = NULL;
+    int snapshot_capacity = msg_height;
     int snapshot_count = end - start;
 
-    if (snapshot_count > 0) {
-        msg_snapshot = calloc(snapshot_count, sizeof(message_t));
+    if (snapshot_count > 0 && snapshot_capacity > 0) {
+        msg_snapshot = calloc(snapshot_capacity, sizeof(message_t));
     }
 
     /* Second pass under lock: copy messages */
@@ -289,12 +295,22 @@ void tui_render_screen(client_t *client) {
         pthread_rwlock_rdlock(&g_room->lock);
         /* Re-clamp in case msg_count changed */
         int actual_count = g_room->message_count;
-        int actual_end = (end <= actual_count) ? end : actual_count;
-        int actual_start = (start < actual_end) ? start : actual_end;
+        int actual_start = start;
+        int actual_end = end;
+        if (anchor_latest) {
+            actual_end = actual_count;
+            actual_start = history_view_latest_start_for_height(
+                g_room->messages, actual_count, msg_height);
+        } else {
+            actual_end = (actual_end <= actual_count) ? actual_end : actual_count;
+            actual_start = (actual_start < actual_end) ? actual_start : actual_end;
+        }
         int actual_snapshot = actual_end - actual_start;
-        if (actual_snapshot > 0 && actual_snapshot <= snapshot_count) {
+        if (actual_snapshot > 0 && actual_snapshot <= snapshot_capacity) {
             memcpy(msg_snapshot, &g_room->messages[actual_start],
                    actual_snapshot * sizeof(message_t));
+            start = actual_start;
+            end = actual_end;
             snapshot_count = actual_snapshot;
         } else {
             snapshot_count = 0;
@@ -507,30 +523,7 @@ void tui_render_screen(client_t *client) {
     buffer_appendf(buffer, buf_size, &pos, "\033[K\r\n");
 
     /* Status/Input line */
-    if (client->mode == MODE_INSERT) {
-        buffer_appendf(buffer, buf_size, &pos, "\033[2;37m›\033[0m \033[K");
-    } else if (client->mode == MODE_NORMAL) {
-        int total = msg_count;
-        int scroll_pos = client->scroll_pos + 1;
-        if (total == 0) scroll_pos = 0;
-        int unseen = msg_count - end;
-        /* mode reverse-video chip + dim position + optional unseen marker */
-        if (unseen > 0) {
-            buffer_appendf(buffer, buf_size, &pos,
-                           "\033[7;33m NORMAL \033[0m"
-                           "  \033[2;37m%d / %d\033[0m"
-                           "   \033[33m▼ %d new\033[0m\033[K",
-                           scroll_pos, total, unseen);
-        } else {
-            buffer_appendf(buffer, buf_size, &pos,
-                           "\033[7;33m NORMAL \033[0m"
-                           "  \033[2;37m%d / %d\033[0m\033[K",
-                           scroll_pos, total);
-        }
-    } else if (client->mode == MODE_COMMAND) {
-        buffer_appendf(buffer, buf_size, &pos,
-                       "\033[35m:\033[0m%s\033[K", client->command_input);
-    }
+    tui_status_append(buffer, buf_size, &pos, client, msg_count, start, end);
 
     client_send(client, buffer, pos);
     free(buffer);
@@ -771,11 +764,15 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  Ctrl+C     - Enter NORMAL mode\n"
                "\n"
                "NORMAL MODE KEYS:\n"
+               "  Opens at latest messages\n"
+               "  Follows latest until you scroll up\n"
                "  i          - Return to INSERT mode\n"
                "  :          - Enter COMMAND mode\n"
                "  j/k        - Scroll down/up one line\n"
                "  Ctrl+D/U   - Scroll half page down/up\n"
                "  Ctrl+F/B   - Scroll full page down/up\n"
+               "  PgDn/PgUp  - Scroll full page down/up\n"
+               "  End/Home   - Jump to bottom/top\n"
                "  g/G        - Jump to top/bottom\n"
                "  ?          - Show this help\n"
                "  Ctrl+C     - Exit chat\n"
@@ -788,6 +785,7 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  :last [N]            - Show last N messages (max 50)\n"
                "  :search <keyword>    - Search message history\n"
                "  :mute-joins          - Toggle join/leave notices\n"
+               "  :support             - Show quick support guide\n"
                "  :help                - Show available commands\n"
                "  :clear               - Clear command output\n"
                "  :q, :quit, :exit     - Disconnect\n"
@@ -820,11 +818,15 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  Ctrl+C     - 进入 NORMAL 模式\n"
                "\n"
                "NORMAL 模式按键:\n"
+               "  默认停在最新消息\n"
+               "  未向上翻阅时自动跟随最新消息\n"
                "  i          - 返回 INSERT 模式\n"
                "  :          - 进入 COMMAND 模式\n"
                "  j/k        - 向下/上滚动一行\n"
                "  Ctrl+D/U   - 向下/上滚动半页\n"
                "  Ctrl+F/B   - 向下/上滚动整页\n"
+               "  PgDn/PgUp  - 向下/上滚动整页\n"
+               "  End/Home   - 跳到底部/顶部\n"
                "  g/G        - 跳到顶部/底部\n"
                "  ?          - 显示此帮助\n"
                "  Ctrl+C     - 退出聊天\n"
@@ -837,6 +839,7 @@ const char* tui_get_help_text(help_lang_t lang) {
                "  :last [N]            - 显示最后 N 条消息(最多50)\n"
                "  :search <关键词>     - 搜索消息历史\n"
                "  :mute-joins          - 切换加入/离开提示\n"
+               "  :support             - 显示快速支持指南\n"
                "  :help                - 显示可用命令\n"
                "  :clear               - 清空命令输出\n"
                "  :q, :quit, :exit     - 断开连接\n"

@@ -28,6 +28,7 @@ typedef struct client {
     client_mode_t mode;
     help_lang_t help_lang;
     int scroll_pos;
+    bool follow_tail;                /* NORMAL stays pinned to latest until user scrolls up */
     int help_scroll_pos;
     bool show_help;
     char command_input[256];

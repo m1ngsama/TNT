@@ -5,6 +5,7 @@
 #include "input.h"
 #include "message.h"
 #include "ratelimit.h"
+#include "support.h"
 #include "utf8.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -126,9 +127,18 @@ static int exec_command_help(client_t *client) {
         "  tail -n N       Print recent messages\n"
         "  post MESSAGE    Post a message non-interactively\n"
         "  post \"/me act\"  Post an action message\n"
+        "  support         Show quick support guide\n"
         "  exit            Exit successfully\n";
 
     return client_send(client, help_text, sizeof(help_text) - 1) == 0 ? 0 : 1;
+}
+
+static int exec_command_support(client_t *client) {
+    char output[2048] = {0};
+    size_t pos = 0;
+
+    support_append_exec_panel(output, sizeof(output), &pos);
+    return client_send(client, output, pos) == 0 ? 0 : 1;
 }
 
 static int exec_command_health(client_t *client) {
@@ -382,13 +392,17 @@ static int exec_command_post(client_t *client, const char *args) {
     }
 
     room_broadcast(g_room, &msg);
-    notify_mentions(msg.content, client);
-    if (message_save(&msg) < 0) {
-        client_printf(client, "post: failed to persist message\n");
+    if (client_send(client, "posted\n", 7) != 0) {
         return 1;
     }
 
-    return client_send(client, "posted\n", 7) == 0 ? 0 : 1;
+    notify_mentions(msg.content, client);
+    if (message_save(&msg) < 0) {
+        fprintf(stderr, "post: failed to persist message\n");
+        return 1;
+    }
+
+    return 0;
 }
 
 int exec_dispatch(client_t *client) {
@@ -420,6 +434,9 @@ int exec_dispatch(client_t *client) {
 
     if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0) {
         return exec_command_help(client);
+    }
+    if (strcmp(cmd, "support") == 0 || strcmp(cmd, "guide") == 0) {
+        return exec_command_support(client);
     }
     if (strcmp(cmd, "health") == 0) {
         return exec_command_health(client);

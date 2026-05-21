@@ -84,21 +84,31 @@ ESC	Switch to NORMAL
 Ctrl+W	Delete last word
 Ctrl+U	Clear input line
 Ctrl+C	Switch to NORMAL
+Paste	Keep multi-line paste in the input buffer
 /me \fIaction\fR	Send action message (e.g. /me waves)
 @\fIusername\fR	Mention user (bell notification + highlight)
 .TE
+.PP
+The input line shows remaining bytes near the message limit.  Extra input
+past the limit is ignored with a terminal bell.
 .SS NORMAL mode
 .TS
 l l.
 j/k	Scroll down/up one line
 Ctrl+D/Ctrl+U	Scroll half page down/up
 Ctrl+F/Ctrl+B	Scroll full page down/up
+PageDown/PageUp	Scroll full page down/up
+End/Home	Jump to bottom/top
 g/G	Jump to top/bottom
 i	Switch to INSERT
 :	Enter COMMAND mode
 ?	Open help screen
 Ctrl+C	Disconnect
 .TE
+.PP
+NORMAL mode opens on the latest visible messages and stays pinned there
+until you scroll up.  Use k, Ctrl+U, Ctrl+B, or PageUp to move toward
+older history; use G or End to return to the latest messages.
 .SS COMMAND mode
 .TS
 l l.
@@ -110,6 +120,7 @@ l l.
 :last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
 :search \fIkeyword\fR	Case\-insensitive search across full message history
 :mute\-joins	Toggle join/leave system notifications on/off
+:support	Show quick support guide
 :help	Show available commands
 :clear	Clear command output
 :q, :quit, :exit	Disconnect
@@ -121,6 +132,7 @@ Commands can be run non\-interactively for scripting:
 .PP
 .nf
 ssh host \-p 2222 help
+ssh host \-p 2222 support
 ssh host \-p 2222 users \-\-json
 ssh host \-p 2222 stats \-\-json
 ssh host \-p 2222 tail 20

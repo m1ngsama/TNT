@@ -33,6 +33,10 @@ int client_send(client_t *client, const char *data, size_t len) {
         total += (size_t)sent;
     }
 
+    if (client->exec_command[0] != '\0') {
+        ssh_blocking_flush(client->session, 1000);
+    }
+
     pthread_mutex_unlock(&client->io_lock);
     return 0;
 }
@@ -58,7 +62,9 @@ void client_release(client_t *client) {
             ssh_remove_channel_callbacks(client->channel, client->channel_cb);
         }
         if (client->channel) {
-            ssh_channel_close(client->channel);
+            if (ssh_channel_is_open(client->channel)) {
+                ssh_channel_close(client->channel);
+            }
             ssh_channel_free(client->channel);
         }
         if (client->session) {
@@ -120,7 +126,12 @@ static void client_channel_eof(ssh_session session, ssh_channel channel,
 
     client_t *client = (client_t *)userdata;
     if (client) {
-        client->connected = false;
+        /* Exec clients commonly half-close stdin immediately after sending
+         * the command.  Keep stdout usable so the exec handler can return
+         * output and an exit status. */
+        if (client->exec_command[0] == '\0') {
+            client->connected = false;
+        }
     }
 }
 

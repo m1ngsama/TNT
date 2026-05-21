@@ -25,7 +25,7 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
+SSH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
 
 echo "=== TNT Exec Mode Tests ==="
 
@@ -75,6 +75,18 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+SUPPORT_OUTPUT=$(ssh $SSH_OPTS localhost support 2>/dev/null || true)
+printf '%s\n' "$SUPPORT_OUTPUT" | grep -q '^TNT support$' &&
+printf '%s\n' "$SUPPORT_OUTPUT" | grep -q '^Troubleshooting:'
+if [ $? -eq 0 ]; then
+    echo "✓ support returns quick guide"
+    PASS=$((PASS + 1))
+else
+    echo "✗ support output unexpected"
+    printf '%s\n' "$SUPPORT_OUTPUT"
+    FAIL=$((FAIL + 1))
+fi
+
 POST_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "hello from exec" 2>/dev/null || true)
 if [ "$POST_OUTPUT" = "posted" ]; then
     echo "✓ post publishes a message"
@@ -112,7 +124,7 @@ EOF
 expect "$EXPECT_SCRIPT" >"${STATE_DIR}/expect.log" 2>&1 &
 INTERACTIVE_PID=$!
 
-for _ in 1 2 3 4 5 6 7 8 9 10; do
+for _ in 1 2 3 4 5; do
     [ -f "$WATCHER_READY" ] && break
     sleep 1
 done
@@ -138,7 +150,7 @@ else
 fi
 
 USERS_JSON=""
-for _ in 1 2 3 4 5; do
+for _ in 1 2 3 4 5 6 7 8 9 10; do
     USERS_JSON=$(ssh $SSH_OPTS localhost users --json 2>/dev/null || true)
     printf '%s\n' "$USERS_JSON" | grep -q '"watcher"' && break
     sleep 1

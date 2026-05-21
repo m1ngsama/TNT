@@ -62,15 +62,23 @@ Backspace  - Delete character
 Ctrl+W     - Delete last word
 Ctrl+U     - Delete line
 Ctrl+C     - Enter NORMAL mode
+Paste      - Multi-line paste stays in the input buffer
 ```
+
+The input line shows remaining bytes near the message limit.  Extra input
+past the limit is ignored with a terminal bell.
 
 **NORMAL mode**
 ```
+Opens at latest messages
+Stays pinned to latest until you scroll up
 i          - Return to INSERT mode
 :          - Enter COMMAND mode
 j/k        - Scroll down/up one line
 Ctrl+D/U   - Scroll half page down/up
 Ctrl+F/B   - Scroll full page down/up
+PgDn/PgUp  - Scroll full page down/up
+End/Home   - Jump to bottom/top
 g/G        - Jump to top/bottom
 ?          - Show help
 Ctrl+C     - Exit chat
@@ -85,6 +93,7 @@ Ctrl+C     - Exit chat
 :last [N]            - Show last N messages from history (max 50, default 10)
 :search <keyword>    - Search full message history (case-insensitive)
 :mute-joins          - Toggle join/leave system notifications
+:support             - Show quick support guide
 :help                - Show available commands
 :clear               - Clear command output
 :q, :quit, :exit     - Disconnect
@@ -161,6 +170,7 @@ TNT also exposes a small non-interactive SSH surface for scripts:
 ssh -p 2222 chat.m1ng.space health
 ssh -p 2222 chat.m1ng.space stats --json
 ssh -p 2222 chat.m1ng.space users
+ssh -p 2222 chat.m1ng.space support
 ssh -p 2222 chat.m1ng.space "tail -n 20"
 ssh -p 2222 operator@chat.m1ng.space post "service notice"
 ssh -p 2222 chat.m1ng.space post "/me deploys v2.0"
@@ -230,7 +240,10 @@ TNT/
 │   ├── ssh_server.c  # SSH server implementation
 │   ├── chat_room.c   # chat room logic
 │   ├── message.c     # message persistence
+│   ├── history_view.c # message viewport and scroll state
+│   ├── support.c     # quick support guide content
 │   ├── tui.c         # terminal UI rendering
+│   ├── tui_status.c  # status/input line rendering
 │   └── utf8.c        # UTF-8 character handling
 ├── include/          # header files
 ├── tests/            # test scripts

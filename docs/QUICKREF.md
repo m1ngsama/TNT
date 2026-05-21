@@ -25,6 +25,7 @@ COMMANDS (COMMAND mode, prefix with :)
   last [N]               last N messages from log (default 10, max 50)
   search <keyword>       search full history (case-insensitive, 15 results)
   mute-joins             toggle join/leave notifications
+  support                quick support guide
   help                   show all commands
   clear                  clear output
   q / quit / exit        disconnect
@@ -32,13 +33,19 @@ COMMANDS (COMMAND mode, prefix with :)
 INSERT MODE
   /me <action>           action message
   @username              mention (bell + highlight)
+  paste                  multi-line paste stays in the input buffer
+  limit                  1023 bytes/message; over-limit input rings bell
+  normal                 opens/follows latest; k/PgUp older, j/PgDn newer
 
 STRUCTURE
   src/main.c          entry, signals
   src/ssh_server.c    SSH, threads, commands
   src/chat_room.c     broadcast
   src/message.c       persistence, search
+  src/history_view.c  message viewport / scroll state
+  src/support.c       quick support guide content
   src/tui.c           rendering, help
+  src/tui_status.c    status/input line rendering
   src/utf8.c          unicode
 
 LIMITS
