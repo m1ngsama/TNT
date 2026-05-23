@@ -89,6 +89,12 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return " 帮助 ";
             case I18N_HELP_STATUS_FORMAT:
                 return "-- 帮助 -- (%d/%d) j/k:滚动 g/G:首尾 e/z:语言 q:关闭";
+            case I18N_COMMAND_OUTPUT_TITLE:
+                return " 命令输出 ";
+            case I18N_MOTD_TITLE:
+                return " 公告 ";
+            case I18N_MOTD_CONTINUE_HINT:
+                return " 按任意键继续 ";
         }
     }
 
@@ -111,6 +117,12 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return " HELP ";
         case I18N_HELP_STATUS_FORMAT:
             return "-- HELP -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close";
+        case I18N_COMMAND_OUTPUT_TITLE:
+            return " COMMAND OUTPUT ";
+        case I18N_MOTD_TITLE:
+            return " NOTICE ";
+        case I18N_MOTD_CONTINUE_HINT:
+            return " Press any key ";
     }
 
     return "";

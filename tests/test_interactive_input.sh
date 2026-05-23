@@ -216,6 +216,7 @@ expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "mute-joins\r"
+expect "命令输出"
 expect "加入/离开提示"
 expect "已静音"
 expect "按任意键"
@@ -231,6 +232,7 @@ expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "users\r"
+expect "COMMAND OUTPUT"
 expect "Online users"
 expect "Press any key"
 send -- "q"
@@ -247,6 +249,35 @@ if expect "$LOCALIZED_COMMANDS_SCRIPT" >"$STATE_DIR/localized-commands.log" 2>&1
 else
     echo "x localized command output failed"
     sed -n '1,200p' "$STATE_DIR/localized-commands.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+printf '维护窗口\n' >"$STATE_DIR/motd.txt"
+MOTD_SCRIPT="$STATE_DIR/motd.expect"
+cat >"$MOTD_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "motduser\r"
+expect "公告"
+expect "维护窗口"
+expect "按任意键继续"
+send -- "x"
+expect "NORMAL"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$MOTD_SCRIPT" >"$STATE_DIR/motd.log" 2>&1; then
+    echo "✓ MOTD chrome follows session language"
+    PASS=$((PASS + 1))
+else
+    echo "x localized MOTD chrome failed"
+    sed -n '1,200p' "$STATE_DIR/motd.log"
     sed -n '1,120p' "$STATE_DIR/server.log"
     FAIL=$((FAIL + 1))
 fi

@@ -621,7 +621,8 @@ void tui_render_command_output(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
     /* Title */
-    const char *title = " COMMAND OUTPUT ";
+    const char *title = i18n_text(client->help_lang,
+                                  I18N_COMMAND_OUTPUT_TITLE);
     char title_display[64];
     utf8_ansi_truncate(title, title_display, sizeof(title_display), rw);
     int title_width = utf8_ansi_string_width(title_display);
@@ -678,8 +679,8 @@ void tui_render_motd(client_t *client) {
     size_t pos = 0;
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
-    /* Top border: ╭─ 公告 / MOTD ──...──╮ */
-    const char *title = " 公告 / MOTD ";
+    /* Top border with a localized title chip. */
+    const char *title = i18n_text(client->help_lang, I18N_MOTD_TITLE);
     int title_w = utf8_string_width(title);
     int top_dash_fill = rw - 2 - title_w - 1;  /* 2 corners, 1 leading ─ */
     if (top_dash_fill < 0) top_dash_fill = 0;
@@ -730,8 +731,9 @@ void tui_render_motd(client_t *client) {
     /* Bottom breathing-room line */
     buffer_appendf(buffer, sizeof(buffer), &pos, "\r\n");
 
-    /* Bottom border: ╰─ 按任意键继续 ─...─╯ */
-    const char *footer = " 按任意键继续 / press any key ";
+    /* Bottom border with a localized continue hint. */
+    const char *footer = i18n_text(client->help_lang,
+                                   I18N_MOTD_CONTINUE_HINT);
     int footer_w = utf8_string_width(footer);
     int bot_dash_fill = rw - 2 - footer_w - 1;
     if (bot_dash_fill < 0) bot_dash_fill = 0;
