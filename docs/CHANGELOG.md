@@ -31,6 +31,8 @@
   module, keeping large bilingual help copy out of TUI and command flow code.
 - Session language, unknown-command, suggestion, and continuation prompts now
   use the shared i18n table instead of inline command-flow conditionals.
+- Interactive and exec support guide copy now lives in a dedicated
+  `support_text` module, with focused language-selection unit coverage.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest
