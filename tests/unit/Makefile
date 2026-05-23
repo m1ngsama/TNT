@@ -13,6 +13,7 @@ endif
 UTF8_SRC = ../../src/utf8.c
 MESSAGE_SRC = ../../src/message.c
 COMMON_SRC = ../../src/common.c
+CLI_TEXT_SRC = ../../src/cli_text.c
 CHAT_ROOM_SRC = ../../src/chat_room.c
 HISTORY_VIEW_SRC = ../../src/history_view.c
 I18N_SRC = ../../src/i18n.c
@@ -20,7 +21,7 @@ SYSTEM_MESSAGE_SRC = ../../src/system_message.c
 HELP_TEXT_SRC = ../../src/help_text.c
 SUPPORT_TEXT_SRC = ../../src/support_text.c
 
-TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_help_text test_support_text
+TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_help_text test_support_text test_cli_text
 
 .PHONY: all clean run
 
@@ -50,6 +51,9 @@ test_help_text: test_help_text.c $(HELP_TEXT_SRC) $(COMMON_SRC)
 test_support_text: test_support_text.c $(SUPPORT_TEXT_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_cli_text: test_cli_text.c $(CLI_TEXT_SRC) $(COMMON_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 run: all
 	@echo "=== Running UTF-8 Tests ==="
 	./test_utf8
@@ -74,6 +78,9 @@ run: all
 	@echo ""
 	@echo "=== Running Support Text Tests ==="
 	./test_support_text
+	@echo ""
+	@echo "=== Running CLI Text Tests ==="
+	./test_cli_text
 
 clean:
 	rm -f $(TESTS) *.o test_messages.log

@@ -36,6 +36,8 @@
 - Exec-mode help, usage errors, unknown-command feedback, and post validation
   messages now follow `TNT_LANG` while preserving stable machine-readable
   command output.
+- Startup CLI help and option errors now live in a dedicated `cli_text` module
+  and follow `TNT_LANG` / locale for English and Chinese users.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

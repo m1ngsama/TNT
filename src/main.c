@@ -1,7 +1,9 @@
-#include "common.h"
-#include "ssh_server.h"
 #include "chat_room.h"
+#include "cli_text.h"
+#include "common.h"
+#include "i18n.h"
 #include "message.h"
+#include "ssh_server.h"
 #include <signal.h>
 #include <unistd.h>
 
@@ -18,6 +20,7 @@ static void signal_handler(int sig) {
 
 int main(int argc, char **argv) {
     int port = DEFAULT_PORT;
+    help_lang_t lang = i18n_default_lang();
 
     /* Environment provides defaults; command-line flags override it. */
     const char *port_env = getenv("PORT");
@@ -36,7 +39,8 @@ int main(int argc, char **argv) {
             char *end;
             long val = strtol(argv[i + 1], &end, 10);
             if (*end != '\0' || val <= 0 || val > 65535) {
-                fprintf(stderr, "Invalid port: %s\n", argv[i + 1]);
+                fprintf(stderr, cli_text_invalid_port_format(lang),
+                        argv[i + 1]);
                 return 1;
             }
             port = (int)val;
@@ -52,25 +56,15 @@ int main(int argc, char **argv) {
             printf("tnt %s\n", TNT_VERSION);
             return 0;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            printf("tnt %s - anonymous SSH chat server\n\n", TNT_VERSION);
-            printf("Usage: %s [options]\n\n", argv[0]);
-            printf("Options:\n");
-            printf("  -p, --port PORT       Listen on PORT (default: %d)\n", DEFAULT_PORT);
-            printf("  -d, --state-dir DIR   Store host key and logs in DIR\n");
-            printf("  -V, --version         Show version\n");
-            printf("  -h, --help            Show this help\n");
-            printf("\nEnvironment:\n");
-            printf("  PORT                  Default listening port\n");
-            printf("  TNT_STATE_DIR         State directory\n");
-            printf("  TNT_ACCESS_TOKEN      Require this password for SSH auth\n");
-            printf("  TNT_LANG              UI language: en or zh (default: locale)\n");
-            printf("  TNT_MAX_CONNECTIONS   Global connection limit (default: 64)\n");
-            printf("  TNT_RATE_LIMIT        Set to 0 to disable rate limiting\n");
-            printf("  TNT_IDLE_TIMEOUT      Idle disconnect timeout in seconds (default: 1800)\n");
+            char output[2048] = {0};
+            size_t pos = 0;
+
+            cli_text_append_help(output, sizeof(output), &pos, argv[0], lang);
+            fputs(output, stdout);
             return 0;
         } else {
-            fprintf(stderr, "Unknown option: %s\n", argv[i]);
-            fprintf(stderr, "Usage: %s [-p PORT] [-d DIR] [-h]\n", argv[0]);
+            fprintf(stderr, cli_text_unknown_option_format(lang), argv[i]);
+            fprintf(stderr, cli_text_short_usage_format(lang), argv[0]);
             return 1;
         }
     }
