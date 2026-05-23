@@ -95,6 +95,45 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return " 公告 ";
             case I18N_MOTD_CONTINUE_HINT:
                 return " 按任意键继续 ";
+            case I18N_USERS_TITLE:
+                return "在线用户";
+            case I18N_MSG_USAGE:
+                return "用法: msg <用户名> <消息>\n"
+                       "      w <用户名> <消息>\n";
+            case I18N_MSG_SENT_FORMAT:
+                return "悄悄话已发送给 %s\n";
+            case I18N_MSG_USER_NOT_FOUND_FORMAT:
+                return "未找到用户 '%s'\n";
+            case I18N_INBOX_TITLE:
+                return "悄悄话";
+            case I18N_INBOX_EMPTY:
+                return "(空)";
+            case I18N_NICK_USAGE:
+                return "用法: nick <新用户名>\n";
+            case I18N_NICK_INVALID:
+                return "用户名无效\n";
+            case I18N_NICK_TAKEN_FORMAT:
+                return "昵称 '%s' 已被使用\n";
+            case I18N_NICK_UNCHANGED:
+                return "昵称未变化\n";
+            case I18N_NICK_CHANGED_FORMAT:
+                return "昵称已修改: %s -> %s\n";
+            case I18N_LAST_USAGE:
+                return "用法: last [N]  (N: 1-50，默认 10)\n";
+            case I18N_LAST_HEADER_FORMAT:
+                return "--- 最近 %d 条消息 ---\n";
+            case I18N_SEARCH_USAGE:
+                return "用法: search <关键词>\n";
+            case I18N_SEARCH_HEADER_FORMAT:
+                return "--- 搜索: \"%s\" (%d 条匹配) ---\n";
+            case I18N_MUTE_JOINS_FORMAT:
+                return "加入/离开提示: %s\n";
+            case I18N_MUTE_JOINS_MUTED:
+                return "已静音";
+            case I18N_MUTE_JOINS_UNMUTED:
+                return "已开启";
+            case I18N_CLEAR_DONE:
+                return "命令输出已清空\n";
         }
     }
 
@@ -123,6 +162,45 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return " NOTICE ";
         case I18N_MOTD_CONTINUE_HINT:
             return " Press any key ";
+        case I18N_USERS_TITLE:
+            return "Online users";
+        case I18N_MSG_USAGE:
+            return "Usage: msg <username> <message>\n"
+                   "       w <username> <message>\n";
+        case I18N_MSG_SENT_FORMAT:
+            return "Whisper sent to %s\n";
+        case I18N_MSG_USER_NOT_FOUND_FORMAT:
+            return "User '%s' not found\n";
+        case I18N_INBOX_TITLE:
+            return "Whispers";
+        case I18N_INBOX_EMPTY:
+            return "(empty)";
+        case I18N_NICK_USAGE:
+            return "Usage: nick <new_username>\n";
+        case I18N_NICK_INVALID:
+            return "Invalid username\n";
+        case I18N_NICK_TAKEN_FORMAT:
+            return "Nickname '%s' is already taken\n";
+        case I18N_NICK_UNCHANGED:
+            return "Nickname unchanged\n";
+        case I18N_NICK_CHANGED_FORMAT:
+            return "Nickname changed: %s -> %s\n";
+        case I18N_LAST_USAGE:
+            return "Usage: last [N]  (N: 1-50, default 10)\n";
+        case I18N_LAST_HEADER_FORMAT:
+            return "--- Last %d message(s) ---\n";
+        case I18N_SEARCH_USAGE:
+            return "Usage: search <keyword>\n";
+        case I18N_SEARCH_HEADER_FORMAT:
+            return "--- Search: \"%s\" (%d match(es)) ---\n";
+        case I18N_MUTE_JOINS_FORMAT:
+            return "Join/leave notifications: %s\n";
+        case I18N_MUTE_JOINS_MUTED:
+            return "muted";
+        case I18N_MUTE_JOINS_UNMUTED:
+            return "unmuted";
+        case I18N_CLEAR_DONE:
+            return "Command output cleared\n";
     }
 
     return "";

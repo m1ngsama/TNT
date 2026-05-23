@@ -193,15 +193,9 @@ void commands_dispatch(client_t *client) {
         strcmp(cmd, "who") == 0) {
         pthread_rwlock_rdlock(&g_room->lock);
         int total = g_room->client_count;
-        if (client->help_lang == LANG_ZH) {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "\033[1;36m在线用户\033[0m  "
-                           "\033[2;37m· %d\033[0m\n", total);
-        } else {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "\033[1;36mOnline users\033[0m  "
-                           "\033[2;37m· %d\033[0m\n", total);
-        }
+        buffer_appendf(output, sizeof(output), &pos,
+                       "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
+                       i18n_text(client->help_lang, I18N_USERS_TITLE), total);
 
         time_t now = time(NULL);
         for (int i = 0; i < total; i++) {
@@ -290,15 +284,8 @@ void commands_dispatch(client_t *client) {
         while (*rest == ' ') rest++;
 
         if (target_name[0] == '\0' || rest[0] == '\0') {
-            if (client->help_lang == LANG_ZH) {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "用法: msg <用户名> <消息>\n"
-                               "      w <用户名> <消息>\n");
-            } else {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "Usage: msg <username> <message>\n"
-                               "       w <username> <message>\n");
-            }
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->help_lang, I18N_MSG_USAGE));
         } else {
             bool found = false;
             client_t *target = NULL;
@@ -345,21 +332,15 @@ void commands_dispatch(client_t *client) {
             }
 
             if (found) {
-                if (client->help_lang == LANG_ZH) {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "悄悄话已发送给 %s\n", target_name);
-                } else {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "Whisper sent to %s\n", target_name);
-                }
+                buffer_appendf(output, sizeof(output), &pos,
+                               i18n_text(client->help_lang,
+                                         I18N_MSG_SENT_FORMAT),
+                               target_name);
             } else {
-                if (client->help_lang == LANG_ZH) {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "未找到用户 '%s'\n", target_name);
-                } else {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "User '%s' not found\n", target_name);
-                }
+                buffer_appendf(output, sizeof(output), &pos,
+                               i18n_text(client->help_lang,
+                                         I18N_MSG_USER_NOT_FOUND_FORMAT),
+                               target_name);
             }
         }
 
@@ -375,20 +356,14 @@ void commands_dispatch(client_t *client) {
         pthread_mutex_unlock(&client->io_lock);
         client->unread_whispers = 0;
 
-        if (client->help_lang == LANG_ZH) {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "\033[1;36m悄悄话\033[0m  "
-                           "\033[2;37m· %d\033[0m\n", snap_count);
-        } else {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "\033[1;36mWhispers\033[0m  "
-                           "\033[2;37m· %d\033[0m\n", snap_count);
-        }
+        buffer_appendf(output, sizeof(output), &pos,
+                       "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
+                       i18n_text(client->help_lang, I18N_INBOX_TITLE),
+                       snap_count);
         if (snap_count == 0) {
             buffer_appendf(output, sizeof(output), &pos,
-                           client->help_lang == LANG_ZH ?
-                           "  \033[2;37m(空)\033[0m\n" :
-                           "  \033[2;37m(empty)\033[0m\n");
+                           "  \033[2;37m%s\033[0m\n",
+                           i18n_text(client->help_lang, I18N_INBOX_EMPTY));
         }
         for (int i = 0; i < snap_count; i++) {
             char ts[20];
@@ -406,15 +381,11 @@ void commands_dispatch(client_t *client) {
         while (*new_name == ' ') new_name++;
 
         if (new_name[0] == '\0') {
-            buffer_appendf(output, sizeof(output), &pos,
-                           client->help_lang == LANG_ZH ?
-                           "用法: nick <新用户名>\n" :
-                           "Usage: nick <new_username>\n");
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->help_lang, I18N_NICK_USAGE));
         } else if (!is_valid_username(new_name)) {
-            buffer_appendf(output, sizeof(output), &pos,
-                           client->help_lang == LANG_ZH ?
-                           "用户名无效\n" :
-                           "Invalid username\n");
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->help_lang, I18N_NICK_INVALID));
         } else {
             char validated_name[MAX_USERNAME_LEN];
             snprintf(validated_name, sizeof(validated_name), "%s", new_name);
@@ -445,20 +416,14 @@ void commands_dispatch(client_t *client) {
             pthread_rwlock_unlock(&g_room->lock);
 
             if (taken) {
-                if (client->help_lang == LANG_ZH) {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "昵称 '%s' 已被使用\n",
-                                   validated_name);
-                } else {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "Nickname '%s' is already taken\n",
-                                   validated_name);
-                }
-            } else if (strcmp(validated_name, old_name) == 0) {
                 buffer_appendf(output, sizeof(output), &pos,
-                               client->help_lang == LANG_ZH ?
-                               "昵称未变化\n" :
-                               "Nickname unchanged\n");
+                               i18n_text(client->help_lang,
+                                         I18N_NICK_TAKEN_FORMAT),
+                               validated_name);
+            } else if (strcmp(validated_name, old_name) == 0) {
+                buffer_appendf(output, sizeof(output), &pos, "%s",
+                               i18n_text(client->help_lang,
+                                         I18N_NICK_UNCHANGED));
             } else {
                 message_t nick_msg = { .timestamp = time(NULL) };
                 snprintf(nick_msg.username, MAX_USERNAME_LEN, "系统");
@@ -467,15 +432,10 @@ void commands_dispatch(client_t *client) {
                 room_broadcast(g_room, &nick_msg);
                 message_save(&nick_msg);
 
-                if (client->help_lang == LANG_ZH) {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "昵称已修改: %s -> %s\n",
-                                   old_name, client->username);
-                } else {
-                    buffer_appendf(output, sizeof(output), &pos,
-                                   "Nickname changed: %s -> %s\n",
-                                   old_name, client->username);
-                }
+                buffer_appendf(output, sizeof(output), &pos,
+                               i18n_text(client->help_lang,
+                                         I18N_NICK_CHANGED_FORMAT),
+                               old_name, client->username);
             }
         }
 
@@ -487,10 +447,8 @@ void commands_dispatch(client_t *client) {
             char *endp;
             long val = strtol(arg, &endp, 10);
             if (*endp != '\0' || val < 1 || val > 50) {
-                buffer_appendf(output, sizeof(output), &pos,
-                               client->help_lang == LANG_ZH ?
-                               "用法: last [N]  (N: 1-50，默认 10)\n" :
-                               "Usage: last [N]  (N: 1-50, default 10)\n");
+                buffer_appendf(output, sizeof(output), &pos, "%s",
+                               i18n_text(client->help_lang, I18N_LAST_USAGE));
                 goto cmd_done;
             }
             n = (int)val;
@@ -498,13 +456,9 @@ void commands_dispatch(client_t *client) {
 
         message_t *last_msgs = NULL;
         int last_count = message_load(&last_msgs, n);
-        if (client->help_lang == LANG_ZH) {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "--- 最近 %d 条消息 ---\n", last_count);
-        } else {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "--- Last %d message(s) ---\n", last_count);
-        }
+        buffer_appendf(output, sizeof(output), &pos,
+                       i18n_text(client->help_lang, I18N_LAST_HEADER_FORMAT),
+                       last_count);
         for (int i = 0; i < last_count; i++) {
             char ts[20];
             struct tm tmi;
@@ -519,22 +473,15 @@ void commands_dispatch(client_t *client) {
         char *query = cmd + 6;
         while (*query == ' ') query++;
         if (*query == '\0') {
-            buffer_appendf(output, sizeof(output), &pos,
-                           client->help_lang == LANG_ZH ?
-                           "用法: search <关键词>\n" :
-                           "Usage: search <keyword>\n");
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->help_lang, I18N_SEARCH_USAGE));
         } else {
             message_t *found = NULL;
             int found_count = message_search(query, &found, 15);
-            if (client->help_lang == LANG_ZH) {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "--- 搜索: \"%s\" (%d 条匹配) ---\n",
-                               query, found_count);
-            } else {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "--- Search: \"%s\" (%d match(es)) ---\n",
-                               query, found_count);
-            }
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->help_lang,
+                                     I18N_SEARCH_HEADER_FORMAT),
+                           query, found_count);
             for (int i = 0; i < found_count; i++) {
                 char ts[20];
                 struct tm tmi;
@@ -554,15 +501,12 @@ void commands_dispatch(client_t *client) {
 
     } else if (strcmp(cmd, "mute-joins") == 0 || strcmp(cmd, "mute") == 0) {
         client->mute_joins = !client->mute_joins;
-        if (client->help_lang == LANG_ZH) {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "加入/离开提示: %s\n",
-                           client->mute_joins ? "已静音" : "已开启");
-        } else {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "Join/leave notifications: %s\n",
-                           client->mute_joins ? "muted" : "unmuted");
-        }
+        buffer_appendf(output, sizeof(output), &pos,
+                       i18n_text(client->help_lang, I18N_MUTE_JOINS_FORMAT),
+                       i18n_text(client->help_lang,
+                                 client->mute_joins ?
+                                 I18N_MUTE_JOINS_MUTED :
+                                 I18N_MUTE_JOINS_UNMUTED));
 
     } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0 ||
                strcmp(cmd, "exit") == 0) {
@@ -570,10 +514,8 @@ void commands_dispatch(client_t *client) {
         return;
 
     } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
-        buffer_appendf(output, sizeof(output), &pos,
-                       client->help_lang == LANG_ZH ?
-                       "命令输出已清空\n" :
-                       "Command output cleared\n");
+        buffer_appendf(output, sizeof(output), &pos, "%s",
+                       i18n_text(client->help_lang, I18N_CLEAR_DONE));
 
     } else if (cmd[0] == '\0') {
         /* Empty command */

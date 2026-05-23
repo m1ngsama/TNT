@@ -74,6 +74,14 @@ TEST(text_lookup_matches_language) {
                   "Press any key") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_MOTD_CONTINUE_HINT),
                   "按任意键") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_MSG_USAGE),
+                  "msg <username>") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_MSG_USAGE),
+                  "用户名") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_SEARCH_HEADER_FORMAT),
+                  "Search") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_SEARCH_HEADER_FORMAT),
+                  "搜索") != NULL);
     assert(strcmp(i18n_lang_code(LANG_EN), "en") == 0);
     assert(strcmp(i18n_lang_code(LANG_ZH), "zh") == 0);
 }

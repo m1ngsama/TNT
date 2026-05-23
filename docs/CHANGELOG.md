@@ -18,6 +18,8 @@
 - Common command usage errors now stay in the session language, and bare
   `:search`, `:msg`, and `:nick` show usage instead of falling through to
   unknown-command guidance.
+- Command output text for common interactive commands is now centralized in
+  the i18n table instead of being scattered through command flow logic.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest
