@@ -87,6 +87,40 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+HELP_OUTPUT=$(ssh $SSH_OPTS localhost help 2>/dev/null || true)
+printf '%s\n' "$HELP_OUTPUT" | grep -q '^TNT exec 接口$' &&
+printf '%s\n' "$HELP_OUTPUT" | grep -q '^命令:$'
+if [ $? -eq 0 ]; then
+    echo "✓ help follows TNT_LANG"
+    PASS=$((PASS + 1))
+else
+    echo "✗ help output unexpected"
+    printf '%s\n' "$HELP_OUTPUT"
+    FAIL=$((FAIL + 1))
+fi
+
+UNKNOWN_OUTPUT=$(ssh $SSH_OPTS localhost nope 2>/dev/null || true)
+printf '%s\n' "$UNKNOWN_OUTPUT" | grep -q '^未知命令: nope$'
+if [ $? -eq 0 ]; then
+    echo "✓ unknown command follows TNT_LANG"
+    PASS=$((PASS + 1))
+else
+    echo "✗ unknown command output unexpected"
+    printf '%s\n' "$UNKNOWN_OUTPUT"
+    FAIL=$((FAIL + 1))
+fi
+
+POST_USAGE=$(ssh $SSH_OPTS localhost post 2>/dev/null || true)
+printf '%s\n' "$POST_USAGE" | grep -q '^post: 用法: post MESSAGE$'
+if [ $? -eq 0 ]; then
+    echo "✓ post usage follows TNT_LANG"
+    PASS=$((PASS + 1))
+else
+    echo "✗ post usage output unexpected"
+    printf '%s\n' "$POST_USAGE"
+    FAIL=$((FAIL + 1))
+fi
+
 POST_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "hello from exec" 2>/dev/null || true)
 if [ "$POST_OUTPUT" = "posted" ]; then
     echo "✓ post publishes a message"

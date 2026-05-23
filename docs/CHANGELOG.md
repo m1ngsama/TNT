@@ -33,6 +33,9 @@
   use the shared i18n table instead of inline command-flow conditionals.
 - Interactive and exec support guide copy now lives in a dedicated
   `support_text` module, with focused language-selection unit coverage.
+- Exec-mode help, usage errors, unknown-command feedback, and post validation
+  messages now follow `TNT_LANG` while preserving stable machine-readable
+  command output.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

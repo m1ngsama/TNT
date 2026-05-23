@@ -2,6 +2,7 @@
 #include "chat_room.h"
 #include "client.h"
 #include "common.h"
+#include "i18n.h"
 #include "input.h"
 #include "message.h"
 #include "ratelimit.h"
@@ -116,21 +117,9 @@ static void resolve_exec_username(const client_t *client, char *buffer,
 }
 
 static int exec_command_help(client_t *client) {
-    static const char help_text[] =
-        "TNT exec interface\n"
-        "Commands:\n"
-        "  help            Show this help\n"
-        "  health          Print service health\n"
-        "  users [--json]  List online users\n"
-        "  stats [--json]  Print room statistics\n"
-        "  tail [N]        Print recent messages\n"
-        "  tail -n N       Print recent messages\n"
-        "  post MESSAGE    Post a message non-interactively\n"
-        "  post \"/me act\"  Post an action message\n"
-        "  support         Show quick support guide\n"
-        "  exit            Exit successfully\n";
+    const char *help_text = i18n_text(client->help_lang, I18N_EXEC_HELP);
 
-    return client_send(client, help_text, sizeof(help_text) - 1) == 0 ? 0 : 1;
+    return client_send(client, help_text, strlen(help_text)) == 0 ? 0 : 1;
 }
 
 static int exec_command_support(client_t *client) {
@@ -304,7 +293,8 @@ static int exec_command_tail(client_t *client, const char *args) {
     int rc;
 
     if (parse_tail_count(args, &requested) < 0) {
-        client_printf(client, "tail: usage: tail [N] | tail -n N\n");
+        client_printf(client, "%s",
+                      i18n_text(client->help_lang, I18N_EXEC_TAIL_USAGE));
         return 64;
     }
 
@@ -357,7 +347,8 @@ static int exec_command_post(client_t *client, const char *args) {
     };
 
     if (!args || args[0] == '\0') {
-        client_printf(client, "post: usage: post MESSAGE\n");
+        client_printf(client, "%s",
+                      i18n_text(client->help_lang, I18N_EXEC_POST_USAGE));
         return 64;
     }
 
@@ -366,12 +357,15 @@ static int exec_command_post(client_t *client, const char *args) {
     trim_ascii_whitespace(content);
 
     if (content[0] == '\0') {
-        client_printf(client, "post: message cannot be empty\n");
+        client_printf(client, "%s",
+                      i18n_text(client->help_lang, I18N_EXEC_POST_EMPTY));
         return 64;
     }
 
     if (!utf8_is_valid_string(content)) {
-        client_printf(client, "post: invalid UTF-8 input\n");
+        client_printf(client, "%s",
+                      i18n_text(client->help_lang,
+                                I18N_EXEC_POST_INVALID_UTF8));
         return 1;
     }
 
@@ -443,14 +437,18 @@ int exec_dispatch(client_t *client) {
     }
     if (strcmp(cmd, "users") == 0) {
         if (args && strcmp(args, "--json") != 0) {
-            client_printf(client, "users: usage: users [--json]\n");
+            client_printf(client, "%s",
+                          i18n_text(client->help_lang,
+                                    I18N_EXEC_USERS_USAGE));
             return 64;
         }
         return exec_command_users(client, args != NULL);
     }
     if (strcmp(cmd, "stats") == 0) {
         if (args && strcmp(args, "--json") != 0) {
-            client_printf(client, "stats: usage: stats [--json]\n");
+            client_printf(client, "%s",
+                          i18n_text(client->help_lang,
+                                    I18N_EXEC_STATS_USAGE));
             return 64;
         }
         return exec_command_stats(client, args != NULL);
@@ -465,6 +463,9 @@ int exec_dispatch(client_t *client) {
         return 0;
     }
 
-    client_printf(client, "Unknown command: %s\n", cmd);
+    client_printf(client,
+                  i18n_text(client->help_lang,
+                            I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
+                  cmd);
     return 64;
 }

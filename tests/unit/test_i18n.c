@@ -98,6 +98,18 @@ TEST(text_lookup_matches_language) {
                   "Unknown command") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_UNKNOWN_COMMAND_FORMAT),
                   "未知命令") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_EXEC_HELP),
+                  "TNT exec interface") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_EXEC_HELP),
+                  "TNT exec 接口") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_EXEC_POST_EMPTY),
+                  "message cannot be empty") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_EXEC_POST_EMPTY),
+                  "消息不能为空") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
+                  "Unknown command") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
+                  "未知命令") != NULL);
     assert(strcmp(i18n_lang_code(LANG_EN), "en") == 0);
     assert(strcmp(i18n_lang_code(LANG_ZH), "zh") == 0);
 }

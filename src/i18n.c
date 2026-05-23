@@ -168,6 +168,33 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "你是想输入 :%s 吗?\n";
             case I18N_UNKNOWN_GUIDANCE:
                 return "输入 :support 查看引导，或 :help 查看命令\n";
+            case I18N_EXEC_HELP:
+                return "TNT exec 接口\n"
+                       "命令:\n"
+                       "  help            显示此帮助\n"
+                       "  health          输出服务健康状态\n"
+                       "  users [--json]  列出在线用户\n"
+                       "  stats [--json]  输出房间统计\n"
+                       "  tail [N]        输出最近消息\n"
+                       "  tail -n N       输出最近消息\n"
+                       "  post MESSAGE    非交互发送消息\n"
+                       "  post \"/me act\" 发送动作消息\n"
+                       "  support         显示快速支持指南\n"
+                       "  exit            成功退出\n";
+            case I18N_EXEC_USERS_USAGE:
+                return "users: 用法: users [--json]\n";
+            case I18N_EXEC_STATS_USAGE:
+                return "stats: 用法: stats [--json]\n";
+            case I18N_EXEC_TAIL_USAGE:
+                return "tail: 用法: tail [N] | tail -n N\n";
+            case I18N_EXEC_POST_USAGE:
+                return "post: 用法: post MESSAGE\n";
+            case I18N_EXEC_POST_EMPTY:
+                return "post: 消息不能为空\n";
+            case I18N_EXEC_POST_INVALID_UTF8:
+                return "post: 输入不是有效 UTF-8\n";
+            case I18N_EXEC_UNKNOWN_COMMAND_FORMAT:
+                return "未知命令: %s\n";
             case I18N_CONTINUE_PROMPT:
                 return "\n按任意键继续...";
         }
@@ -271,6 +298,33 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "Did you mean :%s?\n";
         case I18N_UNKNOWN_GUIDANCE:
             return "Type :support for guidance or :help for commands\n";
+        case I18N_EXEC_HELP:
+            return "TNT exec interface\n"
+                   "Commands:\n"
+                   "  help            Show this help\n"
+                   "  health          Print service health\n"
+                   "  users [--json]  List online users\n"
+                   "  stats [--json]  Print room statistics\n"
+                   "  tail [N]        Print recent messages\n"
+                   "  tail -n N       Print recent messages\n"
+                   "  post MESSAGE    Post a message non-interactively\n"
+                   "  post \"/me act\"  Post an action message\n"
+                   "  support         Show quick support guide\n"
+                   "  exit            Exit successfully\n";
+        case I18N_EXEC_USERS_USAGE:
+            return "users: usage: users [--json]\n";
+        case I18N_EXEC_STATS_USAGE:
+            return "stats: usage: stats [--json]\n";
+        case I18N_EXEC_TAIL_USAGE:
+            return "tail: usage: tail [N] | tail -n N\n";
+        case I18N_EXEC_POST_USAGE:
+            return "post: usage: post MESSAGE\n";
+        case I18N_EXEC_POST_EMPTY:
+            return "post: message cannot be empty\n";
+        case I18N_EXEC_POST_INVALID_UTF8:
+            return "post: invalid UTF-8 input\n";
+        case I18N_EXEC_UNKNOWN_COMMAND_FORMAT:
+            return "Unknown command: %s\n";
         case I18N_CONTINUE_PROMPT:
             return "\nPress any key to continue...";
     }
