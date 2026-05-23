@@ -322,6 +322,48 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+SYSTEM_MESSAGES_SCRIPT="$STATE_DIR/system-messages.expect"
+cat >"$SYSTEM_MESSAGES_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "systemuser\r"
+expect ":support"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "lang en\r"
+expect "Language set to: en"
+expect "Press any key"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "nick systemuser2\r"
+expect "Nickname changed: systemuser -> systemuser2"
+expect "Press any key"
+send -- "q"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$SYSTEM_MESSAGES_SCRIPT" >"$STATE_DIR/system-messages.log" 2>&1 &&
+   grep -q 'system|systemuser renamed to systemuser2' "$STATE_DIR/messages.log" &&
+   grep -q 'system|systemuser2 left the room' "$STATE_DIR/messages.log"; then
+    echo "✓ system messages follow session language"
+    PASS=$((PASS + 1))
+else
+    echo "x localized system messages failed"
+    sed -n '1,220p' "$STATE_DIR/system-messages.log" 2>/dev/null || true
+    cat "$STATE_DIR/messages.log" 2>/dev/null || true
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 printf '维护窗口\n' >"$STATE_DIR/motd.txt"
 MOTD_SCRIPT="$STATE_DIR/motd.expect"
 cat >"$MOTD_SCRIPT" <<EOF

@@ -101,6 +101,14 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "静音";
             case I18N_TITLE_HELP_HINT:
                 return "? 帮助";
+            case I18N_SYSTEM_USERNAME:
+                return "系统";
+            case I18N_SYSTEM_JOIN_FORMAT:
+                return "%s 加入了聊天室";
+            case I18N_SYSTEM_LEAVE_FORMAT:
+                return "%s 离开了聊天室";
+            case I18N_SYSTEM_NICK_FORMAT:
+                return "%s 更名为 %s";
             case I18N_USERS_TITLE:
                 return "在线用户";
             case I18N_MSG_USAGE:
@@ -174,6 +182,14 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "muted";
         case I18N_TITLE_HELP_HINT:
             return "? help";
+        case I18N_SYSTEM_USERNAME:
+            return "system";
+        case I18N_SYSTEM_JOIN_FORMAT:
+            return "%s joined the room";
+        case I18N_SYSTEM_LEAVE_FORMAT:
+            return "%s left the room";
+        case I18N_SYSTEM_NICK_FORMAT:
+            return "%s renamed to %s";
         case I18N_USERS_TITLE:
             return "Online users";
         case I18N_MSG_USAGE:

@@ -16,8 +16,9 @@ COMMON_SRC = ../../src/common.c
 CHAT_ROOM_SRC = ../../src/chat_room.c
 HISTORY_VIEW_SRC = ../../src/history_view.c
 I18N_SRC = ../../src/i18n.c
+SYSTEM_MESSAGE_SRC = ../../src/system_message.c
 
-TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n
+TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message
 
 .PHONY: all clean run
 
@@ -38,6 +39,9 @@ test_history_view: test_history_view.c $(HISTORY_VIEW_SRC)
 test_i18n: test_i18n.c $(I18N_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_system_message: test_system_message.c $(SYSTEM_MESSAGE_SRC) $(I18N_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 run: all
 	@echo "=== Running UTF-8 Tests ==="
 	./test_utf8
@@ -53,6 +57,9 @@ run: all
 	@echo ""
 	@echo "=== Running i18n Tests ==="
 	./test_i18n
+	@echo ""
+	@echo "=== Running System Message Tests ==="
+	./test_system_message
 
 clean:
 	rm -f $(TESTS) *.o test_messages.log

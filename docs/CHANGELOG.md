@@ -22,6 +22,9 @@
   the i18n table instead of being scattered through command flow logic.
 - TUI title-bar status labels, including online count, mute marker, and help
   hint, now follow the session UI language.
+- Join, leave, and nickname-change system messages now use a dedicated
+  `system_message` module, follow the sender's session language, and keep
+  `:mute-joins` filtering compatible with both Chinese and English logs.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

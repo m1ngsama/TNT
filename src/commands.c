@@ -11,6 +11,7 @@
 #include "i18n.h"
 #include "message.h"
 #include "support.h"
+#include "system_message.h"
 #include "tui.h"
 #include "utf8.h"
 #include <stdio.h>
@@ -425,10 +426,9 @@ void commands_dispatch(client_t *client) {
                                i18n_text(client->help_lang,
                                          I18N_NICK_UNCHANGED));
             } else {
-                message_t nick_msg = { .timestamp = time(NULL) };
-                snprintf(nick_msg.username, MAX_USERNAME_LEN, "系统");
-                snprintf(nick_msg.content, MAX_MESSAGE_LEN,
-                         "%s 更名为 %s", old_name, client->username);
+                message_t nick_msg;
+                system_message_make_nick(&nick_msg, old_name,
+                                         client->username, client->help_lang);
                 room_broadcast(g_room, &nick_msg);
                 message_save(&nick_msg);
 

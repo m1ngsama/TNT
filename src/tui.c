@@ -4,15 +4,10 @@
 #include "chat_room.h"
 #include "history_view.h"
 #include "i18n.h"
+#include "system_message.h"
 #include "tui_status.h"
 #include "utf8.h"
 #include <unistd.h>
-
-static bool is_join_leave_msg(const message_t *msg) {
-    if (strcmp(msg->username, "系统") != 0) return false;
-    return strstr(msg->content, "加入了聊天室") != NULL ||
-           strstr(msg->content, "离开了聊天室") != NULL;
-}
 
 static const char *username_color(const char *name) {
     static const char *colors[] = {
@@ -37,7 +32,7 @@ static void format_message_colored(const message_t *msg, char *buffer,
      * marker so they can scan their own contributions when scrolling. */
     bool is_self = false;
     if (my_username && my_username[0] != '\0' &&
-        strcmp(msg->username, "系统") != 0) {
+        !system_message_is_system(msg)) {
         if (strcmp(msg->username, "*") == 0) {
             /* /me message: content starts with the actor's username */
             size_t un_len = strlen(my_username);
@@ -54,7 +49,7 @@ static void format_message_colored(const message_t *msg, char *buffer,
 
     bool mentioned = false;
     if (my_username && my_username[0] != '\0' &&
-        strcmp(msg->username, "系统") != 0) {
+        !system_message_is_system(msg)) {
         char mention[MAX_USERNAME_LEN + 2];
         snprintf(mention, sizeof(mention), "@%s", my_username);
         if (strstr(msg->content, mention) != NULL) {
@@ -64,7 +59,7 @@ static void format_message_colored(const message_t *msg, char *buffer,
     const char *hl_start = mentioned ? "\033[1;33m" : "";
     const char *hl_end = mentioned ? "\033[0m" : "";
 
-    if (strcmp(msg->username, "系统") == 0) {
+    if (system_message_is_system(msg)) {
         snprintf(buffer, buf_size,
                  "%s\033[90m--> %s\033[0m", gutter, msg->content);
     } else if (strcmp(msg->username, "*") == 0) {
@@ -80,7 +75,7 @@ static void format_message_colored(const message_t *msg, char *buffer,
 
     /* Plain-text version for width calculation — gutter is 1 column. */
     char plain[MAX_MESSAGE_LEN + 128];
-    if (strcmp(msg->username, "系统") == 0) {
+    if (system_message_is_system(msg)) {
         snprintf(plain, sizeof(plain), " --> %s", msg->content);
     } else if (strcmp(msg->username, "*") == 0) {
         snprintf(plain, sizeof(plain), " %s * %s", time_str, msg->content);
@@ -94,7 +89,7 @@ static void format_message_colored(const message_t *msg, char *buffer,
          * 1-column gutter so the budget math comes out right. */
         int prefix_width;
         char prefix_plain[256];
-        if (strcmp(msg->username, "系统") == 0) {
+        if (system_message_is_system(msg)) {
             snprintf(prefix_plain, sizeof(prefix_plain), " --> ");
         } else if (strcmp(msg->username, "*") == 0) {
             snprintf(prefix_plain, sizeof(prefix_plain), " %s * ", time_str);
@@ -107,7 +102,7 @@ static void format_message_colored(const message_t *msg, char *buffer,
         if (content_width < 4) content_width = 4;
 
         char truncated_content[MAX_MESSAGE_LEN];
-        if (strcmp(msg->username, "系统") == 0) {
+        if (system_message_is_system(msg)) {
             strncpy(truncated_content, msg->content, sizeof(truncated_content) - 1);
             truncated_content[sizeof(truncated_content) - 1] = '\0';
         } else if (strcmp(msg->username, "*") == 0) {
@@ -118,7 +113,7 @@ static void format_message_colored(const message_t *msg, char *buffer,
         }
         utf8_truncate(truncated_content, content_width);
 
-        if (strcmp(msg->username, "系统") == 0) {
+        if (system_message_is_system(msg)) {
             snprintf(buffer, buf_size,
                      "%s\033[90m--> %s\033[0m", gutter, truncated_content);
         } else if (strcmp(msg->username, "*") == 0) {
@@ -325,7 +320,7 @@ void tui_render_screen(client_t *client) {
     if (client->mute_joins && msg_snapshot) {
         int filtered = 0;
         for (int i = 0; i < snapshot_count; i++) {
-            if (!is_join_leave_msg(&msg_snapshot[i])) {
+            if (!system_message_is_join_leave(&msg_snapshot[i])) {
                 msg_snapshot[filtered++] = msg_snapshot[i];
             }
         }

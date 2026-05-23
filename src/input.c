@@ -8,6 +8,7 @@
 #include "i18n.h"
 #include "message.h"
 #include "ratelimit.h"
+#include "system_message.h"
 #include "tui.h"
 #include "utf8.h"
 #include <libssh/callbacks.h>
@@ -701,12 +702,8 @@ void input_run_session(client_t *client) {
     bracketed_paste_enabled = true;
 
     /* Broadcast join message */
-    message_t join_msg = {
-        .timestamp = time(NULL),
-    };
-    strncpy(join_msg.username, "系统", MAX_USERNAME_LEN - 1);
-    join_msg.username[MAX_USERNAME_LEN - 1] = '\0';
-    snprintf(join_msg.content, MAX_MESSAGE_LEN, "%s 加入了聊天室", client->username);
+    message_t join_msg;
+    system_message_make_join(&join_msg, client->username, client->help_lang);
     room_broadcast(g_room, &join_msg);
     message_save(&join_msg);
 
@@ -892,12 +889,9 @@ cleanup:
 
     /* Broadcast leave message */
     if (joined_room) {
-        message_t leave_msg = {
-            .timestamp = time(NULL),
-        };
-        strncpy(leave_msg.username, "系统", MAX_USERNAME_LEN - 1);
-        leave_msg.username[MAX_USERNAME_LEN - 1] = '\0';
-        snprintf(leave_msg.content, MAX_MESSAGE_LEN, "%s 离开了聊天室", client->username);
+        message_t leave_msg;
+        system_message_make_leave(&leave_msg, client->username,
+                                  client->help_lang);
 
         client->connected = false;
         room_remove_client(g_room, client);
