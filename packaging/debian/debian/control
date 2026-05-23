@@ -1,0 +1,22 @@
+Source: tnt-chat
+Section: net
+Priority: optional
+Maintainer: M1ng <REPLACE_WITH_EMAIL>
+Build-Depends:
+ debhelper-compat (= 13),
+ libssh-dev,
+ make,
+ gcc
+Standards-Version: 4.7.0
+Homepage: https://github.com/m1ngsama/TNT
+Rules-Requires-Root: no
+
+Package: tnt-chat
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends}
+Description: SSH-native terminal chat server
+ TNT is a minimalist terminal chat server accessed over SSH. It provides a
+ Vim-style terminal interface, anonymous access by default, persistent message
+ history, and a small non-interactive SSH exec surface for scripts.

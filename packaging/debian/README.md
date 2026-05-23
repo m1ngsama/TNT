@@ -4,6 +4,22 @@ Ubuntu distribution should start with a Launchpad PPA. Direct inclusion in
 Debian or Ubuntu archives is a separate, slower process and should wait until
 the project has a stable release cadence.
 
+## Draft metadata
+
+The `debian/` directory in this folder is a packaging draft. To test it against
+an upstream release tree, copy it to the root of a clean source checkout:
+
+```sh
+cp -a packaging/debian/debian ./debian
+dpkg-buildpackage -us -uc
+```
+
+For PPA uploads, build a signed source package instead:
+
+```sh
+debuild -S
+```
+
 ## Recommended path
 
 1. Keep the upstream project installable with:
@@ -12,14 +28,13 @@ the project has a stable release cadence.
    make DESTDIR="$pkgdir" PREFIX=/usr install
    ```
 
-2. Create Debian packaging metadata from a release tarball:
+2. Review Debian packaging metadata from a release tarball:
 
    - `debian/control`
    - `debian/rules`
    - `debian/changelog`
    - `debian/copyright`
-   - `debian/install`
-   - optional `debian/tnt.service`
+   - `debian/source/format`
 
 3. Build locally with `debuild` or `dpkg-buildpackage`.
 4. Upload the signed source package to a Launchpad PPA.

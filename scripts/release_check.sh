@@ -15,6 +15,7 @@ Default checks:
   - unit tests
   - staged install layout with PREFIX=/usr and DESTDIR
   - installer shell syntax
+  - Debian packaging metadata
   - Arch/Homebrew packaging syntax
 
 Environment:
@@ -65,6 +66,10 @@ grep -q "^pkgver=$version$" packaging/arch/PKGBUILD ||
     fail "packaging/arch/PKGBUILD pkgver does not match $version"
 grep -q "v${version}.tar.gz" packaging/homebrew/tnt-chat.rb ||
     fail "packaging/homebrew/tnt-chat.rb URL does not match v$version"
+grep -q "^tnt-chat (${version}-1)" packaging/debian/debian/changelog ||
+    fail "packaging/debian/debian/changelog version does not match $version"
+grep -q "^Source: tnt-chat$" packaging/debian/debian/control ||
+    fail "packaging/debian/debian/control Source is not tnt-chat"
 
 step "building"
 make clean
@@ -100,6 +105,12 @@ make DESTDIR="$tmpdir" PREFIX=/usr install-systemd
 
 step "checking installer syntax"
 sh -n install.sh
+
+step "checking Debian packaging metadata"
+[ -x packaging/debian/debian/rules ] ||
+    fail "packaging/debian/debian/rules must be executable"
+grep -q "^3.0 (quilt)$" packaging/debian/debian/source/format ||
+    fail "unsupported Debian source format"
 
 step "checking packaging syntax"
 if command -v bash >/dev/null 2>&1; then

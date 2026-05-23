@@ -8,11 +8,12 @@ any public registry.
 
 - `arch/PKGBUILD` - AUR-ready draft for `tnt-chat`.
 - `homebrew/tnt-chat.rb` - Homebrew tap formula draft.
-- `debian/README.md` - Ubuntu PPA / Debian packaging notes.
+- `debian/` - Ubuntu PPA / Debian packaging notes and draft metadata.
 
 ## Release checklist
 
 1. Confirm `TNT_VERSION` in `include/common.h` and the manpage version match.
+   Also update package versions in Arch, Homebrew, and Debian drafts.
 2. Create a GitHub release tag such as `v1.0.0`.
 3. Build and upload release tarballs or rely on GitHub source archives.
 4. Replace placeholder checksums in package drafts.

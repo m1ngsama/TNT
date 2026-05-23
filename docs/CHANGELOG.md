@@ -39,6 +39,8 @@
   release for manual review instead of publishing immediately.
 - The one-line installer now downloads `checksums.txt`, verifies the selected
   binary before installation, and fails fast on missing release assets.
+- Added a Debian packaging metadata draft for the future Ubuntu PPA path, with
+  lightweight validation in `make release-check`.
 
 ## 2026-05-18 - Interactive input polish
 
