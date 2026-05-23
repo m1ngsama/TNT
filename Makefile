@@ -29,8 +29,9 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
+CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory unit-test integration-test connection-limit-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test connection-limit-test security-test info
 
 all: $(TARGET)
 
@@ -115,6 +116,15 @@ integration-test: all
 connection-limit-test: all
 	@echo "Running connection limit tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_connection_limits.sh
+
+security-test: all
+	@echo "Running security feature tests..."
+	@cd tests && PORT=$${PORT:-13600} ./test_security_features.sh
+
+ci-test:
+	@$(MAKE) test PORT=$(CI_TEST_PORT)
+	@$(MAKE) connection-limit-test PORT=$$(($(CI_TEST_PORT) + 10))
+	@$(MAKE) security-test PORT=$$(($(CI_TEST_PORT) + 20))
 
 # Show build info
 info:

@@ -203,6 +203,8 @@ make clean        # clean build artifacts
 make test          # run comprehensive test suite and fail on regressions
 make test-advisory # run integration tests as advisory checks
 make connection-limit-test # verify per-IP concurrency and rate limits
+make security-test # run security feature checks
+make ci-test       # run the same checks as GitHub Actions
 
 # Individual tests
 cd tests
