@@ -204,6 +204,53 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+LOCALIZED_COMMANDS_SCRIPT="$STATE_DIR/localized-commands.expect"
+cat >"$LOCALIZED_COMMANDS_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "localized\r"
+expect ":support"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "mute-joins\r"
+expect "加入/离开提示"
+expect "已静音"
+expect "按任意键"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "lang en\r"
+expect "Language set to: en"
+expect "Press any key"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "users\r"
+expect "Online users"
+expect "Press any key"
+send -- "q"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$LOCALIZED_COMMANDS_SCRIPT" >"$STATE_DIR/localized-commands.log" 2>&1; then
+    echo "✓ common command output follows session language"
+    PASS=$((PASS + 1))
+else
+    echo "x localized command output failed"
+    sed -n '1,200p' "$STATE_DIR/localized-commands.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "PASSED: $PASS"
 echo "FAILED: $FAIL"

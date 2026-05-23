@@ -193,9 +193,15 @@ void commands_dispatch(client_t *client) {
         strcmp(cmd, "who") == 0) {
         pthread_rwlock_rdlock(&g_room->lock);
         int total = g_room->client_count;
-        buffer_appendf(output, sizeof(output), &pos,
-                       "\033[1;36m在线用户 · online\033[0m  "
-                       "\033[2;37m· %d\033[0m\n", total);
+        if (client->help_lang == LANG_ZH) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "\033[1;36m在线用户\033[0m  "
+                           "\033[2;37m· %d\033[0m\n", total);
+        } else {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "\033[1;36mOnline users\033[0m  "
+                           "\033[2;37m· %d\033[0m\n", total);
+        }
 
         time_t now = time(NULL);
         for (int i = 0; i < total; i++) {
@@ -488,9 +494,15 @@ void commands_dispatch(client_t *client) {
 
     } else if (strcmp(cmd, "mute-joins") == 0 || strcmp(cmd, "mute") == 0) {
         client->mute_joins = !client->mute_joins;
-        buffer_appendf(output, sizeof(output), &pos,
-                       "Join/leave notifications: %s\n",
-                       client->mute_joins ? "muted" : "unmuted");
+        if (client->help_lang == LANG_ZH) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "加入/离开提示: %s\n",
+                           client->mute_joins ? "已静音" : "已开启");
+        } else {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Join/leave notifications: %s\n",
+                           client->mute_joins ? "muted" : "unmuted");
+        }
 
     } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0 ||
                strcmp(cmd, "exit") == 0) {
