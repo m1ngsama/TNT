@@ -10,7 +10,9 @@ typedef enum {
     I18N_INSERT_HINT_WIDE,
     I18N_INSERT_HINT_NARROW,
     I18N_NORMAL_LATEST,
-    I18N_NORMAL_NEW_MESSAGES
+    I18N_NORMAL_NEW_MESSAGES,
+    I18N_HELP_TITLE,
+    I18N_HELP_STATUS_FORMAT
 } i18n_text_id_t;
 
 bool i18n_try_parse_lang(const char *value, help_lang_t *lang);

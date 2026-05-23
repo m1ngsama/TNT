@@ -85,6 +85,10 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "G 最新";
             case I18N_NORMAL_NEW_MESSAGES:
                 return "新消息";
+            case I18N_HELP_TITLE:
+                return " 帮助 ";
+            case I18N_HELP_STATUS_FORMAT:
+                return "-- 帮助 -- (%d/%d) j/k:滚动 g/G:首尾 e/z:语言 q:关闭";
         }
     }
 
@@ -103,6 +107,10 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "G latest";
         case I18N_NORMAL_NEW_MESSAGES:
             return "new";
+        case I18N_HELP_TITLE:
+            return " HELP ";
+        case I18N_HELP_STATUS_FORMAT:
+            return "-- HELP -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close";
     }
 
     return "";

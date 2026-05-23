@@ -3,6 +3,7 @@
 #include "ssh_server.h"
 #include "chat_room.h"
 #include "history_view.h"
+#include "i18n.h"
 #include "tui_status.h"
 #include "utf8.h"
 #include <unistd.h>
@@ -875,8 +876,8 @@ void tui_render_help(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
     /* Title */
-    const char *title = " HELP ";
-    int title_width = strlen(title);
+    const char *title = i18n_text(client->help_lang, I18N_HELP_TITLE);
+    int title_width = utf8_string_width(title);
     int padding = rw - title_width;
     if (padding < 0) padding = 0;
 
@@ -921,7 +922,7 @@ void tui_render_help(client_t *client) {
 
     /* Status line */
     buffer_appendf(buffer, sizeof(buffer), &pos,
-                   "-- HELP -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close",
+                   i18n_text(client->help_lang, I18N_HELP_STATUS_FORMAT),
                    start + 1, max_scroll + 1);
 
     client_send(client, buffer, pos);

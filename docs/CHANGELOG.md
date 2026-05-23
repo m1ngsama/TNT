@@ -10,6 +10,8 @@
   their current session.
 - COMMAND-mode `:help`, unknown-command guidance, language command output, and
   continuation prompts now follow the session UI language.
+- The full-screen help title and footer now follow the session UI language,
+  with UTF-8-aware title padding for Chinese.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest
