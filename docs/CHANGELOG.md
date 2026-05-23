@@ -43,6 +43,8 @@
   lightweight validation in `make release-check`.
 - Added an Arch `.SRCINFO` draft and AUR maintainer notes, with version/package
   checks in `make release-check`.
+- Added Homebrew tap maintainer notes, and expanded `make release-check` to
+  validate the formula class and `libssh` dependency.
 
 ## 2026-05-18 - Interactive input polish
 

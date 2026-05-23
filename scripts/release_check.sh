@@ -72,6 +72,10 @@ grep -q "^pkgname = tnt-chat$" packaging/arch/.SRCINFO ||
     fail "packaging/arch/.SRCINFO pkgname is not tnt-chat"
 grep -q "v${version}.tar.gz" packaging/homebrew/tnt-chat.rb ||
     fail "packaging/homebrew/tnt-chat.rb URL does not match v$version"
+grep -q "^class TntChat < Formula$" packaging/homebrew/tnt-chat.rb ||
+    fail "packaging/homebrew/tnt-chat.rb formula class is not TntChat"
+grep -q 'depends_on "libssh"' packaging/homebrew/tnt-chat.rb ||
+    fail "packaging/homebrew/tnt-chat.rb must depend on libssh"
 grep -q "^tnt-chat (${version}-1)" packaging/debian/debian/changelog ||
     fail "packaging/debian/debian/changelog version does not match $version"
 grep -q "^Source: tnt-chat$" packaging/debian/debian/control ||

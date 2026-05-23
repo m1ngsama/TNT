@@ -7,7 +7,7 @@ any public registry.
 ## Current targets
 
 - `arch/` - AUR-ready draft for `tnt-chat`.
-- `homebrew/tnt-chat.rb` - Homebrew tap formula draft.
+- `homebrew/` - Homebrew tap formula draft and maintainer notes.
 - `debian/` - Ubuntu PPA / Debian packaging notes and draft metadata.
 
 ## Release checklist
