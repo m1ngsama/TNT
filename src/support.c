@@ -1,38 +1,91 @@
 #include "support.h"
 
 void support_append_interactive_panel(char *buffer, size_t buf_size,
-                                      size_t *pos) {
+                                      size_t *pos, help_lang_t lang) {
     if (!buffer || !pos) return;
+
+    if (lang == LANG_ZH) {
+        buffer_appendf(buffer, buf_size, pos,
+                       "\033[1;36m支持 · support\033[0m\n"
+                       "\n"
+                       "\033[1;37m第一次进来\033[0m\n"
+                       "  INSERT  输入消息，Enter 发送，ESC 进入 NORMAL\n"
+                       "  NORMAL  浏览消息，G 回到最新，i 继续输入\n"
+                       "  COMMAND 按 : 输入命令，q/ESC 关闭当前面板\n"
+                       "\n"
+                       "\033[1;37m我想...\033[0m\n"
+                       "  看谁在线        :users\n"
+                       "  看最近历史      :last 20\n"
+                       "  搜索聊天记录    :search <keyword>\n"
+                       "  回到最新消息    G 或 End\n"
+                       "  私聊某个人      :msg <user> <text>\n"
+                       "  查看私聊收件箱  :inbox\n"
+                       "  静音进出提示    :mute-joins\n"
+                       "\n"
+                       "\033[1;37m遇到问题\033[0m\n"
+                       "  看不到新消息: 在 NORMAL 按 G 或 End 回到最新\n"
+                       "  粘贴多行文本: 直接粘贴，TNT 会等 Enter 后一次发送\n"
+                       "  输入太长: 状态行接近限制时会提示，超出会响铃\n"
+                       "  命令不记得: 输入 :help 看列表，输入 :support 回到这里\n"
+                       "  连接断开: 可能是空闲超时、连接数限制或网络重连\n"
+                       "\n"
+                       "\033[2;37m更多: ? 打开完整按键帮助，:help 查看命令列表\033[0m\n");
+        return;
+    }
 
     buffer_appendf(buffer, buf_size, pos,
-                   "\033[1;36m支持 · support\033[0m\n"
+                   "\033[1;36mSupport\033[0m\n"
                    "\n"
-                   "\033[1;37m第一次进来\033[0m\n"
-                   "  INSERT  输入消息，Enter 发送，ESC 进入 NORMAL\n"
-                   "  NORMAL  浏览消息，G 回到最新，i 继续输入\n"
-                   "  COMMAND 按 : 输入命令，q/ESC 关闭当前面板\n"
+                   "\033[1;37mFirst minute\033[0m\n"
+                   "  INSERT  Type messages, Enter sends, ESC enters NORMAL\n"
+                   "  NORMAL  Browse history, G jumps latest, i continues typing\n"
+                   "  COMMAND Press : for commands, q/ESC closes this panel\n"
                    "\n"
-                   "\033[1;37m我想...\033[0m\n"
-                   "  看谁在线        :users\n"
-                   "  看最近历史      :last 20\n"
-                   "  搜索聊天记录    :search <keyword>\n"
-                   "  回到最新消息    G 或 End\n"
-                   "  私聊某个人      :msg <user> <text>\n"
-                   "  查看私聊收件箱  :inbox\n"
-                   "  静音进出提示    :mute-joins\n"
+                   "\033[1;37mI want to...\033[0m\n"
+                   "  See who is online   :users\n"
+                   "  See recent history  :last 20\n"
+                   "  Search history      :search <keyword>\n"
+                   "  Return to latest    G or End\n"
+                   "  Whisper someone     :msg <user> <text>\n"
+                   "  Read whispers       :inbox\n"
+                   "  Mute join notices   :mute-joins\n"
                    "\n"
-                   "\033[1;37m遇到问题\033[0m\n"
-                   "  看不到新消息: 在 NORMAL 按 G 或 End 回到最新\n"
-                   "  粘贴多行文本: 直接粘贴，TNT 会等 Enter 后一次发送\n"
-                   "  输入太长: 状态行接近限制时会提示，超出会响铃\n"
-                   "  命令不记得: 输入 :help 看列表，输入 :support 回到这里\n"
-                   "  连接断开: 可能是空闲超时、连接数限制或网络重连\n"
+                   "\033[1;37mTroubleshooting\033[0m\n"
+                   "  Missing new messages: press G or End in NORMAL\n"
+                   "  Pasting many lines: paste normally, then Enter sends once\n"
+                   "  Message too long: the status line warns near the limit\n"
+                   "  Forgot a command: type :help or return here with :support\n"
+                   "  Disconnected: check idle timeout, limits, or reconnect\n"
                    "\n"
-                   "\033[2;37m更多: ? 打开完整按键帮助，:help 查看命令列表\033[0m\n");
+                   "\033[2;37mMore: ? opens full key help, :help lists commands\033[0m\n");
 }
 
-void support_append_exec_panel(char *buffer, size_t buf_size, size_t *pos) {
+void support_append_exec_panel(char *buffer, size_t buf_size, size_t *pos,
+                               help_lang_t lang) {
     if (!buffer || !pos) return;
+
+    if (lang == LANG_ZH) {
+        buffer_appendf(buffer, buf_size, pos,
+                       "TNT 支持\n"
+                       "\n"
+                       "交互使用:\n"
+                       "  ssh -p 2222 HOST\n"
+                       "  INSERT: 输入消息并按 Enter 发送\n"
+                       "  NORMAL: G 回到最新，k/PageUp 查看更早消息\n"
+                       "  COMMAND: 按 : 后可运行 users, last, search, msg, inbox\n"
+                       "\n"
+                       "非交互检查:\n"
+                       "  ssh -p 2222 HOST health\n"
+                       "  ssh -p 2222 HOST stats --json\n"
+                       "  ssh -p 2222 HOST users --json\n"
+                       "  ssh -p 2222 HOST 'tail -n 20'\n"
+                       "  ssh -p 2222 USER@HOST post 'message'\n"
+                       "\n"
+                       "排查:\n"
+                       "  连接过早关闭: 检查限流、空闲超时、连接容量、\n"
+                       "  单 IP 限制和防火墙规则。\n");
+        return;
+    }
 
     buffer_appendf(buffer, buf_size, pos,
                    "TNT support\n"

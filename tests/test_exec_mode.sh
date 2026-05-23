@@ -29,7 +29,7 @@ SSH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Batc
 
 echo "=== TNT Exec Mode Tests ==="
 
-TNT_RATE_LIMIT=0 $BIN -p "$PORT" -d "$STATE_DIR" >"${STATE_DIR}/server.log" 2>&1 &
+TNT_LANG=zh TNT_RATE_LIMIT=0 $BIN -p "$PORT" -d "$STATE_DIR" >"${STATE_DIR}/server.log" 2>&1 &
 SERVER_PID=$!
 
 HEALTH_OUTPUT=""
@@ -76,8 +76,8 @@ else
 fi
 
 SUPPORT_OUTPUT=$(ssh $SSH_OPTS localhost support 2>/dev/null || true)
-printf '%s\n' "$SUPPORT_OUTPUT" | grep -q '^TNT support$' &&
-printf '%s\n' "$SUPPORT_OUTPUT" | grep -q '^Troubleshooting:'
+printf '%s\n' "$SUPPORT_OUTPUT" | grep -Eq '^TNT (support|支持)$' &&
+printf '%s\n' "$SUPPORT_OUTPUT" | grep -Eq '^(Troubleshooting|排查):'
 if [ $? -eq 0 ]; then
     echo "✓ support returns quick guide"
     PASS=$((PASS + 1))

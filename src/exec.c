@@ -137,7 +137,7 @@ static int exec_command_support(client_t *client) {
     char output[2048] = {0};
     size_t pos = 0;
 
-    support_append_exec_panel(output, sizeof(output), &pos);
+    support_append_exec_panel(output, sizeof(output), &pos, client->help_lang);
     return client_send(client, output, pos) == 0 ? 0 : 1;
 }
 

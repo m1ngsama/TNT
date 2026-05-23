@@ -4,7 +4,8 @@
 #include "common.h"
 
 void support_append_interactive_panel(char *buffer, size_t buf_size,
-                                      size_t *pos);
-void support_append_exec_panel(char *buffer, size_t buf_size, size_t *pos);
+                                      size_t *pos, help_lang_t lang);
+void support_append_exec_panel(char *buffer, size_t buf_size, size_t *pos,
+                               help_lang_t lang);
 
 #endif /* SUPPORT_H */

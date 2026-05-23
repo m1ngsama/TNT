@@ -32,7 +32,7 @@ SSH_OPTS="-e none -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o
 
 echo "=== TNT Interactive Input Tests ==="
 
-TNT_RATE_LIMIT=0 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
+TNT_LANG=zh TNT_RATE_LIMIT=0 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
 SERVER_READY=0

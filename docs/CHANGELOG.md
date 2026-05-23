@@ -2,6 +2,11 @@
 
 ## 2026-05-21 - Message browsing polish
 
+### Added
+- Added a first i18n boundary: `TNT_LANG` / locale detection now chooses the
+  default interactive UI language (`en` or `zh`) for username prompts, status
+  hints, help language, and `:support`.
+
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest
   in-memory message. Use `k`/PageUp to browse older history and `G`/End to

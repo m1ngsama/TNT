@@ -188,7 +188,8 @@ void commands_dispatch(client_t *client) {
                        "========================================\n");
 
     } else if (strcmp(cmd, "support") == 0 || strcmp(cmd, "guide") == 0) {
-        support_append_interactive_panel(output, sizeof(output), &pos);
+        support_append_interactive_panel(output, sizeof(output), &pos,
+                                         client->help_lang);
 
     } else if (strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {
         char *rest = (cmd[0] == 'w') ? cmd + 2 : cmd + 4;

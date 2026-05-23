@@ -12,3 +12,4 @@ tests/unit/test_utf8
 tests/unit/test_message
 tests/unit/test_chat_room
 tests/unit/test_history_view
+tests/unit/test_i18n

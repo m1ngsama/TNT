@@ -156,6 +156,14 @@ Directory for host key and message log (default: current directory).
 If set, clients must supply this string as their SSH password.
 Compared in constant time.
 .TP
+.B TNT_LANG
+Default interactive UI language.
+Accepts
+.B en
+or
+.BR zh .
+When unset, TNT detects the process locale and falls back to English.
+.TP
 .B TNT_MAX_CONNECTIONS
 Global connection limit (default: 64, max: 1024).
 .TP

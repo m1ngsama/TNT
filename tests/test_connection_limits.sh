@@ -44,7 +44,7 @@ wait_for_health() {
 
 echo "=== TNT Connection Limit Tests ==="
 
-TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=1 "$BIN" -p "$PORT" -d "$STATE_DIR" \
+TNT_LANG=zh TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=1 "$BIN" -p "$PORT" -d "$STATE_DIR" \
     >"$STATE_DIR/concurrent.log" 2>&1 &
 SERVER_PID=$!
 
@@ -99,7 +99,7 @@ SERVER_PID=""
 RATE_PORT=$((PORT + 1))
 SSH_RATE_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $RATE_PORT"
 
-TNT_MAX_CONN_PER_IP=10 TNT_MAX_CONN_RATE_PER_IP=2 "$BIN" -p "$RATE_PORT" -d "$STATE_DIR" \
+TNT_LANG=zh TNT_MAX_CONN_PER_IP=10 TNT_MAX_CONN_RATE_PER_IP=2 "$BIN" -p "$RATE_PORT" -d "$STATE_DIR" \
     >"$STATE_DIR/rate.log" 2>&1 &
 SERVER_PID=$!
 

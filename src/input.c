@@ -5,6 +5,7 @@
 #include "common.h"
 #include "exec.h"
 #include "history_view.h"
+#include "i18n.h"
 #include "message.h"
 #include "ratelimit.h"
 #include "tui.h"
@@ -19,9 +20,11 @@
 #include <time.h>
 
 static int g_idle_timeout = DEFAULT_IDLE_TIMEOUT;
+static help_lang_t g_default_lang = LANG_EN;
 
 void input_init(void) {
     g_idle_timeout = env_int("TNT_IDLE_TIMEOUT", DEFAULT_IDLE_TIMEOUT, 0, 86400);
+    g_default_lang = i18n_default_lang();
 }
 
 static int read_username(client_t *client) {
@@ -30,7 +33,8 @@ static int read_username(client_t *client) {
     char buf[4];
 
     tui_render_welcome(client);
-    client_printf(client, "  请输入用户名 (留空 anonymous): ");
+    client_printf(client, "%s", i18n_text(client->help_lang,
+                                          I18N_USERNAME_PROMPT));
 
     while (1) {
         int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 60000); /* 60 sec timeout */
@@ -112,7 +116,8 @@ static int read_username(client_t *client) {
 
         /* Validate username for security */
         if (!is_valid_username(client->username)) {
-            client_printf(client, "Invalid username. Using 'anonymous' instead.\r\n");
+            client_printf(client, "%s", i18n_text(client->help_lang,
+                                                  I18N_INVALID_USERNAME));
             strcpy(client->username, "anonymous");
         } else {
             /* Truncate to 20 characters */
@@ -659,7 +664,7 @@ void input_run_session(client_t *client) {
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
     client->follow_tail = true;
-    client->help_lang = LANG_ZH;
+    client->help_lang = g_default_lang;
     client->connected = true;
     client->command_history_count = 0;
     client->command_history_pos = 0;
@@ -683,7 +688,8 @@ void input_run_session(client_t *client) {
 
     /* Add to room */
     if (room_add_client(g_room, client) < 0) {
-        client_printf(client, "Room is full\n");
+        client_printf(client, "%s", i18n_text(client->help_lang,
+                                              I18N_ROOM_FULL));
         goto cleanup;
     }
     joined_room = true;

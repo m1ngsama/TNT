@@ -10,7 +10,7 @@ if [ ! -f "$BIN" ]; then
 fi
 
 echo "Starting TNT server on port $PORT..."
-$BIN -p $PORT > /dev/null 2>&1 &
+TNT_LANG=zh $BIN -p $PORT > /dev/null 2>&1 &
 SERVER_PID=$!
 sleep 2
 

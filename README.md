@@ -127,6 +127,9 @@ TNT_STATE_DIR=/var/lib/tnt tnt
 
 # Show the public SSH endpoint in startup logs
 TNT_PUBLIC_HOST=chat.m1ng.space tnt
+
+# Choose interactive UI language (en or zh; defaults from locale)
+TNT_LANG=zh tnt
 ```
 
 **Rate limiting:**
