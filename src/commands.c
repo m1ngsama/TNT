@@ -8,6 +8,7 @@
 #include "chat_room.h"
 #include "client.h"
 #include "common.h"
+#include "help_text.h"
 #include "i18n.h"
 #include "message.h"
 #include "support.h"
@@ -105,58 +106,6 @@ static const char *suggest_command(const char *cmd) {
     return best_distance <= 2 ? best : NULL;
 }
 
-static void append_command_help(char *output, size_t buf_size, size_t *pos,
-                                help_lang_t lang) {
-    if (lang == LANG_ZH) {
-        buffer_appendf(output, buf_size, pos,
-                       "========================================\n"
-                       "    可用命令\n"
-                       "========================================\n"
-                       "list, users, who    - 显示在线用户\n"
-                       "nick/name <name>    - 修改昵称\n"
-                       "msg/w <user> <text> - 私聊用户\n"
-                       "inbox               - 查看私聊历史\n"
-                       "last [N]            - 查看最近 N 条消息\n"
-                       "search <keyword>    - 搜索消息历史\n"
-                       "mute-joins          - 切换加入/离开提示\n"
-                       "support             - 显示快速支持指南\n"
-                       "lang [en|zh]        - 查看或切换界面语言\n"
-                       "help, commands      - 显示此帮助\n"
-                       "clear, cls          - 清空命令输出\n"
-                       "q, quit, exit       - 断开连接\n"
-                       "上/下方向键         - 命令历史\n"
-                       "========================================\n"
-                       "INSERT 模式:\n"
-                       "  /me <action>      - 发送动作消息\n"
-                       "  @username         - 提及用户并响铃提示\n"
-                       "========================================\n");
-        return;
-    }
-
-    buffer_appendf(output, buf_size, pos,
-                   "========================================\n"
-                   "    Available Commands\n"
-                   "========================================\n"
-                   "list, users, who    - Show online users\n"
-                   "nick/name <name>    - Change nickname\n"
-                   "msg/w <user> <text> - Whisper to user (private)\n"
-                   "inbox               - Show whisper history\n"
-                   "last [N]            - Show last N messages\n"
-                   "search <keyword>    - Search message history\n"
-                   "mute-joins          - Toggle join/leave notices\n"
-                   "support             - Show quick support guide\n"
-                   "lang [en|zh]        - Show or switch UI language\n"
-                   "help, commands      - Show this help\n"
-                   "clear, cls          - Clear command output\n"
-                   "q, quit, exit       - Disconnect\n"
-                   "Up/Down arrows      - Command history\n"
-                   "========================================\n"
-                   "In INSERT mode:\n"
-                   "  /me <action>      - Send action message\n"
-                   "  @username         - Mention (bell notify)\n"
-                   "========================================\n");
-}
-
 void commands_dispatch(client_t *client) {
     char cmd_buf[256];
     strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
@@ -220,7 +169,8 @@ void commands_dispatch(client_t *client) {
         pthread_rwlock_unlock(&g_room->lock);
 
     } else if (strcmp(cmd, "help") == 0 || strcmp(cmd, "commands") == 0) {
-        append_command_help(output, sizeof(output), &pos, client->help_lang);
+        help_text_append_commands(output, sizeof(output), &pos,
+                                  client->help_lang);
 
     } else if (strcmp(cmd, "support") == 0 || strcmp(cmd, "guide") == 0) {
         support_append_interactive_panel(output, sizeof(output), &pos,

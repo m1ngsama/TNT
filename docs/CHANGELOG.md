@@ -27,6 +27,8 @@
   `:mute-joins` filtering compatible with both Chinese and English logs.
 - The interactive welcome screen now follows the selected UI language,
   including the narrow-terminal fallback.
+- Full-screen help and COMMAND-mode help now live in a dedicated `help_text`
+  module, keeping large bilingual help copy out of TUI and command flow code.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest
