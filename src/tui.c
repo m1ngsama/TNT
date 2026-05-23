@@ -356,7 +356,9 @@ void tui_render_screen(client_t *client) {
     chip_count++;
 
     char online_buf[32];
-    snprintf(online_buf, sizeof(online_buf), "在线 %d", online);
+    snprintf(online_buf, sizeof(online_buf),
+             i18n_text(client->help_lang, I18N_TITLE_ONLINE_FORMAT),
+             online);
     chips[chip_count].value = online_buf;
     chips[chip_count].value_color = "\033[37m";
     chip_count++;
@@ -373,9 +375,10 @@ void tui_render_screen(client_t *client) {
     chips[chip_count].value_color = mode_color;
     chip_count++;
 
-    const char *hint = "? 帮助";
+    const char *hint = i18n_text(client->help_lang, I18N_TITLE_HELP_HINT);
     int hint_width = utf8_string_width(hint);
-    int mute_width = client->mute_joins ? 6 : 0;  /* "  静音" = 2 + 4 */
+    const char *mute_label = i18n_text(client->help_lang, I18N_TITLE_MUTED);
+    int mute_width = client->mute_joins ? utf8_string_width(mute_label) + 2 : 0;
 
     /* Unread @-mentions chip — high-priority, gets a bright yellow star.
      * Sits between mode and hint when present, and survives degradation
@@ -442,7 +445,8 @@ void tui_render_screen(client_t *client) {
         left_width += utf8_string_width(chips[i].value);
     }
     if (show_mute) {
-        buffer_appendf(left, sizeof(left), &lpos, "  \033[2;37m静音\033[0m");
+        buffer_appendf(left, sizeof(left), &lpos,
+                       "  \033[2;37m%s\033[0m", mute_label);
         left_width += mute_width;
     }
     if (show_unread) {

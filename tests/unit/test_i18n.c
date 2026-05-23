@@ -74,6 +74,10 @@ TEST(text_lookup_matches_language) {
                   "Press any key") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_MOTD_CONTINUE_HINT),
                   "按任意键") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_TITLE_ONLINE_FORMAT),
+                  "online") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_TITLE_ONLINE_FORMAT),
+                  "在线") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_MSG_USAGE),
                   "msg <username>") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_MSG_USAGE),

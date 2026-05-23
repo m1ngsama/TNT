@@ -20,6 +20,8 @@
   unknown-command guidance.
 - Command output text for common interactive commands is now centralized in
   the i18n table instead of being scattered through command flow logic.
+- TUI title-bar status labels, including online count, mute marker, and help
+  hint, now follow the session UI language.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

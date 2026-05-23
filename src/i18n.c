@@ -95,6 +95,12 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return " 公告 ";
             case I18N_MOTD_CONTINUE_HINT:
                 return " 按任意键继续 ";
+            case I18N_TITLE_ONLINE_FORMAT:
+                return "在线 %d";
+            case I18N_TITLE_MUTED:
+                return "静音";
+            case I18N_TITLE_HELP_HINT:
+                return "? 帮助";
             case I18N_USERS_TITLE:
                 return "在线用户";
             case I18N_MSG_USAGE:
@@ -162,6 +168,12 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return " NOTICE ";
         case I18N_MOTD_CONTINUE_HINT:
             return " Press any key ";
+        case I18N_TITLE_ONLINE_FORMAT:
+            return "online %d";
+        case I18N_TITLE_MUTED:
+            return "muted";
+        case I18N_TITLE_HELP_HINT:
+            return "? help";
         case I18N_USERS_TITLE:
             return "Online users";
         case I18N_MSG_USAGE:
