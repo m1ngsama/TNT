@@ -41,6 +41,8 @@
   binary before installation, and fails fast on missing release assets.
 - Added a Debian packaging metadata draft for the future Ubuntu PPA path, with
   lightweight validation in `make release-check`.
+- Added an Arch `.SRCINFO` draft and AUR maintainer notes, with version/package
+  checks in `make release-check`.
 
 ## 2026-05-18 - Interactive input polish
 

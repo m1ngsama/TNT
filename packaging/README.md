@@ -6,7 +6,7 @@ any public registry.
 
 ## Current targets
 
-- `arch/PKGBUILD` - AUR-ready draft for `tnt-chat`.
+- `arch/` - AUR-ready draft for `tnt-chat`.
 - `homebrew/tnt-chat.rb` - Homebrew tap formula draft.
 - `debian/` - Ubuntu PPA / Debian packaging notes and draft metadata.
 

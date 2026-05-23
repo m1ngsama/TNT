@@ -64,6 +64,12 @@ grep -q "\"TNT $version\"" tnt.1 ||
     fail "tnt.1 does not mention TNT $version"
 grep -q "^pkgver=$version$" packaging/arch/PKGBUILD ||
     fail "packaging/arch/PKGBUILD pkgver does not match $version"
+grep -q "pkgver = $version" packaging/arch/.SRCINFO ||
+    fail "packaging/arch/.SRCINFO pkgver does not match $version"
+grep -q "^pkgname=tnt-chat$" packaging/arch/PKGBUILD ||
+    fail "packaging/arch/PKGBUILD pkgname is not tnt-chat"
+grep -q "^pkgname = tnt-chat$" packaging/arch/.SRCINFO ||
+    fail "packaging/arch/.SRCINFO pkgname is not tnt-chat"
 grep -q "v${version}.tar.gz" packaging/homebrew/tnt-chat.rb ||
     fail "packaging/homebrew/tnt-chat.rb URL does not match v$version"
 grep -q "^tnt-chat (${version}-1)" packaging/debian/debian/changelog ||
@@ -129,6 +135,8 @@ if [ "$STRICT" -eq 1 ]; then
     step "checking strict release gates"
     ! grep -q "sha256sums=('SKIP')" packaging/arch/PKGBUILD ||
         fail "replace PKGBUILD sha256sums before strict release"
+    ! grep -q "sha256sums = SKIP" packaging/arch/.SRCINFO ||
+        fail "replace .SRCINFO sha256sums before strict release"
     ! grep -q "REPLACE_WITH_RELEASE_TARBALL_SHA256" packaging/homebrew/tnt-chat.rb ||
         fail "replace Homebrew sha256 before strict release"
     git rev-parse -q --verify "refs/tags/v$version" >/dev/null ||

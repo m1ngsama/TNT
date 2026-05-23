@@ -1,0 +1,15 @@
+pkgbase = tnt-chat
+	pkgdesc = SSH-native terminal chat server with a Vim-style interface
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/m1ngsama/TNT
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	makedepends = gcc
+	makedepends = make
+	depends = libssh
+	source = tnt-chat-1.0.0.tar.gz::https://github.com/m1ngsama/TNT/archive/refs/tags/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = tnt-chat
