@@ -62,6 +62,10 @@ TEST(text_lookup_matches_language) {
                   "display name") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_USERNAME_PROMPT),
                   "用户名") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_WELCOME_SUBTITLE),
+                  "anonymous chat") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_WELCOME_SUBTITLE),
+                  "匿名聊天室") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_HELP_STATUS_FORMAT),
                   "HELP") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_HELP_STATUS_FORMAT),

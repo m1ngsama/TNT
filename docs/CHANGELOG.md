@@ -25,6 +25,8 @@
 - Join, leave, and nickname-change system messages now use a dedicated
   `system_message` module, follow the sender's session language, and keep
   `:mute-joins` filtering compatible with both Chinese and English logs.
+- The interactive welcome screen now follows the selected UI language,
+  including the narrow-terminal fallback.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

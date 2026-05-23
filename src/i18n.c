@@ -77,6 +77,12 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "用户名无效，已改用 anonymous。\r\n";
             case I18N_ROOM_FULL:
                 return "房间已满\r\n";
+            case I18N_WELCOME_SUBTITLE:
+                return "匿名聊天室 · SSH";
+            case I18N_WELCOME_TAGLINE:
+                return "键盘友好的终端交流";
+            case I18N_WELCOME_FALLBACK_FORMAT:
+                return "TNT %s - SSH 匿名聊天室\r\n\r\n";
             case I18N_INSERT_HINT_WIDE:
                 return "Enter 发送 · Esc 浏览 · :support";
             case I18N_INSERT_HINT_NARROW:
@@ -158,6 +164,12 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "Invalid username. Using 'anonymous' instead.\r\n";
         case I18N_ROOM_FULL:
             return "Room is full\r\n";
+        case I18N_WELCOME_SUBTITLE:
+            return "anonymous chat · SSH";
+        case I18N_WELCOME_TAGLINE:
+            return "keyboard-first terminal chat";
+        case I18N_WELCOME_FALLBACK_FORMAT:
+            return "TNT %s - anonymous chat over SSH\r\n\r\n";
         case I18N_INSERT_HINT_WIDE:
             return "Enter send · Esc browse · :support";
         case I18N_INSERT_HINT_NARROW:

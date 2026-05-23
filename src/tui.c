@@ -153,8 +153,8 @@ void tui_render_welcome(client_t *client) {
 
     /* Lines, in display order.  Width is computed in display columns. */
     const char *line1 = "TNT · " TNT_VERSION;
-    const char *line2 = "匿名聊天室 · SSH";
-    const char *line3 = "Anonymous chat over SSH";
+    const char *line2 = i18n_text(client->help_lang, I18N_WELCOME_SUBTITLE);
+    const char *line3 = i18n_text(client->help_lang, I18N_WELCOME_TAGLINE);
 
     int inner_w = utf8_string_width(line1);
     int w2 = utf8_string_width(line2);
@@ -165,11 +165,13 @@ void tui_render_welcome(client_t *client) {
 
     /* Fall back to plain prompt if the terminal is too narrow for the frame. */
     if (inner_w + 2 > rw) {
+        char fallback_text[96];
         char fallback[128];
-        int n = snprintf(fallback, sizeof(fallback),
-                         ANSI_CLEAR ANSI_HOME
-                         "TNT %s — anonymous chat over SSH\r\n\r\n",
-                         TNT_VERSION);
+        snprintf(fallback_text, sizeof(fallback_text),
+                 i18n_text(client->help_lang, I18N_WELCOME_FALLBACK_FORMAT),
+                 TNT_VERSION);
+        int n = snprintf(fallback, sizeof(fallback), ANSI_CLEAR ANSI_HOME "%s",
+                         fallback_text);
         if (n > 0) client_send(client, fallback, (size_t)n);
         return;
     }
