@@ -8,6 +8,8 @@
   hints, help language, and `:support`.
 - Added `:lang <en|zh>` so users can switch the interactive UI language for
   their current session.
+- COMMAND-mode `:help`, unknown-command guidance, language command output, and
+  continuation prompts now follow the session UI language.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest
