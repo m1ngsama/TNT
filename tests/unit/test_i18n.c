@@ -82,6 +82,10 @@ TEST(text_lookup_matches_language) {
                   "online") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_TITLE_ONLINE_FORMAT),
                   "在线") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_IDLE_TIMEOUT_FORMAT),
+                  "idle timeout") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_IDLE_TIMEOUT_FORMAT),
+                  "空闲超时") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_MSG_USAGE),
                   "msg <username>") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_MSG_USAGE),

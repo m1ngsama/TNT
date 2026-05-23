@@ -107,6 +107,8 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "静音";
             case I18N_TITLE_HELP_HINT:
                 return "? 帮助";
+            case I18N_IDLE_TIMEOUT_FORMAT:
+                return "\r\n\033[33m已断开: 空闲超时 (%d 分钟)\033[0m\r\n";
             case I18N_SYSTEM_USERNAME:
                 return "系统";
             case I18N_SYSTEM_JOIN_FORMAT:
@@ -237,6 +239,8 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "muted";
         case I18N_TITLE_HELP_HINT:
             return "? help";
+        case I18N_IDLE_TIMEOUT_FORMAT:
+            return "\r\n\033[33mDisconnected: idle timeout (%d min)\033[0m\r\n";
         case I18N_SYSTEM_USERNAME:
             return "system";
         case I18N_SYSTEM_JOIN_FORMAT:

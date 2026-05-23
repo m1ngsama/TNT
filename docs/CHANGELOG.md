@@ -38,6 +38,7 @@
   command output.
 - Startup CLI help and option errors now live in a dedicated `cli_text` module
   and follow `TNT_LANG` / locale for English and Chinese users.
+- Idle-timeout disconnect notices now follow the session UI language.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

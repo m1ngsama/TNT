@@ -787,7 +787,9 @@ main_loop:
 
             if (g_idle_timeout > 0 && joined_room &&
                 time(NULL) - client->last_active >= g_idle_timeout) {
-                client_printf(client, "\r\n\033[33mDisconnected: idle timeout (%d min)\033[0m\r\n",
+                client_printf(client,
+                              i18n_text(client->help_lang,
+                                        I18N_IDLE_TIMEOUT_FORMAT),
                               g_idle_timeout / 60);
                 break;
             }
