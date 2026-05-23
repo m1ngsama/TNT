@@ -17,23 +17,33 @@ static bool starts_with_lang(const char *value, const char *prefix) {
     return *value == '\0' || *value == '_' || *value == '-' || *value == '.';
 }
 
-help_lang_t i18n_parse_lang(const char *value, help_lang_t fallback) {
+bool i18n_try_parse_lang(const char *value, help_lang_t *lang) {
     if (!value || value[0] == '\0') {
-        return fallback;
+        return false;
     }
 
     if (starts_with_lang(value, "zh") ||
         starts_with_lang(value, "cn") ||
         starts_with_lang(value, "chinese")) {
-        return LANG_ZH;
+        if (lang) *lang = LANG_ZH;
+        return true;
     }
 
     if (starts_with_lang(value, "en") ||
         starts_with_lang(value, "c") ||
         starts_with_lang(value, "posix")) {
-        return LANG_EN;
+        if (lang) *lang = LANG_EN;
+        return true;
     }
 
+    return false;
+}
+
+help_lang_t i18n_parse_lang(const char *value, help_lang_t fallback) {
+    help_lang_t lang;
+    if (i18n_try_parse_lang(value, &lang)) {
+        return lang;
+    }
     return fallback;
 }
 

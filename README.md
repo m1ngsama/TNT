@@ -96,6 +96,7 @@ Ctrl+C     - Exit chat
 :search <keyword>    - Search full message history (case-insensitive)
 :mute-joins          - Toggle join/leave system notifications
 :support             - Show quick support guide
+:lang <en|zh>        - Switch UI language for this session
 :help                - Show available commands
 :clear               - Clear command output
 :q, :quit, :exit     - Disconnect

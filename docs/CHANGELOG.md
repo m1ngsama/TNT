@@ -6,6 +6,8 @@
 - Added a first i18n boundary: `TNT_LANG` / locale detection now chooses the
   default interactive UI language (`en` or `zh`) for username prompts, status
   hints, help language, and `:support`.
+- Added `:lang <en|zh>` so users can switch the interactive UI language for
+  their current session.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

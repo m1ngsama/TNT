@@ -13,6 +13,7 @@ typedef enum {
     I18N_NORMAL_NEW_MESSAGES
 } i18n_text_id_t;
 
+bool i18n_try_parse_lang(const char *value, help_lang_t *lang);
 help_lang_t i18n_parse_lang(const char *value, help_lang_t fallback);
 help_lang_t i18n_default_lang(void);
 const char *i18n_lang_code(help_lang_t lang);

@@ -17,11 +17,19 @@
 static int tests_passed = 0;
 
 TEST(parse_explicit_languages) {
+    help_lang_t lang;
+
     assert(i18n_parse_lang("zh", LANG_EN) == LANG_ZH);
     assert(i18n_parse_lang("zh_CN.UTF-8", LANG_EN) == LANG_ZH);
     assert(i18n_parse_lang("cn", LANG_EN) == LANG_ZH);
     assert(i18n_parse_lang("en", LANG_ZH) == LANG_EN);
     assert(i18n_parse_lang("en_US.UTF-8", LANG_ZH) == LANG_EN);
+
+    assert(i18n_try_parse_lang("zh", &lang) == true);
+    assert(lang == LANG_ZH);
+    assert(i18n_try_parse_lang("en", &lang) == true);
+    assert(lang == LANG_EN);
+    assert(i18n_try_parse_lang("fr", &lang) == false);
 }
 
 TEST(parse_unknown_uses_fallback) {

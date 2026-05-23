@@ -148,6 +148,13 @@ send -- "support\r"
 expect "支持"
 expect "Press any key"
 send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "lang en\r"
+expect "Language set to: en"
+expect "Press any key"
+send -- "q"
 sleep 0.2
 send -- "\003"
 sleep 0.2

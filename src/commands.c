@@ -8,6 +8,7 @@
 #include "chat_room.h"
 #include "client.h"
 #include "common.h"
+#include "i18n.h"
 #include "message.h"
 #include "support.h"
 #include "tui.h"
@@ -82,7 +83,8 @@ static const char *suggest_command(const char *cmd) {
     static const char *commands[] = {
         "list", "users", "who", "nick", "name", "msg", "w", "inbox",
         "last", "search", "mute-joins", "mute", "support", "guide",
-        "help", "commands", "clear", "cls", "q", "quit", "exit"
+        "lang", "language", "help", "commands", "clear", "cls",
+        "q", "quit", "exit"
     };
     const char *best = NULL;
     int best_distance = 99;
@@ -177,6 +179,7 @@ void commands_dispatch(client_t *client) {
                        "search <keyword>    - Search message history\n"
                        "mute-joins          - Toggle join/leave notices\n"
                        "support             - Show quick support guide\n"
+                       "lang [en|zh]        - Show or switch UI language\n"
                        "help, commands      - Show this help\n"
                        "clear, cls          - Clear command output\n"
                        "q, quit, exit       - Disconnect\n"
@@ -190,6 +193,34 @@ void commands_dispatch(client_t *client) {
     } else if (strcmp(cmd, "support") == 0 || strcmp(cmd, "guide") == 0) {
         support_append_interactive_panel(output, sizeof(output), &pos,
                                          client->help_lang);
+
+    } else if (strcmp(cmd, "lang") == 0 || strcmp(cmd, "language") == 0 ||
+               strncmp(cmd, "lang ", 5) == 0 ||
+               strncmp(cmd, "language ", 9) == 0) {
+        char *arg = NULL;
+        help_lang_t next_lang;
+
+        if (strncmp(cmd, "lang ", 5) == 0) {
+            arg = cmd + 5;
+        } else if (strncmp(cmd, "language ", 9) == 0) {
+            arg = cmd + 9;
+        }
+
+        if (!arg || arg[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Current language: %s\n"
+                           "Usage: lang <en|zh>\n",
+                           i18n_lang_code(client->help_lang));
+        } else if (i18n_try_parse_lang(arg, &next_lang)) {
+            client->help_lang = next_lang;
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Language set to: %s\n",
+                           i18n_lang_code(client->help_lang));
+        } else {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "Unsupported language: %s\n"
+                           "Usage: lang <en|zh>\n", arg);
+        }
 
     } else if (strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {
         char *rest = (cmd[0] == 'w') ? cmd + 2 : cmd + 4;
