@@ -36,6 +36,7 @@ jobs:
     - name: Run comprehensive tests
       run: |
         make test
+        make connection-limit-test
         cd tests
         ./test_security_features.sh
         # Skipping anonymous access test in CI as it requires interactive pty handling which might be flaky

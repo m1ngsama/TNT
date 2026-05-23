@@ -17,3 +17,4 @@ tests/unit/test_system_message
 tests/unit/test_help_text
 tests/unit/test_support_text
 tests/unit/test_cli_text
+tests/unit/test_ratelimit

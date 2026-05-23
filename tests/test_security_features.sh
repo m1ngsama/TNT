@@ -11,6 +11,9 @@ NC='\033[0m'
 
 PASS=0
 FAIL=0
+STATE_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/tnt-security-test.XXXXXX")
+SERVER_PIDS=""
+NEXT_PORT=${PORT:-13600}
 
 print_test() {
     echo -e "\n${YELLOW}[TEST]${NC} $1"
@@ -27,8 +30,11 @@ fail() {
 }
 
 cleanup() {
-    pkill -f "^\.\./tnt" 2>/dev/null || true
-    sleep 1
+    for pid in $SERVER_PIDS; do
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    done
+    rm -rf "$STATE_ROOT"
 }
 
 trap cleanup EXIT
@@ -43,23 +49,47 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-# Detect timeout command
-TIMEOUT_CMD="timeout"
-if command -v gtimeout >/dev/null 2>&1; then
-    TIMEOUT_CMD="gtimeout"
-fi
+run_server_probe() {
+    local name="$1"
+    local port="$NEXT_PORT"
+    local pid
+    local state_dir
+    local log_file
+    shift
+
+    NEXT_PORT=$((NEXT_PORT + 1))
+    state_dir="$STATE_ROOT/$name"
+    log_file="$state_dir/server.log"
+    mkdir -p "$state_dir"
+
+    "$@" "$BIN" -p "$port" -d "$state_dir" >"$log_file" 2>&1 &
+    pid=$!
+    SERVER_PIDS="$SERVER_PIDS $pid"
+
+    for _ in 1 2 3 4 5 6 7 8; do
+        if grep -q "TNT chat server listening" "$log_file"; then
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 0
+        fi
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    sed -n '1,120p' "$log_file"
+    return 1
+}
 
 # Test 1: 4096-bit RSA Key Generation
 print_test "1. RSA 4096-bit Key Generation"
-rm -f host_key
-$BIN &
-PID=$!
-sleep 8  # Wait for key generation
-kill $PID 2>/dev/null || true
-sleep 1
+KEY_DIR="$STATE_ROOT/host-key"
 
-if [ -f host_key ]; then
-    KEY_SIZE=$(ssh-keygen -l -f host_key 2>/dev/null | awk '{print $1}')
+if run_server_probe host-key env && [ -f "$KEY_DIR/host_key" ]; then
+    KEY_SIZE=$(ssh-keygen -l -f "$KEY_DIR/host_key" 2>/dev/null | awk '{print $1}')
     if [ "$KEY_SIZE" = "4096" ]; then
         pass "RSA key upgraded to 4096 bits (was 2048)"
     else
@@ -68,9 +98,9 @@ if [ -f host_key ]; then
 
     # Check permissions
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        PERMS=$(stat -f "%OLp" host_key)
+        PERMS=$(stat -f "%OLp" "$KEY_DIR/host_key")
     else
-        PERMS=$(stat -c "%a" host_key)
+        PERMS=$(stat -c "%a" "$KEY_DIR/host_key")
     fi
     
     if [ "$PERMS" = "600" ]; then
@@ -86,33 +116,34 @@ fi
 print_test "2. Environment Variable Configuration"
 
 # Test bind address
-TNT_BIND_ADDR=127.0.0.1 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+run_server_probe bind-addr env TNT_BIND_ADDR=127.0.0.1 && \
     pass "TNT_BIND_ADDR configuration works" || fail "TNT_BIND_ADDR not working"
 
 # Test with access token set (just verify it starts)
-TNT_ACCESS_TOKEN="test123" $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+run_server_probe access-token env TNT_ACCESS_TOKEN="test123" && \
     pass "TNT_ACCESS_TOKEN configuration accepted" || fail "TNT_ACCESS_TOKEN not working"
 
 # Test max connections configuration
-TNT_MAX_CONNECTIONS=10 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+run_server_probe max-connections env TNT_MAX_CONNECTIONS=10 && \
     pass "TNT_MAX_CONNECTIONS configuration accepted" || fail "TNT_MAX_CONNECTIONS not working"
 
 # Test per-IP connection rate configuration
-TNT_MAX_CONN_RATE_PER_IP=20 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+run_server_probe conn-rate env TNT_MAX_CONN_RATE_PER_IP=20 && \
     pass "TNT_MAX_CONN_RATE_PER_IP configuration accepted" || fail "TNT_MAX_CONN_RATE_PER_IP not working"
 
 # Test rate limit toggle
-TNT_RATE_LIMIT=0 $TIMEOUT_CMD 3 $BIN 2>&1 | grep -q "TNT chat server" && \
+run_server_probe rate-toggle env TNT_RATE_LIMIT=0 && \
     pass "TNT_RATE_LIMIT configuration accepted" || fail "TNT_RATE_LIMIT not working"
 
 sleep 1
 
 # Test 3: Input Validation in Message Log
 print_test "3. Message Log Sanitization"
-rm -f messages.log
+MESSAGE_DIR="$STATE_ROOT/message-log"
+mkdir -p "$MESSAGE_DIR"
 
 # Create a test message log with potentially dangerous content
-cat > messages.log <<EOF
+cat > "$MESSAGE_DIR/messages.log" <<EOF
 2026-01-22T10:00:00Z|testuser|normal message
 2026-01-22T10:01:00Z|user|with|pipes|attempt to break format
 2026-01-22T10:02:00Z|user
@@ -121,15 +152,9 @@ newline
 2026-01-22T10:03:00Z|validuser|valid content
 EOF
 
-# Start server and let it load messages
-$BIN &
-PID=$!
-sleep 3
-kill $PID 2>/dev/null || true
-sleep 1
-
-# Check if server handled malformed log entries safely
-if grep -q "validuser" messages.log; then
+# Start server and let it load messages, then verify it kept valid entries.
+if run_server_probe message-log env >/dev/null &&
+   grep -q "validuser" "$MESSAGE_DIR/messages.log"; then
     pass "Server loads messages from log file"
 else
     fail "Server message loading issue"
@@ -215,21 +240,16 @@ fi
 
 # Test 7: Resource Management (Dynamic Allocation)
 print_test "7. Resource Management (Large Log Files)"
-rm -f messages.log
+LARGE_DIR="$STATE_ROOT/large-log"
+mkdir -p "$LARGE_DIR"
 # Create a large message log (2000 entries, more than old fixed 1000 limit)
 for i in $(seq 1 2000); do
-    echo "2026-01-22T$(printf "%02d" $((i/100))):$(printf "%02d" $((i%60))):00Z|user$i|message $i" >> messages.log
+    echo "2026-01-22T$(printf "%02d" $((i/100))):$(printf "%02d" $((i%60))):00Z|user$i|message $i" >> "$LARGE_DIR/messages.log"
 done
 
-$BIN &
-PID=$!
-sleep 4
-kill $PID 2>/dev/null || true
-sleep 1
-
 # Check if server started successfully with large log
-if [ -f messages.log ]; then
-    LINE_COUNT=$(wc -l < messages.log)
+if run_server_probe large-log env >/dev/null && [ -f "$LARGE_DIR/messages.log" ]; then
+    LINE_COUNT=$(wc -l < "$LARGE_DIR/messages.log")
     if [ "$LINE_COUNT" -ge 2000 ]; then
         pass "Server handles large message log (${LINE_COUNT} messages)"
     else

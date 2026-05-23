@@ -202,6 +202,7 @@ make clean        # clean build artifacts
 ```sh
 make test          # run comprehensive test suite and fail on regressions
 make test-advisory # run integration tests as advisory checks
+make connection-limit-test # verify per-IP concurrency and rate limits
 
 # Individual tests
 cd tests

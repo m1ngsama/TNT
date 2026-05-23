@@ -30,7 +30,7 @@ BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory unit-test integration-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory unit-test integration-test connection-limit-test info
 
 all: $(TARGET)
 
@@ -111,6 +111,10 @@ integration-test: all
 	@cd tests && PORT=$${PORT:-2222} ./test_basic.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh
+
+connection-limit-test: all
+	@echo "Running connection limit tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_connection_limits.sh
 
 # Show build info
 info:

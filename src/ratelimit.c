@@ -134,7 +134,7 @@ bool ratelimit_check_ip(const char *ip) {
         }
 
         entry->recent_connection_count++;
-        if (entry->recent_connection_count >= g_max_conn_rate_per_ip) {
+        if (entry->recent_connection_count > g_max_conn_rate_per_ip) {
             entry->is_blocked = true;
             entry->block_until = now + BLOCK_DURATION;
             pthread_mutex_unlock(&g_rate_limit_lock);

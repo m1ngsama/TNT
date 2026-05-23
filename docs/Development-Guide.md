@@ -161,6 +161,7 @@ make install      # Install to /usr/local/bin
 ```sh
 make test          # Run all tests and fail on regressions
 make test-advisory # Run integration tests as advisory checks
+make connection-limit-test # Verify per-IP concurrency and rate limits
 
 # Individual tests
 cd tests

@@ -7,6 +7,7 @@ Every push or PR automatically runs:
   - Build on Ubuntu
   - AddressSanitizer build
   - Unit and strict integration tests
+  - Per-IP concurrency and connection-rate limit tests
   - Release/package preflight (`make release-check`)
 
 Check status:

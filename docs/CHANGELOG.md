@@ -45,6 +45,12 @@
   environments can use `make test-advisory` for the previous advisory behavior.
 - Removed the duplicate `deploy.yml` CI workflow so automated checks stay
   focused on CI while production deployment remains manual.
+- Fixed the per-IP connection-rate limit to allow the configured number of
+  attempts before blocking, added unit coverage, and exposed
+  `make connection-limit-test` for the black-box limit regression test.
+- Security feature checks now use isolated ports and temporary state
+  directories, so they no longer require `timeout`/`gtimeout` or write
+  `host_key` / `messages.log` into the test directory.
 - NORMAL mode now opens at the latest visible messages instead of the oldest
   in-memory message. Use `k`/PageUp to browse older history and `G`/End to
   return to the latest messages.
