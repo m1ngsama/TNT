@@ -248,11 +248,16 @@ sudo dnf install libssh-devel
 TNT/
 ├── src/              # source code
 │   ├── main.c        # entry point
+│   ├── cli_text.c    # startup CLI help and option text
 │   ├── ssh_server.c  # SSH server implementation
+│   ├── bootstrap.c   # SSH authentication and session bootstrap
 │   ├── chat_room.c   # chat room logic
 │   ├── message.c     # message persistence
 │   ├── history_view.c # message viewport and scroll state
-│   ├── support.c     # quick support guide content
+│   ├── help_text.c   # full-screen and command help content
+│   ├── support_text.c # quick support guide content
+│   ├── i18n.c        # language selection and shared UI text
+│   ├── ratelimit.c   # connection limits and rate limiting
 │   ├── tui.c         # terminal UI rendering
 │   ├── tui_status.c  # status/input line rendering
 │   └── utf8.c        # UTF-8 character handling
@@ -382,8 +387,8 @@ logged to stderr with the offending IP.
 ### Idle disconnect
 
 After `TNT_IDLE_TIMEOUT` seconds (default 1800 = 30 min) of no
-keystrokes, TNT prints `Disconnected: idle timeout (N min)` and closes
-the channel.  Set the env var to `0` to disable.
+keystrokes, TNT prints a localized idle-timeout notice and closes the
+channel. Set the env var to `0` to disable.
 
 ## Known Limitations
 

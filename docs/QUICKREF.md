@@ -9,8 +9,11 @@ BUILD
   make clean        remove artifacts
 
 TEST
-  ./test_basic.sh           basic functionality
-  ./test_stress.sh 20 60    stress test (20 clients, 60s)
+  make test                 strict unit + integration tests
+  make test-advisory        unit tests + advisory integration checks
+  make connection-limit-test per-IP concurrency/rate-limit checks
+  make security-test        security feature checks
+  make ci-test              same checks as GitHub Actions
 
 DEBUG
   ASAN_OPTIONS=detect_leaks=1 ./tnt
@@ -39,12 +42,19 @@ INSERT MODE
 
 STRUCTURE
   src/main.c          entry, signals
-  src/ssh_server.c    SSH, threads, commands
-  src/chat_room.c     broadcast
+  src/cli_text.c      startup CLI text
+  src/ssh_server.c    SSH listener and server setup
+  src/bootstrap.c     SSH auth/session bootstrap
+  src/chat_room.c     broadcast and room state
+  src/commands.c      COMMAND-mode command dispatch
+  src/exec.c          SSH exec command dispatch
   src/message.c       persistence, search
   src/history_view.c  message viewport / scroll state
-  src/support.c       quick support guide content
-  src/tui.c           rendering, help
+  src/help_text.c     full-screen and command help text
+  src/support_text.c  quick support guide content
+  src/i18n.c          language selection and shared text
+  src/ratelimit.c     connection limits and rate limiting
+  src/tui.c           rendering
   src/tui_status.c    status/input line rendering
   src/utf8.c          unicode
 
