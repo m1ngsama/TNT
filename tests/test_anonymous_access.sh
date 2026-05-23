@@ -1,90 +1,112 @@
 #!/bin/bash
-# Test anonymous SSH access
+# Anonymous SSH access regression tests for TNT
 
 BIN="../tnt"
 PORT=${PORT:-2222}
+PASS=0
+FAIL=0
+STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-anonymous-test.XXXXXX")
+SERVER_PID=""
+
+cleanup() {
+    if [ -n "$SERVER_PID" ]; then
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    rm -rf "$STATE_DIR"
+}
+
+trap cleanup EXIT
 
 if [ ! -f "$BIN" ]; then
     echo "Error: Binary $BIN not found."
     exit 1
 fi
 
-echo "Starting TNT server on port $PORT..."
-TNT_LANG=zh $BIN -p $PORT > /dev/null 2>&1 &
+SSH_BASE="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -p $PORT"
+
+wait_for_health() {
+    local out
+
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        if [ -n "$SERVER_PID" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            return 1
+        fi
+        out=$(ssh -n $SSH_BASE localhost health 2>/dev/null || true)
+        [ "$out" = "ok" ] && return 0
+        sleep 1
+    done
+    return 1
+}
+
+run_password_test() {
+    local name="$1"
+    local user="$2"
+    local password="$3"
+    local display_name="$4"
+    local script="$STATE_DIR/$name.expect"
+    local log="$STATE_DIR/$name.log"
+
+    cat >"$script" <<EOF
+set timeout 10
+spawn ssh $SSH_BASE -o PreferredAuthentications=password $user@localhost
+expect {
+    -re "(?i)password:" {
+        send -- "$password\r"
+        exp_continue
+    }
+    "请输入用户名" {
+        send -- "$display_name\r"
+        send -- "\003"
+        expect eof
+        exit 0
+    }
+    timeout { exit 1 }
+    eof { exit 1 }
+}
+EOF
+
+    if expect "$script" >"$log" 2>&1; then
+        return 0
+    fi
+
+    sed -n '1,120p' "$log"
+    return 1
+}
+
+echo "=== TNT Anonymous Access Tests ==="
+
+TNT_LANG=zh TNT_RATE_LIMIT=0 "$BIN" -p "$PORT" -d "$STATE_DIR" \
+    >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
-sleep 2
 
-cleanup() {
-    kill $SERVER_PID 2>/dev/null
-    wait 2>/dev/null
-}
-trap cleanup EXIT
-
-# Detect timeout command
-TIMEOUT_CMD="timeout"
-if command -v gtimeout >/dev/null 2>&1; then
-    TIMEOUT_CMD="gtimeout"
-fi
-
-echo "Testing anonymous SSH access to TNT server..."
-echo ""
-
-# Test 1: Connection with any username and password
-echo "Test 1: Connection with any username (should succeed)"
-$TIMEOUT_CMD 10 expect -c "
-spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT testuser@localhost
-expect {
-    \"password:\" {
-        send \"anypassword\r\"
-        expect {
-            \"请输入用户名\" {
-                send \"TestUser\r\"
-                send \"\003\"
-                exit 0
-            }
-            timeout { exit 1 }
-        }
-    }
-    timeout { exit 1 }
-}
-" 2>&1 | grep -q "请输入用户名"
-
-if [ $? -eq 0 ]; then
-    echo "✓ Test 1 PASSED: Can connect with any password"
+if wait_for_health; then
+    echo "✓ server started"
+    PASS=$((PASS + 1))
 else
-    echo "✗ Test 1 FAILED: Cannot connect with any password"
+    echo "✗ server failed to start"
+    sed -n '1,120p' "$STATE_DIR/server.log"
     exit 1
 fi
 
-echo ""
-
-# Test 2: Connection should work with empty password
-echo "Test 2: Simple connection (standard SSH command)"
-$TIMEOUT_CMD 10 expect -c "
-spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT anonymous@localhost
-expect {
-    \"password:\" {
-        send \"\r\"
-        expect {
-            \"请输入用户名\" {
-                send \"\r\"
-                send \"\003\"
-                exit 0
-            }
-            timeout { exit 1 }
-        }
-    }
-    timeout { exit 1 }
-}
-" 2>&1 | grep -q "请输入用户名"
-
-if [ $? -eq 0 ]; then
-    echo "✓ Test 2 PASSED: Can connect with empty password"
+if run_password_test "any-password" "testuser" "anypassword" "TestUser"; then
+    echo "✓ accepts any password when no access token is configured"
+    PASS=$((PASS + 1))
 else
-    echo "✗ Test 2 FAILED: Cannot connect with empty password"
-    exit 1
+    echo "✗ any-password login failed"
+    FAIL=$((FAIL + 1))
+fi
+
+if run_password_test "empty-password" "anonymous" "" ""; then
+    echo "✓ accepts empty password when no access token is configured"
+    PASS=$((PASS + 1))
+else
+    echo "✗ empty-password login failed"
+    FAIL=$((FAIL + 1))
 fi
 
 echo ""
-echo "Anonymous access test completed."
-exit 0
+echo "PASSED: $PASS"
+echo "FAILED: $FAIL"
+[ "$FAIL" -eq 0 ] && echo "All tests passed" || echo "Some tests failed"
+exit "$FAIL"

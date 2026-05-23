@@ -6,7 +6,8 @@ AUTOMATIC TESTING
 Every push or PR automatically runs:
   - Build on Ubuntu
   - AddressSanitizer build
-  - `make ci-test`
+  - `make ci-test` (strict integration, anonymous access, connection limits,
+    and security feature checks)
   - Release/package preflight (`make release-check`)
 
 Check status:

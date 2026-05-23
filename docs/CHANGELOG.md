@@ -53,6 +53,9 @@
   `host_key` / `messages.log` into the test directory.
 - Added `make security-test` and `make ci-test` so local runs can use the same
   full verification path as GitHub Actions.
+- Anonymous access checks now use isolated state, wait for real SSH health,
+  avoid external `timeout` helpers, and run through `make anonymous-access-test`
+  as part of `make ci-test`.
 - Refreshed README and quick-reference module maps to match the current
   `cli_text`, `help_text`, `support_text`, i18n, exec, and rate-limit modules.
 - NORMAL mode now opens at the latest visible messages instead of the oldest

@@ -31,7 +31,7 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test connection-limit-test security-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test info
 
 all: $(TARGET)
 
@@ -113,6 +113,10 @@ integration-test: all
 	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh
 
+anonymous-access-test: all
+	@echo "Running anonymous access tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_anonymous_access.sh
+
 connection-limit-test: all
 	@echo "Running connection limit tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_connection_limits.sh
@@ -123,6 +127,7 @@ security-test: all
 
 ci-test:
 	@$(MAKE) test PORT=$(CI_TEST_PORT)
+	@$(MAKE) anonymous-access-test PORT=$$(($(CI_TEST_PORT) + 5))
 	@$(MAKE) connection-limit-test PORT=$$(($(CI_TEST_PORT) + 10))
 	@$(MAKE) security-test PORT=$$(($(CI_TEST_PORT) + 20))
 

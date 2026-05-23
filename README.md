@@ -202,6 +202,7 @@ make clean        # clean build artifacts
 ```sh
 make test          # run comprehensive test suite and fail on regressions
 make test-advisory # run integration tests as advisory checks
+make anonymous-access-test # verify default anonymous login behavior
 make connection-limit-test # verify per-IP concurrency and rate limits
 make security-test # run security feature checks
 make ci-test       # run the same checks as GitHub Actions
@@ -218,7 +219,7 @@ cd tests
 **Test coverage:**
 - Basic functionality: 3 tests
 - Anonymous access: 2 tests
-- Security features: 11 tests
+- Security features: 12 tests
 - Stress test: concurrent connections
 
 ### Dependencies
