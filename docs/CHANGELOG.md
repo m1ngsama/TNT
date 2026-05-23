@@ -29,6 +29,8 @@
   including the narrow-terminal fallback.
 - Full-screen help and COMMAND-mode help now live in a dedicated `help_text`
   module, keeping large bilingual help copy out of TUI and command flow code.
+- Session language, unknown-command, suggestion, and continuation prompts now
+  use the shared i18n table instead of inline command-flow conditionals.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

@@ -90,6 +90,14 @@ TEST(text_lookup_matches_language) {
                   "Search") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_SEARCH_HEADER_FORMAT),
                   "搜索") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_LANG_CURRENT_FORMAT),
+                  "Current language") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_LANG_CURRENT_FORMAT),
+                  "当前语言") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_UNKNOWN_COMMAND_FORMAT),
+                  "Unknown command") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_UNKNOWN_COMMAND_FORMAT),
+                  "未知命令") != NULL);
     assert(strcmp(i18n_lang_code(LANG_EN), "en") == 0);
     assert(strcmp(i18n_lang_code(LANG_ZH), "zh") == 0);
 }

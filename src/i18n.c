@@ -154,6 +154,22 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "已开启";
             case I18N_CLEAR_DONE:
                 return "命令输出已清空\n";
+            case I18N_LANG_CURRENT_FORMAT:
+                return "当前语言: %s\n"
+                       "用法: lang <en|zh>\n";
+            case I18N_LANG_SET_FORMAT:
+                return "语言已切换为: %s\n";
+            case I18N_LANG_UNSUPPORTED_FORMAT:
+                return "不支持的语言: %s\n"
+                       "用法: lang <en|zh>\n";
+            case I18N_UNKNOWN_COMMAND_FORMAT:
+                return "未知命令: %s\n";
+            case I18N_DID_YOU_MEAN_FORMAT:
+                return "你是想输入 :%s 吗?\n";
+            case I18N_UNKNOWN_GUIDANCE:
+                return "输入 :support 查看引导，或 :help 查看命令\n";
+            case I18N_CONTINUE_PROMPT:
+                return "\n按任意键继续...";
         }
     }
 
@@ -241,6 +257,22 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "unmuted";
         case I18N_CLEAR_DONE:
             return "Command output cleared\n";
+        case I18N_LANG_CURRENT_FORMAT:
+            return "Current language: %s\n"
+                   "Usage: lang <en|zh>\n";
+        case I18N_LANG_SET_FORMAT:
+            return "Language set to: %s\n";
+        case I18N_LANG_UNSUPPORTED_FORMAT:
+            return "Unsupported language: %s\n"
+                   "Usage: lang <en|zh>\n";
+        case I18N_UNKNOWN_COMMAND_FORMAT:
+            return "Unknown command: %s\n";
+        case I18N_DID_YOU_MEAN_FORMAT:
+            return "Did you mean :%s?\n";
+        case I18N_UNKNOWN_GUIDANCE:
+            return "Type :support for guidance or :help for commands\n";
+        case I18N_CONTINUE_PROMPT:
+            return "\nPress any key to continue...";
     }
 
     return "";

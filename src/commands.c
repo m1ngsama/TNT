@@ -189,38 +189,21 @@ void commands_dispatch(client_t *client) {
         }
 
         if (!arg || arg[0] == '\0') {
-            if (client->help_lang == LANG_ZH) {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "当前语言: %s\n"
-                               "用法: lang <en|zh>\n",
-                               i18n_lang_code(client->help_lang));
-            } else {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "Current language: %s\n"
-                               "Usage: lang <en|zh>\n",
-                               i18n_lang_code(client->help_lang));
-            }
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->help_lang,
+                                     I18N_LANG_CURRENT_FORMAT),
+                           i18n_lang_code(client->help_lang));
         } else if (i18n_try_parse_lang(arg, &next_lang)) {
             client->help_lang = next_lang;
-            if (client->help_lang == LANG_ZH) {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "语言已切换为: %s\n",
-                               i18n_lang_code(client->help_lang));
-            } else {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "Language set to: %s\n",
-                               i18n_lang_code(client->help_lang));
-            }
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->help_lang,
+                                     I18N_LANG_SET_FORMAT),
+                           i18n_lang_code(client->help_lang));
         } else {
-            if (client->help_lang == LANG_ZH) {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "不支持的语言: %s\n"
-                               "用法: lang <en|zh>\n", arg);
-            } else {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "Unsupported language: %s\n"
-                               "Usage: lang <en|zh>\n", arg);
-            }
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->help_lang,
+                                     I18N_LANG_UNSUPPORTED_FORMAT),
+                           arg);
         }
 
     } else if (strcmp(cmd, "msg") == 0 || strcmp(cmd, "w") == 0 ||
@@ -477,28 +460,22 @@ void commands_dispatch(client_t *client) {
     } else {
         const char *suggestion = suggest_command(cmd);
         buffer_appendf(output, sizeof(output), &pos,
-                       client->help_lang == LANG_ZH ?
-                       "未知命令: %s\n" : "Unknown command: %s\n", cmd);
+                       i18n_text(client->help_lang,
+                                 I18N_UNKNOWN_COMMAND_FORMAT),
+                       cmd);
         if (suggestion) {
-            if (client->help_lang == LANG_ZH) {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "你是想输入 :%s 吗?\n", suggestion);
-            } else {
-                buffer_appendf(output, sizeof(output), &pos,
-                               "Did you mean :%s?\n", suggestion);
-            }
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->help_lang,
+                                     I18N_DID_YOU_MEAN_FORMAT),
+                           suggestion);
         }
-        buffer_appendf(output, sizeof(output), &pos,
-                       client->help_lang == LANG_ZH ?
-                       "输入 :support 查看引导，或 :help 查看命令\n" :
-                       "Type :support for guidance or :help for commands\n");
+        buffer_appendf(output, sizeof(output), &pos, "%s",
+                       i18n_text(client->help_lang, I18N_UNKNOWN_GUIDANCE));
     }
 
 cmd_done:
-    buffer_appendf(output, sizeof(output), &pos,
-                   client->help_lang == LANG_ZH ?
-                   "\n按任意键继续..." :
-                   "\nPress any key to continue...");
+    buffer_appendf(output, sizeof(output), &pos, "%s",
+                   i18n_text(client->help_lang, I18N_CONTINUE_PROMPT));
 
     snprintf(client->command_output, sizeof(client->command_output), "%s", output);
     client->command_input[0] = '\0';
