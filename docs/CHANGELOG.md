@@ -15,6 +15,9 @@
 - Common COMMAND-mode outputs now respect the session language, including
   `:users` headers and `:mute-joins` state text.
 - Command-output and MOTD screen chrome now use the session UI language.
+- Common command usage errors now stay in the session language, and bare
+  `:search`, `:msg`, and `:nick` show usage instead of falling through to
+  unknown-command guidance.
 
 ### Changed
 - NORMAL mode now opens at the latest visible messages instead of the oldest

@@ -253,6 +253,74 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+COMMAND_USAGE_SCRIPT="$STATE_DIR/command-usage.expect"
+cat >"$COMMAND_USAGE_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "usageuser\r"
+expect ":support"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "search\r"
+expect "用法: search <关键词>"
+expect "按任意键"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "msg\r"
+expect "用法: msg <用户名> <消息>"
+expect "按任意键"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "nick\r"
+expect "用法: nick <新用户名>"
+expect "按任意键"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "lang en\r"
+expect "Language set to: en"
+expect "Press any key"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "inbox\r"
+expect "Whispers"
+expect "(empty)"
+expect "Press any key"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "last 999\r"
+expect "Usage: last \\[N\\]"
+expect "Press any key"
+send -- "q"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$COMMAND_USAGE_SCRIPT" >"$STATE_DIR/command-usage.log" 2>&1; then
+    echo "✓ command usage errors follow session language"
+    PASS=$((PASS + 1))
+else
+    echo "x localized command usage failed"
+    sed -n '1,220p' "$STATE_DIR/command-usage.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 printf '维护窗口\n' >"$STATE_DIR/motd.txt"
 MOTD_SCRIPT="$STATE_DIR/motd.expect"
 cat >"$MOTD_SCRIPT" <<EOF
