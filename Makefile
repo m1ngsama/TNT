@@ -30,7 +30,7 @@ BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test unit-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory unit-test integration-test info
 
 all: $(TARGET)
 
@@ -94,7 +94,9 @@ check:
 	@command -v clang-tidy >/dev/null 2>&1 && clang-tidy src/*.c -- -Iinclude $(INCLUDES) || echo "clang-tidy not installed"
 
 # Test
-test: all unit-test
+test: all unit-test integration-test
+
+test-advisory: all unit-test
 	@echo "Running integration tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_basic.sh || echo "(basic integration tests are advisory)"
 	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh || echo "(exec mode tests are advisory)"
@@ -103,6 +105,12 @@ test: all unit-test
 unit-test:
 	@echo "Running unit tests..."
 	@$(MAKE) -C tests/unit run
+
+integration-test: all
+	@echo "Running integration tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_basic.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh
 
 # Show build info
 info:

@@ -159,7 +159,8 @@ make install      # Install to /usr/local/bin
 ### Running Tests
 
 ```sh
-make test         # Run all tests
+make test          # Run all tests and fail on regressions
+make test-advisory # Run integration tests as advisory checks
 
 # Individual tests
 cd tests

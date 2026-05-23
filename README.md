@@ -200,7 +200,8 @@ make clean        # clean build artifacts
 ### Testing
 
 ```sh
-make test         # run comprehensive test suite
+make test          # run comprehensive test suite and fail on regressions
+make test-advisory # run integration tests as advisory checks
 
 # Individual tests
 cd tests

@@ -6,7 +6,7 @@ AUTOMATIC TESTING
 Every push or PR automatically runs:
   - Build on Ubuntu
   - AddressSanitizer build
-  - Unit and integration tests
+  - Unit and strict integration tests
   - Release/package preflight (`make release-check`)
 
 Check status:

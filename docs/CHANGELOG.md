@@ -41,6 +41,10 @@
 - Idle-timeout disconnect notices now follow the session UI language.
 
 ### Changed
+- `make test` now fails on integration-test regressions; constrained local
+  environments can use `make test-advisory` for the previous advisory behavior.
+- Removed the duplicate `deploy.yml` CI workflow so automated checks stay
+  focused on CI while production deployment remains manual.
 - NORMAL mode now opens at the latest visible messages instead of the oldest
   in-memory message. Use `k`/PageUp to browse older history and `G`/End to
   return to the latest messages.
