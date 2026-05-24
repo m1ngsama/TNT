@@ -64,7 +64,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "tester\r"
-expect ":support"
+expect ":help"
 send -- "\033\[200~"
 send -- "line1\nline2\nline3"
 send -- "\033\[201~"
@@ -133,19 +133,19 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-SUPPORT_SCRIPT="$STATE_DIR/support.expect"
-cat >"$SUPPORT_SCRIPT" <<EOF
+HELP_SCRIPT="$STATE_DIR/help.expect"
+cat >"$HELP_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
-send -- "supporter\r"
-expect ":support"
+send -- "helper\r"
+expect ":help"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
 expect ":"
-send -- "support\r"
-expect "支持"
+send -- "help\r"
+expect "TNT\\(1\\) 帮助"
 expect "按任意键"
 send -- "q"
 expect "NORMAL"
@@ -162,12 +162,12 @@ send -- "\003"
 expect eof
 EOF
 
-if expect "$SUPPORT_SCRIPT" >"$STATE_DIR/support.log" 2>&1; then
-    echo "✓ :support renders quick guide"
+if expect "$HELP_SCRIPT" >"$STATE_DIR/help.log" 2>&1; then
+    echo "✓ :help renders concise manual"
     PASS=$((PASS + 1))
 else
-    echo "x :support command failed"
-    sed -n '1,160p' "$STATE_DIR/support.log"
+    echo "x :help command failed"
+    sed -n '1,160p' "$STATE_DIR/help.log"
     sed -n '1,120p' "$STATE_DIR/server.log"
     FAIL=$((FAIL + 1))
 fi
@@ -178,13 +178,13 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "mistype\r"
-expect ":support"
+expect ":help"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
 expect ":"
-send -- "suport\r"
-expect "你是想输入 :support 吗?"
+send -- "hlep\r"
+expect "你是想输入 :help 吗?"
 expect "按任意键"
 send -- "q"
 sleep 0.2
@@ -210,7 +210,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "localized\r"
-expect ":support"
+expect ":help"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -260,7 +260,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "usageuser\r"
-expect ":support"
+expect ":help"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -328,7 +328,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "systemuser\r"
-expect ":support"
+expect ":help"
 send -- "\033"
 expect "NORMAL"
 send -- ":"

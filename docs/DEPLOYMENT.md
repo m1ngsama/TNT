@@ -97,7 +97,7 @@ Place a `motd.txt` file in the state directory. TNT displays it to each user on 
 # Systemd deployment (state dir is /var/lib/tnt)
 sudo tee /var/lib/tnt/motd.txt <<'EOF'
 Welcome! Be respectful. No spam.
-Type :help for available commands.
+Type :help for a concise manual, or ? for the full key reference.
 EOF
 sudo chown tnt:tnt /var/lib/tnt/motd.txt
 

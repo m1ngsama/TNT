@@ -82,7 +82,7 @@ Ctrl+F/B   - Scroll full page down/up
 PgDn/PgUp  - Scroll full page down/up
 End/Home   - Jump to bottom/top
 g/G        - Jump to top/bottom
-?          - Show help
+?          - Show full key reference
 Ctrl+C     - Exit chat
 ```
 
@@ -92,12 +92,12 @@ Ctrl+C     - Exit chat
 :nick <name>         - Change nickname
 :msg <user> <text>   - Whisper to user
 :w <user> <text>     - Short alias for :msg
+:inbox               - Show whispers
 :last [N]            - Show last N messages from history (max 50, default 10)
 :search <keyword>    - Search full message history (case-insensitive)
 :mute-joins          - Toggle join/leave system notifications
-:support             - Show quick support guide
 :lang <en|zh>        - Switch UI language for this session
-:help                - Show available commands
+:help                - Show concise manual
 :clear               - Clear command output
 :q, :quit, :exit     - Disconnect
 Up/Down              - Browse command history
@@ -176,7 +176,6 @@ TNT also exposes a small non-interactive SSH surface for scripts:
 ssh -p 2222 chat.m1ng.space health
 ssh -p 2222 chat.m1ng.space stats --json
 ssh -p 2222 chat.m1ng.space users
-ssh -p 2222 chat.m1ng.space support
 ssh -p 2222 chat.m1ng.space "tail -n 20"
 ssh -p 2222 operator@chat.m1ng.space post "service notice"
 ssh -p 2222 chat.m1ng.space post "/me deploys v2.0"
@@ -256,8 +255,9 @@ TNT/
 │   ├── chat_room.c   # chat room logic
 │   ├── message.c     # message persistence
 │   ├── history_view.c # message viewport and scroll state
-│   ├── help_text.c   # full-screen and command help content
-│   ├── support_text.c # quick support guide content
+│   ├── help_text.c   # full-screen key reference content
+│   ├── manual.c      # concise manual panel rendering
+│   ├── manual_text.c # concise manual content
 │   ├── i18n.c        # language selection and shared UI text
 │   ├── ratelimit.c   # connection limits and rate limiting
 │   ├── tui.c         # terminal UI rendering

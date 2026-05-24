@@ -104,17 +104,17 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             case I18N_WELCOME_FALLBACK_FORMAT:
                 return "TNT %s - SSH 匿名聊天室\r\n\r\n";
             case I18N_INSERT_HINT_WIDE:
-                return "Enter 发送 · Esc 浏览 · :support";
+                return "Enter 发送 · Esc 浏览 · :help";
             case I18N_INSERT_HINT_NARROW:
-                return "Enter · Esc · :support";
+                return "Enter · Esc · :help";
             case I18N_NORMAL_LATEST:
                 return "G 最新";
             case I18N_NORMAL_NEW_MESSAGES:
                 return "新消息";
             case I18N_HELP_TITLE:
-                return " 帮助 ";
+                return " 按键 ";
             case I18N_HELP_STATUS_FORMAT:
-                return "-- 帮助 -- (%d/%d) j/k:滚动 g/G:首尾 e/z:语言 q:关闭";
+                return "-- 按键参考 -- (%d/%d) j/k:滚动 g/G:首尾 e/z:语言 q:关闭";
             case I18N_COMMAND_OUTPUT_TITLE:
                 return " 命令输出 ";
             case I18N_MOTD_TITLE:
@@ -126,7 +126,7 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             case I18N_TITLE_MUTED:
                 return "静音";
             case I18N_TITLE_HELP_HINT:
-                return "? 帮助";
+                return "? 按键";
             case I18N_IDLE_TIMEOUT_FORMAT:
                 return "\r\n\033[33m已断开: 空闲超时 (%d 分钟)\033[0m\r\n";
             case I18N_SYSTEM_USERNAME:
@@ -189,7 +189,7 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             case I18N_DID_YOU_MEAN_FORMAT:
                 return "你是想输入 :%s 吗?\n";
             case I18N_UNKNOWN_GUIDANCE:
-                return "输入 :support 查看引导，或 :help 查看命令\n";
+                return "输入 :help 查看帮助\n";
             case I18N_EXEC_HELP:
                 return "TNT exec 接口\n"
                        "命令:\n"
@@ -201,7 +201,6 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                        "  tail -n N       输出最近消息\n"
                        "  post MESSAGE    非交互发送消息\n"
                        "  post \"/me act\" 发送动作消息\n"
-                       "  support         显示快速支持指南\n"
                        "  exit            成功退出\n";
             case I18N_EXEC_USERS_USAGE:
                 return "users: 用法: users [--json]\n";
@@ -236,17 +235,17 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
         case I18N_WELCOME_FALLBACK_FORMAT:
             return "TNT %s - anonymous chat over SSH\r\n\r\n";
         case I18N_INSERT_HINT_WIDE:
-            return "Enter send · Esc browse · :support";
+            return "Enter send · Esc browse · :help";
         case I18N_INSERT_HINT_NARROW:
-            return "Enter · Esc · :support";
+            return "Enter · Esc · :help";
         case I18N_NORMAL_LATEST:
             return "G latest";
         case I18N_NORMAL_NEW_MESSAGES:
             return "new";
         case I18N_HELP_TITLE:
-            return " HELP ";
+            return " KEYS ";
         case I18N_HELP_STATUS_FORMAT:
-            return "-- HELP -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close";
+            return "-- KEY REFERENCE -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close";
         case I18N_COMMAND_OUTPUT_TITLE:
             return " COMMAND OUTPUT ";
         case I18N_MOTD_TITLE:
@@ -258,7 +257,7 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
         case I18N_TITLE_MUTED:
             return "muted";
         case I18N_TITLE_HELP_HINT:
-            return "? help";
+            return "? keys";
         case I18N_IDLE_TIMEOUT_FORMAT:
             return "\r\n\033[33mDisconnected: idle timeout (%d min)\033[0m\r\n";
         case I18N_SYSTEM_USERNAME:
@@ -321,7 +320,7 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
         case I18N_DID_YOU_MEAN_FORMAT:
             return "Did you mean :%s?\n";
         case I18N_UNKNOWN_GUIDANCE:
-            return "Type :support for guidance or :help for commands\n";
+            return "Type :help for help\n";
         case I18N_EXEC_HELP:
             return "TNT exec interface\n"
                    "Commands:\n"
@@ -333,7 +332,6 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                    "  tail -n N       Print recent messages\n"
                    "  post MESSAGE    Post a message non-interactively\n"
                    "  post \"/me act\"  Post an action message\n"
-                   "  support         Show quick support guide\n"
                    "  exit            Exit successfully\n";
         case I18N_EXEC_USERS_USAGE:
             return "users: usage: users [--json]\n";

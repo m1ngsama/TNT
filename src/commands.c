@@ -8,10 +8,9 @@
 #include "chat_room.h"
 #include "client.h"
 #include "common.h"
-#include "help_text.h"
 #include "i18n.h"
+#include "manual.h"
 #include "message.h"
-#include "support.h"
 #include "system_message.h"
 #include "tui.h"
 #include "utf8.h"
@@ -84,8 +83,8 @@ static int command_edit_distance(const char *a, const char *b) {
 static const char *suggest_command(const char *cmd) {
     static const char *commands[] = {
         "list", "users", "who", "nick", "name", "msg", "w", "inbox",
-        "last", "search", "mute-joins", "mute", "support", "guide",
-        "lang", "language", "help", "commands", "clear", "cls",
+        "last", "search", "mute-joins", "mute", "lang", "language",
+        "help", "clear", "cls",
         "q", "quit", "exit"
     };
     const char *best = NULL;
@@ -168,13 +167,9 @@ void commands_dispatch(client_t *client) {
         }
         pthread_rwlock_unlock(&g_room->lock);
 
-    } else if (strcmp(cmd, "help") == 0 || strcmp(cmd, "commands") == 0) {
-        help_text_append_commands(output, sizeof(output), &pos,
-                                  client->help_lang);
-
-    } else if (strcmp(cmd, "support") == 0 || strcmp(cmd, "guide") == 0) {
-        support_append_interactive_panel(output, sizeof(output), &pos,
-                                         client->help_lang);
+    } else if (strcmp(cmd, "help") == 0) {
+        manual_append_interactive_panel(output, sizeof(output), &pos,
+                                        client->help_lang);
 
     } else if (strcmp(cmd, "lang") == 0 || strcmp(cmd, "language") == 0 ||
                strncmp(cmd, "lang ", 5) == 0 ||

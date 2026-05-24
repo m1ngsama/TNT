@@ -1,5 +1,5 @@
 .\" tnt(1) - Terminal Network Talk
-.TH TNT 1 "May 2026" "TNT 1.0.1" "User Commands"
+.TH TNT 1 "2026-05-24" "TNT 1.0.1" "User Commands"
 .SH NAME
 tnt \- anonymous SSH chat server with Vim\-style TUI
 .SH SYNOPSIS
@@ -15,7 +15,8 @@ tnt \- anonymous SSH chat server with Vim\-style TUI
 is a multi\-user anonymous chat server accessed over SSH.
 It provides a Vim\-style terminal user interface with INSERT, NORMAL, and
 COMMAND modes.
-Users connect with any standard SSH client; no account or registration is needed.
+Users connect with any standard SSH client; no account or registration is
+needed.
 .PP
 Messages are persisted to a log file and restored on server restart.
 The server supports CJK and emoji input, rate limiting, access tokens, and
@@ -44,7 +45,6 @@ Print version and exit.
 .BR \-h ", " \-\-help
 Print a short usage summary and exit.
 .SH CONNECTING
-.PP
 .nf
 ssh any\-username@hostname \-p 2222
 .fi
@@ -70,7 +70,7 @@ to return to INSERT,
 .B :
 to enter COMMAND mode,
 .B ?
-to open the help screen.
+to open the full key reference.
 .TP
 .B COMMAND
 Execute commands prefixed with
@@ -102,7 +102,7 @@ End/Home	Jump to bottom/top
 g/G	Jump to top/bottom
 i	Switch to INSERT
 :	Enter COMMAND mode
-?	Open help screen
+?	Open full key reference
 Ctrl+C	Disconnect
 .TE
 .PP
@@ -117,12 +117,12 @@ l l.
 :name \fIname\fR	Alias for :nick
 :msg \fIuser text\fR	Send private whisper
 :w \fIuser text\fR	Short alias for :msg
+:inbox	Show private whispers
 :last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
 :search \fIkeyword\fR	Case\-insensitive search across full message history
 :mute\-joins	Toggle join/leave system notifications on/off
-:support	Show quick support guide
 :lang \fIen|zh\fR	Switch UI language for this session
-:help	Show available commands
+:help	Show concise manual
 :clear	Clear command output
 :q, :quit, :exit	Disconnect
 Up/Down	Browse command history
@@ -133,7 +133,6 @@ Commands can be run non\-interactively for scripting:
 .PP
 .nf
 ssh host \-p 2222 help
-ssh host \-p 2222 support
 ssh host \-p 2222 users \-\-json
 ssh host \-p 2222 stats \-\-json
 ssh host \-p 2222 tail 20
@@ -246,6 +245,7 @@ m1ngsama <contact@m1ng.space>
 .SH BUGS
 Report bugs at
 .UR https://github.com/m1ngsama/TNT/issues
+the project issue tracker
 .UE .
 .SH SEE ALSO
 .BR ssh (1),

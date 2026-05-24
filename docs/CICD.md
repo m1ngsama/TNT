@@ -58,7 +58,7 @@ Deployments are operator-driven:
   3. Install the new binary.
   4. Restart the service.
   5. Run black-box checks (`health`, `stats --json`, `users --json`,
-     `support`, and a post/tail smoke test).
+     and a post/tail smoke test).
 
 The installer can still be used manually on a server:
   curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh

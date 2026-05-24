@@ -79,8 +79,9 @@ src/
 ├── tui.c            - Terminal UI rendering (ANSI escape codes)
 ├── tui_status.c     - Mode/status/input-line rendering
 ├── i18n.c           - Language selection and shared UI text
-├── help_text.c      - Full-screen and command help text
-├── support_text.c   - Quick support guide text
+├── help_text.c      - Full-screen key reference text
+├── manual.c         - Concise manual panel rendering
+├── manual_text.c    - Concise manual text
 ├── system_message.c - Localized join/leave/nick system messages
 ├── ratelimit.c      - Per-IP and global connection limits
 └── utf8.c           - UTF-8 character handling
@@ -98,8 +99,9 @@ include/
 ├── history_view.h   - Scroll-state helpers
 ├── tui.h            - TUI rendering functions
 ├── i18n.h           - Language and shared text IDs
-├── help_text.h      - Help text interface
-├── support_text.h   - Support guide text interface
+├── help_text.h      - Key reference text interface
+├── manual.h         - Concise manual panel interface
+├── manual_text.h    - Concise manual text interface
 ├── ratelimit.h      - Connection limit interface
 └── utf8.h           - UTF-8 utilities
 ```
@@ -363,7 +365,7 @@ if (strcmp(cmd, "newcmd") == 0) {
 
 3. **Move user-facing strings through `src/i18n.c` when they need localization or are reused.**
 
-4. **Update help text in `src/help_text.c`:**
+4. **Update user help text in `src/manual_text.c` and `src/help_text.c`:**
 ```c
 "AVAILABLE COMMANDS:\n"
 "  newcmd         - Description of new command\n"

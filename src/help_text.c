@@ -1,60 +1,8 @@
 #include "help_text.h"
 
-void help_text_append_commands(char *output, size_t buf_size, size_t *pos,
-                               help_lang_t lang) {
-    if (lang == LANG_ZH) {
-        buffer_appendf(output, buf_size, pos,
-                       "========================================\n"
-                       "    可用命令\n"
-                       "========================================\n"
-                       "list, users, who    - 显示在线用户\n"
-                       "nick/name <name>    - 修改昵称\n"
-                       "msg/w <user> <text> - 私聊用户\n"
-                       "inbox               - 查看私聊历史\n"
-                       "last [N]            - 查看最近 N 条消息\n"
-                       "search <keyword>    - 搜索消息历史\n"
-                       "mute-joins          - 切换加入/离开提示\n"
-                       "support             - 显示快速支持指南\n"
-                       "lang [en|zh]        - 查看或切换界面语言\n"
-                       "help, commands      - 显示此帮助\n"
-                       "clear, cls          - 清空命令输出\n"
-                       "q, quit, exit       - 断开连接\n"
-                       "上/下方向键         - 命令历史\n"
-                       "========================================\n"
-                       "INSERT 模式:\n"
-                       "  /me <action>      - 发送动作消息\n"
-                       "  @username         - 提及用户并响铃提示\n"
-                       "========================================\n");
-        return;
-    }
-
-    buffer_appendf(output, buf_size, pos,
-                   "========================================\n"
-                   "    Available Commands\n"
-                   "========================================\n"
-                   "list, users, who    - Show online users\n"
-                   "nick/name <name>    - Change nickname\n"
-                   "msg/w <user> <text> - Whisper to user (private)\n"
-                   "inbox               - Show whisper history\n"
-                   "last [N]            - Show last N messages\n"
-                   "search <keyword>    - Search message history\n"
-                   "mute-joins          - Toggle join/leave notices\n"
-                   "support             - Show quick support guide\n"
-                   "lang [en|zh]        - Show or switch UI language\n"
-                   "help, commands      - Show this help\n"
-                   "clear, cls          - Clear command output\n"
-                   "q, quit, exit       - Disconnect\n"
-                   "Up/Down arrows      - Command history\n"
-                   "========================================\n"
-                   "In INSERT mode:\n"
-                   "  /me <action>      - Send action message\n"
-                   "  @username         - Mention (bell notify)\n"
-                   "========================================\n");
-}
-
 const char *help_text_full(help_lang_t lang) {
     if (lang == LANG_EN) {
-        return "TERMINAL CHAT ROOM - HELP\n"
+        return "TNT KEY REFERENCE\n"
                "\n"
                "OPERATING MODES:\n"
                "  INSERT  - Type and send messages (default)\n"
@@ -80,7 +28,7 @@ const char *help_text_full(help_lang_t lang) {
                "  PgDn/PgUp  - Scroll full page down/up\n"
                "  End/Home   - Jump to bottom/top\n"
                "  g/G        - Jump to top/bottom\n"
-               "  ?          - Show this help\n"
+               "  ?          - Show full key reference\n"
                "  Ctrl+C     - Exit chat\n"
                "\n"
                "AVAILABLE COMMANDS:\n"
@@ -88,12 +36,12 @@ const char *help_text_full(help_lang_t lang) {
                "  :nick <name>         - Change nickname\n"
                "  :msg <user> <text>   - Whisper to user\n"
                "  :w <user> <text>     - Short alias for :msg\n"
+               "  :inbox               - Show whispers\n"
                "  :last [N]            - Show last N messages (max 50)\n"
                "  :search <keyword>    - Search message history\n"
                "  :mute-joins          - Toggle join/leave notices\n"
-               "  :support             - Show quick support guide\n"
+               "  :help                - Show concise manual\n"
                "  :lang <en|zh>        - Switch UI language\n"
-               "  :help                - Show available commands\n"
                "  :clear               - Clear command output\n"
                "  :q, :quit, :exit     - Disconnect\n"
                "\n"
@@ -110,7 +58,7 @@ const char *help_text_full(help_lang_t lang) {
                "  e/z        - Switch English/Chinese\n";
     }
 
-    return "终端聊天室 - 帮助\n"
+    return "TNT 按键参考\n"
            "\n"
            "操作模式:\n"
            "  INSERT  - 输入和发送消息(默认)\n"
@@ -136,7 +84,7 @@ const char *help_text_full(help_lang_t lang) {
            "  PgDn/PgUp  - 向下/上滚动整页\n"
            "  End/Home   - 跳到底部/顶部\n"
            "  g/G        - 跳到顶部/底部\n"
-           "  ?          - 显示此帮助\n"
+           "  ?          - 显示完整按键参考\n"
            "  Ctrl+C     - 退出聊天\n"
            "\n"
            "可用命令:\n"
@@ -144,12 +92,12 @@ const char *help_text_full(help_lang_t lang) {
            "  :nick <名字>         - 更改昵称\n"
            "  :msg <用户> <文本>   - 私聊\n"
            "  :w <用户> <文本>     - :msg 的简写\n"
+           "  :inbox               - 查看私聊\n"
            "  :last [N]            - 显示最后 N 条消息(最多50)\n"
            "  :search <关键词>     - 搜索消息历史\n"
            "  :mute-joins          - 切换加入/离开提示\n"
-           "  :support             - 显示快速支持指南\n"
+           "  :help                - 显示简明手册\n"
            "  :lang <en|zh>        - 切换界面语言\n"
-           "  :help                - 显示可用命令\n"
            "  :clear               - 清空命令输出\n"
            "  :q, :quit, :exit     - 断开连接\n"
            "\n"

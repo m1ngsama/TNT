@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Collapsed the interactive help surface around a concise Unix-style `:help`
+  manual and the `?` full key reference; `:support` is no longer a user-facing
+  command.
+- First-use hints and unknown-command guidance now point users to `:help`
+  instead of the removed support entry.
+- The concise manual module is now named `manual_text`, and the redundant
+  interactive `:commands` entrypoint was removed.
+
 ## 1.0.1 - 2026-05-24 - Release candidate hardening
 
 ### Added

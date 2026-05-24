@@ -27,11 +27,12 @@ COMMANDS (COMMAND mode, prefix with :)
   nick <name>            change nickname
   msg <user> <text>      whisper to user
   w <user> <text>        alias for msg
+  inbox                  show whispers
   last [N]               last N messages from log (default 10, max 50)
   search <keyword>       search full history (case-insensitive, 15 results)
   mute-joins             toggle join/leave notifications
-  support                quick support guide
-  help                   show all commands
+  help                   concise manual
+  lang [en|zh]           show or switch UI language
   clear                  clear output
   q / quit / exit        disconnect
 
@@ -52,8 +53,9 @@ STRUCTURE
   src/exec.c          SSH exec command dispatch
   src/message.c       persistence, search
   src/history_view.c  message viewport / scroll state
-  src/help_text.c     full-screen and command help text
-  src/support_text.c  quick support guide content
+  src/help_text.c     full-screen key reference text
+  src/manual.c        concise manual panel rendering
+  src/manual_text.c   concise manual content
   src/i18n.c          language selection and shared text
   src/ratelimit.c     connection limits and rate limiting
   src/tui.c           rendering

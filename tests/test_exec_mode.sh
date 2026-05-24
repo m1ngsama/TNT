@@ -75,18 +75,6 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-SUPPORT_OUTPUT=$(ssh $SSH_OPTS localhost support 2>/dev/null || true)
-printf '%s\n' "$SUPPORT_OUTPUT" | grep -Eq '^TNT (support|支持)$' &&
-printf '%s\n' "$SUPPORT_OUTPUT" | grep -Eq '^(Troubleshooting|排查):'
-if [ $? -eq 0 ]; then
-    echo "✓ support returns quick guide"
-    PASS=$((PASS + 1))
-else
-    echo "✗ support output unexpected"
-    printf '%s\n' "$SUPPORT_OUTPUT"
-    FAIL=$((FAIL + 1))
-fi
-
 HELP_OUTPUT=$(ssh $SSH_OPTS localhost help 2>/dev/null || true)
 printf '%s\n' "$HELP_OUTPUT" | grep -q '^TNT exec 接口$' &&
 printf '%s\n' "$HELP_OUTPUT" | grep -q '^命令:$'

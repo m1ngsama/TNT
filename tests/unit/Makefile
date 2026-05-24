@@ -19,10 +19,10 @@ HISTORY_VIEW_SRC = ../../src/history_view.c
 I18N_SRC = ../../src/i18n.c
 SYSTEM_MESSAGE_SRC = ../../src/system_message.c
 HELP_TEXT_SRC = ../../src/help_text.c
-SUPPORT_TEXT_SRC = ../../src/support_text.c
+MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
 
-TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_help_text test_support_text test_cli_text test_ratelimit
+TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_help_text test_manual_text test_cli_text test_ratelimit
 
 .PHONY: all clean run
 
@@ -49,7 +49,7 @@ test_system_message: test_system_message.c $(SYSTEM_MESSAGE_SRC) $(I18N_SRC)
 test_help_text: test_help_text.c $(HELP_TEXT_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_support_text: test_support_text.c $(SUPPORT_TEXT_SRC)
+test_manual_text: test_manual_text.c $(MANUAL_TEXT_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_cli_text: test_cli_text.c $(CLI_TEXT_SRC) $(COMMON_SRC)
@@ -80,8 +80,8 @@ run: all
 	@echo "=== Running Help Text Tests ==="
 	./test_help_text
 	@echo ""
-	@echo "=== Running Support Text Tests ==="
-	./test_support_text
+	@echo "=== Running Manual Text Tests ==="
+	./test_manual_text
 	@echo ""
 	@echo "=== Running CLI Text Tests ==="
 	./test_cli_text

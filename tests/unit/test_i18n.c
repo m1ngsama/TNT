@@ -81,9 +81,9 @@ TEST(text_lookup_matches_language) {
     assert(strstr(i18n_text(LANG_ZH, I18N_WELCOME_SUBTITLE),
                   "匿名聊天室") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_HELP_STATUS_FORMAT),
-                  "HELP") != NULL);
+                  "KEY REFERENCE") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_HELP_STATUS_FORMAT),
-                  "帮助") != NULL);
+                  "按键参考") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_COMMAND_OUTPUT_TITLE),
                   "COMMAND") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_COMMAND_OUTPUT_TITLE),
@@ -118,8 +118,12 @@ TEST(text_lookup_matches_language) {
                   "未知命令") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_EXEC_HELP),
                   "TNT exec interface") != NULL);
+    assert(strstr(i18n_text(LANG_EN, I18N_EXEC_HELP),
+                  "support") == NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_EXEC_HELP),
                   "TNT exec 接口") != NULL);
+    assert(strstr(i18n_text(LANG_ZH, I18N_EXEC_HELP),
+                  "support") == NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_EXEC_POST_EMPTY),
                   "message cannot be empty") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_EXEC_POST_EMPTY),

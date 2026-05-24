@@ -6,7 +6,6 @@
 #include "input.h"
 #include "message.h"
 #include "ratelimit.h"
-#include "support.h"
 #include "utf8.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -120,14 +119,6 @@ static int exec_command_help(client_t *client) {
     const char *help_text = i18n_text(client->help_lang, I18N_EXEC_HELP);
 
     return client_send(client, help_text, strlen(help_text)) == 0 ? 0 : 1;
-}
-
-static int exec_command_support(client_t *client) {
-    char output[2048] = {0};
-    size_t pos = 0;
-
-    support_append_exec_panel(output, sizeof(output), &pos, client->help_lang);
-    return client_send(client, output, pos) == 0 ? 0 : 1;
 }
 
 static int exec_command_health(client_t *client) {
@@ -428,9 +419,6 @@ int exec_dispatch(client_t *client) {
 
     if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0) {
         return exec_command_help(client);
-    }
-    if (strcmp(cmd, "support") == 0 || strcmp(cmd, "guide") == 0) {
-        return exec_command_support(client);
     }
     if (strcmp(cmd, "health") == 0) {
         return exec_command_health(client);
