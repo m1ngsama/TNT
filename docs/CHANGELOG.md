@@ -66,6 +66,8 @@
   real SSH readiness, and clean up the exact server PID instead of `pkill`.
 - Language parsing now tolerates surrounding whitespace and accepts the
   `english` alias, improving `TNT_LANG` and `:lang` ergonomics.
+- Refreshed the development guide's command/keybinding instructions so they
+  point at the current modular `commands`, `exec`, `i18n`, and help text files.
 - Refreshed README and quick-reference module maps to match the current
   `cli_text`, `help_text`, `support_text`, i18n, exec, and rate-limit modules.
 - NORMAL mode now opens at the latest visible messages instead of the oldest

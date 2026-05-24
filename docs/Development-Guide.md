@@ -67,11 +67,22 @@ TNT uses a multi-threaded architecture with a main accept loop and per-client th
 
 ```
 src/
-├── main.c           - Entry point, signal handling
-├── ssh_server.c     - SSH server, client threads, authentication
-├── chat_room.c      - Chat room logic, message broadcasting
+├── main.c           - CLI entry point and startup option parsing
+├── ssh_server.c     - SSH listener setup and connection accept loop
+├── bootstrap.c      - SSH authentication/session bootstrap
+├── input.c          - Interactive session loop and key handling
+├── commands.c       - COMMAND-mode command dispatch
+├── exec.c           - SSH exec command dispatch
+├── chat_room.c      - Chat room logic and message broadcasting
 ├── message.c        - Message persistence (RFC3339 format)
+├── history_view.c   - NORMAL-mode scroll window rules
 ├── tui.c            - Terminal UI rendering (ANSI escape codes)
+├── tui_status.c     - Mode/status/input-line rendering
+├── i18n.c           - Language selection and shared UI text
+├── help_text.c      - Full-screen and command help text
+├── support_text.c   - Quick support guide text
+├── system_message.c - Localized join/leave/nick system messages
+├── ratelimit.c      - Per-IP and global connection limits
 └── utf8.c           - UTF-8 character handling
 ```
 
@@ -81,9 +92,15 @@ src/
 include/
 ├── common.h         - Common definitions, constants
 ├── ssh_server.h     - SSH server interface
+├── bootstrap.h      - SSH session bootstrap interface
 ├── chat_room.h      - Chat room interface
 ├── message.h        - Message structure and persistence
+├── history_view.h   - Scroll-state helpers
 ├── tui.h            - TUI rendering functions
+├── i18n.h           - Language and shared text IDs
+├── help_text.h      - Help text interface
+├── support_text.h   - Support guide text interface
+├── ratelimit.h      - Connection limit interface
 └── utf8.h           - UTF-8 utilities
 ```
 
@@ -334,7 +351,7 @@ void utf8_remove_last_word(char *str) {
 
 ### Adding a New Command
 
-1. **Add to `execute_command()` in ssh_server.c:**
+1. **For interactive COMMAND mode, add to `commands_dispatch()` in `src/commands.c`:**
 ```c
 if (strcmp(cmd, "newcmd") == 0) {
     pos += snprintf(output + pos, sizeof(output) - pos,
@@ -342,29 +359,35 @@ if (strcmp(cmd, "newcmd") == 0) {
 }
 ```
 
-2. **Update help text in tui.c:**
+2. **For SSH exec mode, add the stable command path in `src/exec.c` if it should work non-interactively.**
+
+3. **Move user-facing strings through `src/i18n.c` when they need localization or are reused.**
+
+4. **Update help text in `src/help_text.c`:**
 ```c
 "AVAILABLE COMMANDS:\n"
 "  newcmd         - Description of new command\n"
 ```
 
-3. **Add test in tests/test_basic.sh:**
+5. **Add tests in the narrowest target:**
 ```sh
-echo ":newcmd" | timeout 5 ssh -p $PORT localhost
+tests/test_exec_mode.sh          # exec command behavior
+tests/test_interactive_input.sh  # COMMAND-mode/TUI behavior
+tests/unit/test_i18n.c           # localized shared text
 ```
 
 ### Adding a New Keybinding
 
-1. **Add to `handle_key()` in ssh_server.c:**
+1. **Add to the relevant mode handler in `src/input.c`:**
 ```c
 case MODE_INSERT:
     if (key == 26) {  /* Ctrl+Z */
         /* Handle Ctrl+Z */
         return true;
-    }
+}
 ```
 
-2. **Update help text in tui.c**
+2. **Update `src/help_text.c` and status hints in `src/i18n.c` / `src/tui_status.c` if the binding is user-visible.**
 
 3. **Document in README.md**
 
