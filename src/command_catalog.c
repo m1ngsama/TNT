@@ -30,7 +30,7 @@ static const command_catalog_entry_t entries[] = {
     {
         {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}, false},
         ":inbox", ":inbox",
-        "Show whispers", "查看私聊",
+        "Show private messages", "查看私信",
         ":inbox", ":inbox", 2
     },
     {

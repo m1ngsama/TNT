@@ -8,6 +8,8 @@
   catalog with coverage checks for every message ID.
 - Kept command placeholders stable across localized output: Chinese help and
   usage text now uses ASCII metavariables such as `<user>` and `<message>`.
+- Standardized user-facing `:msg` / `:inbox` terminology around "private
+  message" / "私信" instead of mixing it with "whisper" wording.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.

@@ -116,6 +116,14 @@ TEST(text_lookup_matches_language) {
                   "msg <user>") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_MSG_USAGE),
                   "<用户>") == NULL);
+    assert(strstr(i18n_text(UI_LANG_EN, I18N_MSG_SENT_FORMAT),
+                  "Private message sent") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH, I18N_MSG_SENT_FORMAT),
+                  "私信已发送") != NULL);
+    assert(strstr(i18n_text(UI_LANG_EN, I18N_INBOX_TITLE),
+                  "Private messages") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH, I18N_INBOX_TITLE),
+                  "私信") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_NICK_USAGE),
                   "nick <name>") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_SEARCH_HEADER_FORMAT),

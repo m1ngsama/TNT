@@ -67,10 +67,12 @@ TEST(generates_localized_help_sections) {
     assert(strstr(en, ":users, :list, :who") != NULL);
     assert(strstr(en, "Show online users") != NULL);
     assert(strstr(en, ":msg <user> <message>") != NULL);
+    assert(strstr(en, "Show private messages") != NULL);
     assert(strstr(en, ":support") == NULL);
 
     assert(strstr(zh, ":users, :list, :who") != NULL);
     assert(strstr(zh, "显示在线用户") != NULL);
+    assert(strstr(zh, "查看私信") != NULL);
     assert(strstr(zh, ":msg <user> <message>") != NULL);
     assert(strstr(zh, "<用户>") == NULL);
     assert(strstr(zh, "<消息>") == NULL);

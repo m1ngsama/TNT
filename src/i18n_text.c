@@ -113,16 +113,16 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         "      w <user> <message>\n"
     },
     [I18N_MSG_SENT_FORMAT] = {
-        "Whisper sent to %s\n",
-        "悄悄话已发送给 %s\n"
+        "Private message sent to %s\n",
+        "私信已发送给 %s\n"
     },
     [I18N_MSG_USER_NOT_FOUND_FORMAT] = {
         "User '%s' not found\n",
         "未找到用户 '%s'\n"
     },
     [I18N_INBOX_TITLE] = {
-        "Whispers",
-        "悄悄话"
+        "Private messages",
+        "私信"
     },
     [I18N_INBOX_EMPTY] = {
         "(empty)",

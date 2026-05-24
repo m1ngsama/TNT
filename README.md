@@ -90,9 +90,9 @@ Ctrl+C     - Exit chat
 ```
 :list, :users        - Show online users
 :nick <name>         - Change nickname
-:msg <user> <text>   - Whisper to user
+:msg <user> <message> - Send private message
 :w <user> <text>     - Short alias for :msg
-:inbox               - Show whispers
+:inbox               - Show private messages
 :last [N]            - Show last N messages from history (max 50, default 10)
 :search <keyword>    - Search full message history (case-insensitive)
 :mute-joins          - Toggle join/leave system notifications

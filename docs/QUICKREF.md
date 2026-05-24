@@ -25,9 +25,9 @@ DEBUG
 COMMANDS (COMMAND mode, prefix with :)
   list, users, who       show online users
   nick <name>            change nickname
-  msg <user> <text>      whisper to user
+  msg <user> <message>   send private message
   w <user> <text>        alias for msg
-  inbox                  show whispers
+  inbox                  show private messages
   last [N]               last N messages from log (default 10, max 50)
   search <keyword>       search full history (case-insensitive, 15 results)
   mute-joins             toggle join/leave notifications
