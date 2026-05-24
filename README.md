@@ -250,9 +250,9 @@ TNT/
 ├── src/              # source code
 │   ├── main.c        # entry point
 │   ├── cli_text.c    # startup CLI help and option text
-│   ├── command_catalog.c # command metadata
+│   ├── command_catalog.c # command metadata, usage, and argument shape
 │   ├── commands.c    # COMMAND-mode command dispatch
-│   ├── exec_catalog.c # SSH exec command matching and metadata
+│   ├── exec_catalog.c # SSH exec command matching, usage, and argument shape
 │   ├── exec.c        # SSH exec command dispatch
 │   ├── ssh_server.c  # SSH server implementation
 │   ├── bootstrap.c   # SSH authentication and session bootstrap

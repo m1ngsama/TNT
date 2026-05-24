@@ -23,6 +23,9 @@
   public documentation does not imply a specific production host.
 - Moved SSH exec usage text and argument-shape checks into `exec_catalog`, so
   `src/exec.c` no longer duplicates `--json` and required-message validation.
+- Moved interactive command usage text and first-pass argument-shape checks
+  into `command_catalog`, so known commands with bad arguments now show usage
+  instead of unknown-command guidance.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.

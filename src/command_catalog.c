@@ -10,76 +10,106 @@ typedef struct {
     const char *summary_zh;
     const char *manual_usage_en;
     const char *manual_usage_zh;
+    const char *error_usage_en;
+    const char *error_usage_zh;
     int manual_group;
+    bool no_args;
+    bool requires_args;
 } command_catalog_entry_t;
 
 static const command_catalog_entry_t entries[] = {
     {
-        {TNT_COMMAND_USERS, "users", {"users", "list", "who", NULL}, false},
+        {TNT_COMMAND_USERS, "users", {"users", "list", "who", NULL}},
         ":users, :list, :who", ":users, :list, :who",
         "Show online users", "显示在线用户",
-        ":users", ":users", 1
+        ":users", ":users",
+        "Usage: users\n", "用法: users\n",
+        1, true, false
     },
     {
-        {TNT_COMMAND_MSG, "msg", {"msg", "w", NULL}, true},
+        {TNT_COMMAND_MSG, "msg", {"msg", "w", NULL}},
         ":msg <user> <message>, :w <user> <message>",
         ":msg <user> <message>, :w <user> <message>",
         "Send private message", "发送私信",
-        ":msg <user> <message>", ":msg <user> <message>", 2
+        ":msg <user> <message>", ":msg <user> <message>",
+        "Usage: msg <user> <message>\n"
+        "       w <user> <message>\n",
+        "用法: msg <user> <message>\n"
+        "      w <user> <message>\n",
+        2, false, true
     },
     {
-        {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}, false},
+        {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}},
         ":inbox", ":inbox",
         "Show private messages", "查看私信",
-        ":inbox", ":inbox", 2
+        ":inbox", ":inbox",
+        "Usage: inbox\n", "用法: inbox\n",
+        2, true, false
     },
     {
-        {TNT_COMMAND_NICK, "nick", {"nick", "name", NULL}, true},
+        {TNT_COMMAND_NICK, "nick", {"nick", "name", NULL}},
         ":nick <name>, :name <name>", ":nick <name>, :name <name>",
         "Change nickname", "更改昵称",
-        ":nick <name>", ":nick <name>", 2
+        ":nick <name>", ":nick <name>",
+        "Usage: nick <name>\n", "用法: nick <name>\n",
+        2, false, true
     },
     {
-        {TNT_COMMAND_LAST, "last", {"last", NULL}, true},
+        {TNT_COMMAND_LAST, "last", {"last", NULL}},
         ":last [N]", ":last [N]",
         "Show last N messages (max 50)", "显示最后 N 条消息(最多50)",
-        ":last [N]", ":last [N]", 1
+        ":last [N]", ":last [N]",
+        "Usage: last [N]  (N: 1-50, default 10)\n",
+        "用法: last [N]  (N: 1-50，默认 10)\n",
+        1, false, false
     },
     {
-        {TNT_COMMAND_SEARCH, "search", {"search", NULL}, true},
+        {TNT_COMMAND_SEARCH, "search", {"search", NULL}},
         ":search <keyword>", ":search <keyword>",
         "Search message history", "搜索消息历史",
-        ":search <keyword>", ":search <keyword>", 1
+        ":search <keyword>", ":search <keyword>",
+        "Usage: search <keyword>\n", "用法: search <keyword>\n",
+        1, false, true
     },
     {
-        {TNT_COMMAND_MUTE_JOINS, "mute-joins", {"mute-joins", "mute", NULL}, false},
+        {TNT_COMMAND_MUTE_JOINS, "mute-joins", {"mute-joins", "mute", NULL}},
         ":mute-joins, :mute", ":mute-joins, :mute",
         "Toggle join/leave notices", "切换加入/离开提示",
-        ":mute-joins", ":mute-joins", 3
+        ":mute-joins", ":mute-joins",
+        "Usage: mute-joins\n", "用法: mute-joins\n",
+        3, true, false
     },
     {
-        {TNT_COMMAND_HELP, "help", {"help", NULL}, false},
+        {TNT_COMMAND_HELP, "help", {"help", NULL}},
         ":help", ":help",
         "Show concise manual", "显示简明手册",
-        NULL, NULL, 0
+        NULL, NULL,
+        "Usage: help\n", "用法: help\n",
+        0, true, false
     },
     {
-        {TNT_COMMAND_LANG, "lang", {"lang", "language", NULL}, true},
+        {TNT_COMMAND_LANG, "lang", {"lang", "language", NULL}},
         ":lang <en|zh>", ":lang <en|zh>",
         "Switch UI language", "切换界面语言",
-        NULL, NULL, 0
+        NULL, NULL,
+        "Usage: lang <en|zh>\n", "用法: lang <en|zh>\n",
+        0, false, false
     },
     {
-        {TNT_COMMAND_CLEAR, "clear", {"clear", "cls", NULL}, false},
+        {TNT_COMMAND_CLEAR, "clear", {"clear", "cls", NULL}},
         ":clear, :cls", ":clear, :cls",
         "Clear command output", "清空命令输出",
-        ":clear", ":clear", 3
+        ":clear", ":clear",
+        "Usage: clear\n", "用法: clear\n",
+        3, true, false
     },
     {
-        {TNT_COMMAND_QUIT, "q", {"q", "quit", "exit", NULL}, false},
+        {TNT_COMMAND_QUIT, "q", {"q", "quit", "exit", NULL}},
         ":q, :quit, :exit", ":q, :quit, :exit",
         "Disconnect", "断开连接",
-        ":q", ":q", 3
+        ":q", ":q",
+        "Usage: q\n", "用法: q\n",
+        3, true, false
     }
 };
 
@@ -177,10 +207,6 @@ bool command_catalog_match(const char *line, tnt_command_id_t *id,
             if (!name_matches(line, spec->names[n], &candidate_args)) {
                 continue;
             }
-            if (candidate_args && candidate_args[0] != '\0' &&
-                !spec->accepts_args) {
-                continue;
-            }
             if (id) {
                 *id = spec->id;
             }
@@ -192,6 +218,22 @@ bool command_catalog_match(const char *line, tnt_command_id_t *id,
     }
 
     return false;
+}
+
+bool command_catalog_args_valid(tnt_command_id_t id, const char *args) {
+    const command_catalog_entry_t *entry = entry_for_id(id);
+    args = skip_spaces(args);
+
+    if (!entry) {
+        return false;
+    }
+    if (entry->no_args) {
+        return !args || args[0] == '\0';
+    }
+    if (entry->requires_args) {
+        return args && args[0] != '\0';
+    }
+    return true;
 }
 
 const char *command_catalog_suggest(const char *name) {
@@ -256,4 +298,18 @@ void command_catalog_append_manual(char *buffer, size_t buf_size, size_t *pos,
         }
         buffer_appendf(buffer, buf_size, pos, "\n");
     }
+}
+
+void command_catalog_append_usage(char *buffer, size_t buf_size, size_t *pos,
+                                  tnt_command_id_t id, ui_lang_t lang) {
+    const command_catalog_entry_t *entry = entry_for_id(id);
+    const char *usage;
+
+    if (!entry) {
+        return;
+    }
+
+    usage = lang == UI_LANG_ZH ? entry->error_usage_zh
+                               : entry->error_usage_en;
+    buffer_appendf(buffer, buf_size, pos, "%s", usage);
 }

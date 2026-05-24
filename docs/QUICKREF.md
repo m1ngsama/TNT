@@ -46,12 +46,12 @@ INSERT MODE
 STRUCTURE
   src/main.c          entry, signals
   src/cli_text.c      startup CLI text
-  src/command_catalog.c command metadata
+  src/command_catalog.c command metadata, usage, argument shape
   src/ssh_server.c    SSH listener and server setup
   src/bootstrap.c     SSH auth/session bootstrap
   src/chat_room.c     broadcast and room state
   src/commands.c      COMMAND-mode command dispatch
-  src/exec_catalog.c  SSH exec command matching and metadata
+  src/exec_catalog.c  SSH exec command matching, usage, argument shape
   src/exec.c          SSH exec command dispatch
   src/message.c       persistence, search
   src/history_view.c  message viewport / scroll state

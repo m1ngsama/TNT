@@ -47,6 +47,11 @@ static void append_highlighted(char *output, size_t buf_size, size_t *pos,
     }
 }
 
+static void append_command_usage(char *output, size_t buf_size, size_t *pos,
+                                 tnt_command_id_t id, ui_lang_t lang) {
+    command_catalog_append_usage(output, buf_size, pos, id, lang);
+}
+
 void commands_dispatch(client_t *client) {
     char cmd_buf[256];
     strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
@@ -104,6 +109,12 @@ void commands_dispatch(client_t *client) {
         }
         buffer_appendf(output, sizeof(output), &pos, "%s",
                        i18n_text(client->ui_lang, I18N_UNKNOWN_GUIDANCE));
+        goto cmd_done;
+    }
+
+    if (!command_catalog_args_valid(command_id, arg)) {
+        append_command_usage(output, sizeof(output), &pos, command_id,
+                             client->ui_lang);
         goto cmd_done;
     }
 
@@ -171,8 +182,8 @@ void commands_dispatch(client_t *client) {
         while (*rest == ' ') rest++;
 
         if (target_name[0] == '\0' || rest[0] == '\0') {
-            buffer_appendf(output, sizeof(output), &pos, "%s",
-                           i18n_text(client->ui_lang, I18N_MSG_USAGE));
+            append_command_usage(output, sizeof(output), &pos,
+                                 TNT_COMMAND_MSG, client->ui_lang);
         } else {
             bool found = false;
             client_t *target = NULL;
@@ -267,8 +278,8 @@ void commands_dispatch(client_t *client) {
         while (*new_name == ' ') new_name++;
 
         if (new_name[0] == '\0') {
-            buffer_appendf(output, sizeof(output), &pos, "%s",
-                           i18n_text(client->ui_lang, I18N_NICK_USAGE));
+            append_command_usage(output, sizeof(output), &pos,
+                                 TNT_COMMAND_NICK, client->ui_lang);
         } else if (!is_valid_username(new_name)) {
             buffer_appendf(output, sizeof(output), &pos, "%s",
                            i18n_text(client->ui_lang, I18N_NICK_INVALID));
@@ -331,8 +342,8 @@ void commands_dispatch(client_t *client) {
             char *endp;
             long val = strtol(arg, &endp, 10);
             if (*endp != '\0' || val < 1 || val > 50) {
-                buffer_appendf(output, sizeof(output), &pos, "%s",
-                               i18n_text(client->ui_lang, I18N_LAST_USAGE));
+                append_command_usage(output, sizeof(output), &pos,
+                                     TNT_COMMAND_LAST, client->ui_lang);
                 goto cmd_done;
             }
             n = (int)val;
@@ -357,8 +368,8 @@ void commands_dispatch(client_t *client) {
         const char *query = arg;
         while (*query == ' ') query++;
         if (*query == '\0') {
-            buffer_appendf(output, sizeof(output), &pos, "%s",
-                           i18n_text(client->ui_lang, I18N_SEARCH_USAGE));
+            append_command_usage(output, sizeof(output), &pos,
+                                 TNT_COMMAND_SEARCH, client->ui_lang);
         } else {
             message_t *found = NULL;
             int found_count = message_search(query, &found, 15);

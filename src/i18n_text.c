@@ -106,12 +106,6 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         "Online users",
         "在线用户"
     },
-    [I18N_MSG_USAGE] = {
-        "Usage: msg <user> <message>\n"
-        "       w <user> <message>\n",
-        "用法: msg <user> <message>\n"
-        "      w <user> <message>\n"
-    },
     [I18N_MSG_SENT_FORMAT] = {
         "Private message sent to %s\n",
         "私信已发送给 %s\n"
@@ -127,10 +121,6 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
     [I18N_INBOX_EMPTY] = {
         "(empty)",
         "(空)"
-    },
-    [I18N_NICK_USAGE] = {
-        "Usage: nick <name>\n",
-        "用法: nick <name>\n"
     },
     [I18N_NICK_INVALID] = {
         "Invalid username\n",
@@ -148,17 +138,9 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         "Nickname changed: %s -> %s\n",
         "昵称已修改: %s -> %s\n"
     },
-    [I18N_LAST_USAGE] = {
-        "Usage: last [N]  (N: 1-50, default 10)\n",
-        "用法: last [N]  (N: 1-50，默认 10)\n"
-    },
     [I18N_LAST_HEADER_FORMAT] = {
         "--- Last %d message(s) ---\n",
         "--- 最近 %d 条消息 ---\n"
-    },
-    [I18N_SEARCH_USAGE] = {
-        "Usage: search <keyword>\n",
-        "用法: search <keyword>\n"
     },
     [I18N_SEARCH_HEADER_FORMAT] = {
         "--- Search: \"%s\" (%d match(es)) ---\n",

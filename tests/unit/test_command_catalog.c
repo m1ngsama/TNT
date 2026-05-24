@@ -40,13 +40,37 @@ TEST(matches_canonical_names_and_aliases) {
     assert(strcmp(args, "zh") == 0);
 }
 
-TEST(rejects_arguments_for_no_arg_commands) {
+TEST(matches_known_commands_before_argument_validation) {
     tnt_command_id_t id;
     const char *args;
 
-    assert(!command_catalog_match("users extra", &id, &args));
-    assert(!command_catalog_match("help now", &id, &args));
-    assert(!command_catalog_match("q now", &id, &args));
+    assert(command_catalog_match("users extra", &id, &args));
+    assert(id == TNT_COMMAND_USERS);
+    assert(strcmp(args, "extra") == 0);
+
+    assert(command_catalog_match("help now", &id, &args));
+    assert(id == TNT_COMMAND_HELP);
+    assert(strcmp(args, "now") == 0);
+
+    assert(command_catalog_match("q now", &id, &args));
+    assert(id == TNT_COMMAND_QUIT);
+    assert(strcmp(args, "now") == 0);
+}
+
+TEST(validates_argument_shapes) {
+    assert(command_catalog_args_valid(TNT_COMMAND_USERS, NULL));
+    assert(!command_catalog_args_valid(TNT_COMMAND_USERS, "extra"));
+    assert(command_catalog_args_valid(TNT_COMMAND_HELP, NULL));
+    assert(!command_catalog_args_valid(TNT_COMMAND_HELP, "now"));
+
+    assert(!command_catalog_args_valid(TNT_COMMAND_MSG, NULL));
+    assert(command_catalog_args_valid(TNT_COMMAND_MSG, "alice hello"));
+    assert(!command_catalog_args_valid(TNT_COMMAND_SEARCH, ""));
+    assert(command_catalog_args_valid(TNT_COMMAND_SEARCH, "needle"));
+
+    assert(command_catalog_args_valid(TNT_COMMAND_LAST, NULL));
+    assert(command_catalog_args_valid(TNT_COMMAND_LAST, "999"));
+    assert(command_catalog_args_valid(TNT_COMMAND_LANG, "fr"));
 }
 
 TEST(suggests_from_catalog_aliases) {
@@ -81,13 +105,31 @@ TEST(generates_localized_help_sections) {
     assert_ascii_angle_placeholders(zh);
 }
 
+TEST(generates_localized_usage) {
+    char en[256] = {0};
+    char zh[256] = {0};
+    size_t en_pos = 0;
+    size_t zh_pos = 0;
+
+    command_catalog_append_usage(en, sizeof(en), &en_pos,
+                                 TNT_COMMAND_LAST, UI_LANG_EN);
+    command_catalog_append_usage(zh, sizeof(zh), &zh_pos,
+                                 TNT_COMMAND_MSG, UI_LANG_ZH);
+
+    assert(strcmp(en, "Usage: last [N]  (N: 1-50, default 10)\n") == 0);
+    assert(strcmp(zh, "用法: msg <user> <message>\n"
+                      "      w <user> <message>\n") == 0);
+}
+
 int main(void) {
     printf("Running command catalog unit tests...\n\n");
 
     RUN_TEST(matches_canonical_names_and_aliases);
-    RUN_TEST(rejects_arguments_for_no_arg_commands);
+    RUN_TEST(matches_known_commands_before_argument_validation);
+    RUN_TEST(validates_argument_shapes);
     RUN_TEST(suggests_from_catalog_aliases);
     RUN_TEST(generates_localized_help_sections);
+    RUN_TEST(generates_localized_usage);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;
