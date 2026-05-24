@@ -46,7 +46,8 @@ typedef enum {
 /* UI language */
 typedef enum {
     UI_LANG_EN,
-    UI_LANG_ZH
+    UI_LANG_ZH,
+    UI_LANG_COUNT
 } ui_lang_t;
 
 /* Runtime helpers */

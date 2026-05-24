@@ -83,6 +83,8 @@ TEST(text_lookup_matches_language) {
                   "display name") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_USERNAME_PROMPT),
                   "用户名") != NULL);
+    assert(strstr(i18n_text((ui_lang_t)99, I18N_USERNAME_PROMPT),
+                  "display name") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_WELCOME_SUBTITLE),
                   "anonymous chat") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_WELCOME_SUBTITLE),

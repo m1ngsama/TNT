@@ -12,6 +12,8 @@ static const ui_lang_definition_t ui_lang_defs[] = {
     {UI_LANG_EN, "en", {"en", "c", "posix", NULL}},
     {UI_LANG_ZH, "zh", {"zh", NULL}}
 };
+typedef char ui_lang_defs_must_cover_enum[
+    sizeof(ui_lang_defs) / sizeof(ui_lang_defs[0]) == UI_LANG_COUNT ? 1 : -1];
 
 static const char *skip_space(const char *value) {
     while (value && *value &&

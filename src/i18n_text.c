@@ -1,8 +1,7 @@
 #include "i18n.h"
 
 typedef struct {
-    const char *en;
-    const char *zh;
+    const char *text[UI_LANG_COUNT];
 } i18n_text_entry_t;
 
 static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
@@ -209,12 +208,16 @@ const char *i18n_text(ui_lang_t lang, i18n_text_id_t id) {
         return "";
     }
 
-    const i18n_text_entry_t *entry = &text_catalog[id];
-    if (lang == UI_LANG_ZH && entry->zh) {
-        return entry->zh;
+    if ((int)lang < 0 || lang >= UI_LANG_COUNT) {
+        lang = UI_LANG_EN;
     }
-    if (entry->en) {
-        return entry->en;
+
+    const i18n_text_entry_t *entry = &text_catalog[id];
+    if (entry->text[lang]) {
+        return entry->text[lang];
+    }
+    if (entry->text[UI_LANG_EN]) {
+        return entry->text[UI_LANG_EN];
     }
     return "";
 }

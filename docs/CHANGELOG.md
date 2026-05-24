@@ -52,6 +52,8 @@
   one internal language registry.
 - Removed the unused `MODE_HELP` enum value and refreshed development-guide
   module descriptions for the split between language parsing and text lookup.
+- `i18n_text` now indexes localized strings by `UI_LANG_*` instead of storing
+  English/Chinese as hard-coded struct fields.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 
