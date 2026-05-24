@@ -1,278 +1,224 @@
-# TNT 匿名聊天室 - 快速部署指南 / TNT Anonymous Chat - Quick Setup Guide
+# TNT Quick Setup
 
-[中文](#中文) | [English](#english)
+This guide gets a TNT server running and explains the first user session.
+For the full reference, see [README.md](../README.md), [tnt(1)](../tnt.1),
+and [Deployment](DEPLOYMENT.md).
 
----
+## Install
 
-## 中文
-
-### 一键安装
-
-```bash
+```sh
 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
 
-### 启动服务器
+Or build from source:
 
-```bash
-tnt              # 监听 2222 端口
+```sh
+git clone https://github.com/m1ngsama/TNT.git
+cd TNT
+make
+sudo make install
 ```
 
-就这么简单！服务器已经运行了。
+## Start A Server
 
-### 用户如何连接
-
-用户只需要一个SSH客户端即可，无需任何配置：
-
-```bash
-ssh -p 2222 chat.example.com
-```
-
-**重要提示**：
-- ✅ 用户可以使用**任意用户名**连接
-- ✅ 用户可以输入**任意密码**（甚至直接按回车跳过）
-- ✅ **不需要SSH密钥**
-- ✅ 不需要提前注册账号
-- ✅ 完全匿名，零门槛
-
-连接后，系统会提示输入显示名称（也可以留空使用默认名称）。
-
-### 生产环境部署
-
-使用 systemd 让服务器开机自启：
-
-```bash
-# 1. 创建专用用户
-sudo useradd -r -s /bin/false tnt
-sudo mkdir -p /var/lib/tnt
-sudo chown tnt:tnt /var/lib/tnt
-
-# 2. 安装服务
-sudo cp tnt.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable tnt
-sudo systemctl start tnt
-
-# 3. 检查状态
-sudo systemctl status tnt
-```
-
-### 防火墙设置
-
-记得开放2222端口：
-
-```bash
-# Ubuntu/Debian
-sudo ufw allow 2222/tcp
-
-# CentOS/RHEL
-sudo firewall-cmd --permanent --add-port=2222/tcp
-sudo firewall-cmd --reload
-```
-
-### 可选配置
-
-通过环境变量进行高级配置：
-
-```bash
-# 修改端口
-PORT=3333 tnt
-
-# 限制最大连接数
-TNT_MAX_CONNECTIONS=100 tnt
-
-# 限制每个IP的最大连接数
-TNT_MAX_CONN_PER_IP=10 tnt
-
-# 只允许本地访问
-TNT_BIND_ADDR=127.0.0.1 tnt
-
-# 添加访问密码（所有用户共用一个密码）
-TNT_ACCESS_TOKEN="your_secret_password" tnt
-```
-
-**注意**：设置 `TNT_ACCESS_TOKEN` 后，所有用户必须使用该密码才能连接，这会提高安全性但也会增加使用门槛。
-
-### 特性
-
-- 🚀 **零配置** - 开箱即用
-- 🔓 **完全匿名** - 无需注册，无需密钥
-- 🎨 **Vim风格界面** - 支持 INSERT/NORMAL/COMMAND 三种模式
-- 📜 **消息历史** - 自动保存聊天记录
-- 🌐 **UTF-8支持** - 完美支持中英文及其他语言
-- 🔒 **可选安全特性** - 支持限流、访问控制等
-
----
-
-## English
-
-### One-Line Installation
-
-```bash
-curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
-```
-
-### Start Server
-
-```bash
-tnt              # Listen on port 2222
-```
-
-That's it! Your server is now running.
-
-### How Users Connect
-
-Users only need an SSH client, no configuration required:
-
-```bash
-ssh -p 2222 chat.example.com
-```
-
-**Important**:
-- ✅ Users can use **ANY username**
-- ✅ Users can enter **ANY password** (or just press Enter to skip)
-- ✅ **No SSH keys required**
-- ✅ No registration needed
-- ✅ Completely anonymous, zero barrier
-
-After connecting, the system will prompt for a display name (can be left empty for default name).
-
-### Production Deployment
-
-Use systemd for auto-start on boot:
-
-```bash
-# 1. Create dedicated user
-sudo useradd -r -s /bin/false tnt
-sudo mkdir -p /var/lib/tnt
-sudo chown tnt:tnt /var/lib/tnt
-
-# 2. Install service
-sudo cp tnt.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable tnt
-sudo systemctl start tnt
-
-# 3. Check status
-sudo systemctl status tnt
-```
-
-### Firewall Configuration
-
-Remember to open port 2222:
-
-```bash
-# Ubuntu/Debian
-sudo ufw allow 2222/tcp
-
-# CentOS/RHEL
-sudo firewall-cmd --permanent --add-port=2222/tcp
-sudo firewall-cmd --reload
-```
-
-### Optional Configuration
-
-Advanced configuration via environment variables:
-
-```bash
-# Change port
-PORT=3333 tnt
-
-# Limit max connections
-TNT_MAX_CONNECTIONS=100 tnt
-
-# Limit concurrent sessions per IP
-TNT_MAX_CONN_PER_IP=10 tnt
-
-# Limit new connections per IP per 60 seconds
-TNT_MAX_CONN_RATE_PER_IP=30 tnt
-
-# Bind to localhost only
-TNT_BIND_ADDR=127.0.0.1 tnt
-
-# Add password protection (shared password for all users)
-TNT_ACCESS_TOKEN="your_secret_password" tnt
-```
-
-**Note**: Setting `TNT_ACCESS_TOKEN` requires all users to use that password to connect. This increases security but also raises the barrier to entry.
-
-### Features
-
-- 🚀 **Zero Configuration** - Works out of the box
-- 🔓 **Fully Anonymous** - No registration, no keys
-- 🎨 **Vim-Style Interface** - Supports INSERT/NORMAL/COMMAND modes
-- 📜 **Message History** - Automatic chat log persistence
-- 🌐 **UTF-8 Support** - Perfect for all languages
-- 🔒 **Optional Security** - Rate limiting, access control, etc.
-
----
-
-## 使用示例 / Usage Examples
-
-### 基本使用 / Basic Usage
-
-```bash
-# 启动服务器
+```sh
 tnt
-
-# 用户连接（从任何机器）
-ssh -p 2222 chat.example.com
-# 输入任意密码或直接回车
-# 输入显示名称或留空
-# 开始聊天！
 ```
 
-### Vim风格操作 / Vim-Style Operations
+By default TNT listens on port `2222`, stores `host_key` and `messages.log`
+in the current directory, and allows anonymous SSH login.
 
-连接后：
+Use explicit state and port settings for a long-running server:
 
-- **INSERT 模式**（默认）：直接输入消息，按 Enter 发送
-- **NORMAL 模式**：按 `ESC` 进入，使用 `j/k` 滚动历史，`g/G` 跳转顶部/底部
-- **COMMAND 模式**：按 `:` 进入，输入 `:list` 查看在线用户，`:help` 查看帮助
+```sh
+tnt -p 2222 -d /var/lib/tnt
+```
 
-### 故障排除 / Troubleshooting
+## Connect
 
-#### 问题：端口已被占用
+```sh
+ssh -p 2222 chat.example.com
+```
 
-```bash
-# 更换端口
+Default access rules:
+
+- Any SSH username is accepted.
+- Empty or arbitrary passwords are accepted.
+- SSH keys are not required.
+- TNT asks for a display name after the SSH session starts.
+
+Set `TNT_ACCESS_TOKEN` when you want a shared password:
+
+```sh
+TNT_ACCESS_TOKEN="change-this-password" tnt -p 2222 -d /var/lib/tnt
+```
+
+## First Session
+
+TNT opens in INSERT mode. Type a message and press `Enter`.
+
+Common keys:
+
+```text
+Esc         enter NORMAL mode
+i           return to INSERT mode
+:           enter COMMAND mode
+?           open the full key reference
+G or End    jump to latest messages
+Ctrl+C      disconnect from NORMAL mode
+```
+
+Common commands:
+
+```text
+:help                 concise manual
+:users                online users
+:nick <name>          change nickname
+:msg <user> <message> send private message
+:inbox                show private messages
+:last [N]             recent messages
+:search <keyword>     search message history
+:lang en|zh           switch UI language
+:q                    disconnect
+```
+
+NORMAL mode opens at the latest messages and follows new messages until the
+user scrolls up. Use `G` or `End` to return to the live tail.
+
+## Configure
+
+```sh
+# Listening address and port
+TNT_BIND_ADDR=0.0.0.0 PORT=2222 tnt
+
+# State directory
+TNT_STATE_DIR=/var/lib/tnt tnt
+
+# Shared SSH password
+TNT_ACCESS_TOKEN="change-this-password" tnt
+
+# Default UI language; unset means locale detection, then English fallback
+TNT_LANG=en tnt
+TNT_LANG=zh tnt
+
+# Connection limits
+TNT_MAX_CONNECTIONS=200 tnt
+TNT_MAX_CONN_PER_IP=30 tnt
+TNT_MAX_CONN_RATE_PER_IP=60 tnt
+
+# Idle timeout in seconds; 0 disables it
+TNT_IDLE_TIMEOUT=3600 tnt
+```
+
+## Run Under systemd
+
+```sh
+sudo useradd -r -s /bin/false tnt
+sudo mkdir -p /var/lib/tnt
+sudo chown tnt:tnt /var/lib/tnt
+sudo cp tnt.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tnt
+sudo systemctl status tnt
+```
+
+Put runtime overrides in `/etc/default/tnt`:
+
+```sh
+PORT=2222
+TNT_BIND_ADDR=0.0.0.0
+TNT_STATE_DIR=/var/lib/tnt
+TNT_MAX_CONNECTIONS=200
+TNT_MAX_CONN_PER_IP=30
+TNT_MAX_CONN_RATE_PER_IP=60
+TNT_RATE_LIMIT=1
+TNT_SSH_LOG_LEVEL=1
+TNT_PUBLIC_HOST=chat.example.com
+```
+
+Open the listening port in your firewall:
+
+```sh
+sudo ufw allow 2222/tcp
+```
+
+## Troubleshooting
+
+### Port Already In Use
+
+```sh
 tnt -p 3333
 ```
 
-#### 问题：防火墙阻止连接
+### Cannot Connect
 
-```bash
-# 检查防火墙状态
+Check the server process:
+
+```sh
+systemctl status tnt
+sudo journalctl -u tnt -n 50 --no-pager
+```
+
+Check the listening port:
+
+```sh
+ss -ltnp | grep 2222
+```
+
+Check the firewall:
+
+```sh
 sudo ufw status
-sudo firewall-cmd --list-ports
-
-# 确保已开放端口
-sudo ufw allow 2222/tcp
 ```
 
-#### 问题：连接超时
+### Connection Closes Immediately
 
-```bash
-# 检查服务器是否运行
-ps aux | grep tnt
+The most common causes are per-IP connection limits, connection-rate limits,
+an auth-failure ban, a full room, or a closed firewall port. The server logs
+the rejection reason to stderr or the systemd journal.
 
-# 检查端口监听
-sudo lsof -i:2222
+## Chinese Quick Notes
+
+### 安装
+
+```sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
 
----
+### 启动
 
-## 技术细节 / Technical Details
+```sh
+tnt
+```
 
-- **语言**: C
-- **依赖**: libssh
-- **并发**: 多线程，支持数百个同时连接
-- **安全**: 可选限流、访问控制、密码保护
-- **存储**: 简单的文本日志（messages.log）
-- **配置**: 环境变量，无配置文件
+默认监听 `2222` 端口，并允许匿名 SSH 登录。
 
----
+### 连接
 
-## 许可证 / License
+```sh
+ssh -p 2222 chat.example.com
+```
 
-MIT License - 自由使用、修改、分发
+默认情况下，任意 SSH 用户名和空密码都可以连接。进入后 TNT 会询问显示名称。
+
+### 常用操作
+
+```text
+Enter        发送消息
+Esc          进入 NORMAL 模式
+i            回到 INSERT 模式
+:            输入命令
+?            查看完整按键参考
+G 或 End      回到最新消息
+:help        查看简明手册
+:lang en|zh  切换界面语言
+:q           断开连接
+```
+
+### 常用配置
+
+```sh
+TNT_ACCESS_TOKEN="change-this-password" tnt
+TNT_STATE_DIR=/var/lib/tnt tnt
+TNT_LANG=zh tnt
+```
