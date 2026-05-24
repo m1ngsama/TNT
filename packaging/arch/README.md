@@ -40,7 +40,7 @@ git clone ssh://aur@aur.archlinux.org/tnt-chat.git aur-tnt-chat
 cp PKGBUILD .SRCINFO aur-tnt-chat/
 cd aur-tnt-chat
 git add PKGBUILD .SRCINFO
-git commit -m "Update to 1.0.0"
+git commit -m "Update to 1.0.1"
 git push
 ```
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-05-21 - Message browsing polish
+## 1.0.1 - 2026-05-24 - Release candidate hardening
 
 ### Added
 - Added a first i18n boundary: `TNT_LANG` / locale detection now chooses the

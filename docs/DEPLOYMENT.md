@@ -9,7 +9,7 @@ curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 
 Specific version:
 ```bash
-VERSION=v1.0.0 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+VERSION=v1.0.1 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
 
 ## Manual Install

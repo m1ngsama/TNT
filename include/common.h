@@ -12,7 +12,7 @@
 #include <pthread.h>
 
 /* Project Metadata */
-#define TNT_VERSION "1.0.0"
+#define TNT_VERSION "1.0.1"
 
 /* Configuration constants */
 #define DEFAULT_PORT 2222

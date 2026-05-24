@@ -28,13 +28,13 @@ ruby -c packaging/homebrew/tnt-chat.rb
 
 ## Updating the formula
 
-1. Publish a GitHub release tag such as `v1.0.0`.
+1. Publish a GitHub release tag such as `v1.0.1`.
 2. Download or hash the release source archive:
 
    ```sh
-   curl -L -o tnt-chat-1.0.0.tar.gz \
-     https://github.com/m1ngsama/TNT/archive/refs/tags/v1.0.0.tar.gz
-   shasum -a 256 tnt-chat-1.0.0.tar.gz
+   curl -L -o tnt-chat-1.0.1.tar.gz \
+     https://github.com/m1ngsama/TNT/archive/refs/tags/v1.0.1.tar.gz
+   shasum -a 256 tnt-chat-1.0.1.tar.gz
    ```
 
 3. Replace `REPLACE_WITH_RELEASE_TARBALL_SHA256` in `tnt-chat.rb`.

@@ -33,8 +33,8 @@ CREATING RELEASES
    make release-check-strict
 
 4. Create and push tag:
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v1.0.1
+   git push origin v1.0.1
 
 5. GitHub Actions automatically:
    - Builds binaries (Linux/macOS, AMD64/ARM64)

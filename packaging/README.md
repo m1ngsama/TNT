@@ -14,7 +14,7 @@ any public registry.
 
 1. Confirm `TNT_VERSION` in `include/common.h` and the manpage version match.
    Also update package versions in Arch, Homebrew, and Debian drafts.
-2. Create a GitHub release tag such as `v1.0.0`.
+2. Create a GitHub release tag such as `v1.0.1`.
 3. Build and upload release tarballs or rely on GitHub source archives.
 4. Replace placeholder checksums in package drafts.
 5. Verify package contents in an isolated directory:
