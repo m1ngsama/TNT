@@ -107,6 +107,12 @@ TEST(generates_localized_usage) {
 
     assert(strcmp(en, "tail: usage: tail [N] | tail -n N\n") == 0);
     assert(strcmp(zh, "post: 用法: post MESSAGE\n") == 0);
+
+    memset(en, 0, sizeof(en));
+    en_pos = 0;
+    exec_catalog_append_usage(en, sizeof(en), &en_pos,
+                              TNT_EXEC_COMMAND_TAIL, (ui_lang_t)99);
+    assert(strcmp(en, "tail: usage: tail [N] | tail -n N\n") == 0);
 }
 
 int main(void) {

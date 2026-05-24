@@ -64,6 +64,8 @@
   around the command-catalog rows.
 - The full-screen key reference now uses the shared localized-string helper
   around the command-catalog rows.
+- SSH exec help headers and usage prefixes now use the shared
+  localized-string helper and English fallback path.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 

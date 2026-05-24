@@ -134,11 +134,11 @@ bool exec_catalog_args_valid(tnt_exec_command_id_t id, const char *args) {
 
 void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
                               ui_lang_t lang) {
-    if (lang == UI_LANG_ZH) {
-        buffer_appendf(buffer, buf_size, pos, "TNT exec 接口\n命令:\n");
-    } else {
-        buffer_appendf(buffer, buf_size, pos, "TNT exec interface\nCommands:\n");
-    }
+    static const i18n_string_t header =
+        I18N_STRING("TNT exec interface\nCommands:\n",
+                    "TNT exec 接口\n命令:\n");
+
+    buffer_appendf(buffer, buf_size, pos, "%s", i18n_string(header, lang));
 
     for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
         const char *summary = i18n_string(entries[i].summary, lang);
@@ -150,15 +150,12 @@ void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
 void exec_catalog_append_usage(char *buffer, size_t buf_size, size_t *pos,
                                tnt_exec_command_id_t id, ui_lang_t lang) {
     const exec_catalog_entry_t *entry = entry_for_id(id);
+    static const i18n_string_t usage_format =
+        I18N_STRING("%s: usage: %s\n", "%s: 用法: %s\n");
 
     if (!entry) {
         return;
     }
-    if (lang == UI_LANG_ZH) {
-        buffer_appendf(buffer, buf_size, pos, "%s: 用法: %s\n",
-                       entry->name, entry->usage_syntax);
-        return;
-    }
-    buffer_appendf(buffer, buf_size, pos, "%s: usage: %s\n",
+    buffer_appendf(buffer, buf_size, pos, i18n_string(usage_format, lang),
                    entry->name, entry->usage_syntax);
 }
