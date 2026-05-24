@@ -47,7 +47,7 @@ PORT=3333 tnt    # via env var
 ### Connecting
 
 ```sh
-ssh -p 2222 chat.m1ng.space
+ssh -p 2222 chat.example.com
 ```
 
 **Anonymous access by default**: Users can connect with ANY username/password (or empty password). No SSH keys required. Perfect for public chat servers.
@@ -127,7 +127,7 @@ TNT_BIND_ADDR=192.168.1.100 tnt
 TNT_STATE_DIR=/var/lib/tnt tnt
 
 # Show the public SSH endpoint in startup logs
-TNT_PUBLIC_HOST=chat.m1ng.space tnt
+TNT_PUBLIC_HOST=chat.example.com tnt
 
 # Choose interactive UI language (en or zh; defaults from locale)
 TNT_LANG=zh tnt
@@ -173,12 +173,12 @@ tnt -p 2222
 TNT also exposes a small non-interactive SSH surface for scripts:
 
 ```sh
-ssh -p 2222 chat.m1ng.space health
-ssh -p 2222 chat.m1ng.space stats --json
-ssh -p 2222 chat.m1ng.space users
-ssh -p 2222 chat.m1ng.space "tail -n 20"
-ssh -p 2222 operator@chat.m1ng.space post "service notice"
-ssh -p 2222 chat.m1ng.space post "/me deploys v2.0"
+ssh -p 2222 chat.example.com health
+ssh -p 2222 chat.example.com stats --json
+ssh -p 2222 chat.example.com users
+ssh -p 2222 chat.example.com "tail -n 20"
+ssh -p 2222 operator@chat.example.com post "service notice"
+ssh -p 2222 chat.example.com post "/me deploys v2.0"
 ```
 
 **`post` identity**: the message is attributed to the SSH login name (the `user@` part of the URL, falling back to `anonymous`). In the default anonymous-access configuration there is no identity check, so any client can post as any name. Set `TNT_ACCESS_TOKEN` if you need authenticated posting.
@@ -297,7 +297,7 @@ TNT_MAX_CONN_PER_IP=30
 TNT_MAX_CONN_RATE_PER_IP=60
 TNT_RATE_LIMIT=1
 TNT_SSH_LOG_LEVEL=0
-TNT_PUBLIC_HOST=chat.m1ng.space
+TNT_PUBLIC_HOST=chat.example.com
 EOF
 ```
 

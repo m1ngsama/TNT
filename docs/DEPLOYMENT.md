@@ -54,7 +54,7 @@ TNT_MAX_CONN_PER_IP=30
 TNT_MAX_CONN_RATE_PER_IP=60
 TNT_RATE_LIMIT=1
 TNT_SSH_LOG_LEVEL=0
-TNT_PUBLIC_HOST=chat.m1ng.space
+TNT_PUBLIC_HOST=chat.example.com
 EOF
 
 sudo systemctl restart tnt
