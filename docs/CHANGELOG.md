@@ -64,6 +64,8 @@
   concurrent-session and connection-rate scenarios.
 - CI memory-leak smoke checks now use an isolated state directory, wait for
   real SSH readiness, and clean up the exact server PID instead of `pkill`.
+- CI memory-leak smoke checks now pre-generate the host key and use a longer
+  valgrind readiness window, avoiding false failures during slow startup.
 - Language parsing now tolerates surrounding whitespace and accepts the
   `english` alias, improving `TNT_LANG` and `:lang` ergonomics.
 - Refreshed the development guide's command/keybinding instructions so they

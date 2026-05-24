@@ -59,12 +59,15 @@ jobs:
         }
         trap cleanup EXIT
 
+        ssh-keygen -q -t rsa -b 4096 -m PEM -N "" -f "$STATE_DIR/host_key"
+        chmod 600 "$STATE_DIR/host_key"
+
         TNT_RATE_LIMIT=0 valgrind --leak-check=full --error-exitcode=99 --log-file="$VALGRIND_LOG" \
           ./tnt -p "$PORT" -d "$STATE_DIR" >"$SERVER_LOG" 2>&1 &
         SERVER_PID=$!
 
         READY=0
-        for _ in $(seq 1 15); do
+        for _ in $(seq 1 60); do
           if ! kill -0 "$SERVER_PID" 2>/dev/null; then
             break
           fi
