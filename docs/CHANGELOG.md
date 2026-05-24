@@ -70,6 +70,8 @@
   stable command syntax, concise help copy, and translation-only localization.
 - Rewrote the quick setup guide as a concise English-first user lifecycle
   document with a short Chinese notes section.
+- The shared UI text catalog now uses the same localized-string initializer
+  as the smaller text modules, avoiding GCC missing-braces warnings.
 
 ## 1.0.1 - 2026-05-24 - Release candidate hardening
 
