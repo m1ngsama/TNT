@@ -12,6 +12,8 @@
   message" / "私信" instead of mixing it with "whisper" wording.
 - Kept localized startup CLI syntax stable by using `用法: tnt [options]`
   instead of localizing the `[options]` metavariable.
+- Moved SSH exec help rows into an `exec_catalog` module so command metadata
+  no longer lives as one large translated blob inside the shared i18n table.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.

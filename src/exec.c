@@ -2,6 +2,7 @@
 #include "chat_room.h"
 #include "client.h"
 #include "common.h"
+#include "exec_catalog.h"
 #include "i18n.h"
 #include "input.h"
 #include "message.h"
@@ -116,9 +117,13 @@ static void resolve_exec_username(const client_t *client, char *buffer,
 }
 
 static int exec_command_help(client_t *client) {
-    const char *help_text = i18n_text(client->ui_lang, I18N_EXEC_HELP);
+    char help_text[1024];
+    size_t pos = 0;
 
-    return client_send(client, help_text, strlen(help_text)) == 0 ? 0 : 1;
+    help_text[0] = '\0';
+    exec_catalog_append_help(help_text, sizeof(help_text), &pos,
+                             client->ui_lang);
+    return client_send(client, help_text, pos) == 0 ? 0 : 1;
 }
 
 static int exec_command_health(client_t *client) {

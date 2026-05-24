@@ -208,30 +208,6 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         "Type :help for help\n",
         "输入 :help 查看帮助\n"
     },
-    [I18N_EXEC_HELP] = {
-        "TNT exec interface\n"
-        "Commands:\n"
-        "  help            Show this help\n"
-        "  health          Print service health\n"
-        "  users [--json]  List online users\n"
-        "  stats [--json]  Print room statistics\n"
-        "  tail [N]        Print recent messages\n"
-        "  tail -n N       Print recent messages\n"
-        "  post MESSAGE    Post a message non-interactively\n"
-        "  post \"/me act\"  Post an action message\n"
-        "  exit            Exit successfully\n",
-        "TNT exec 接口\n"
-        "命令:\n"
-        "  help            显示此帮助\n"
-        "  health          输出服务健康状态\n"
-        "  users [--json]  列出在线用户\n"
-        "  stats [--json]  输出房间统计\n"
-        "  tail [N]        输出最近消息\n"
-        "  tail -n N       输出最近消息\n"
-        "  post MESSAGE    非交互发送消息\n"
-        "  post \"/me act\" 发送动作消息\n"
-        "  exit            成功退出\n"
-    },
     [I18N_EXEC_USERS_USAGE] = {
         "users: usage: users [--json]\n",
         "users: 用法: users [--json]\n"

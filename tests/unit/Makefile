@@ -19,12 +19,13 @@ CHAT_ROOM_SRC = ../../src/chat_room.c
 HISTORY_VIEW_SRC = ../../src/history_view.c
 I18N_SRC = ../../src/i18n.c
 I18N_TEXT_SRC = ../../src/i18n_text.c
+EXEC_CATALOG_SRC = ../../src/exec_catalog.c
 SYSTEM_MESSAGE_SRC = ../../src/system_message.c
 HELP_TEXT_SRC = ../../src/help_text.c
 MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
 
-TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_help_text test_manual_text test_cli_text test_ratelimit
+TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_ratelimit
 
 .PHONY: all clean run
 
@@ -49,6 +50,9 @@ test_system_message: test_system_message.c $(SYSTEM_MESSAGE_SRC) $(I18N_SRC) $(I
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_command_catalog: test_command_catalog.c $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test_exec_catalog: test_exec_catalog.c $(EXEC_CATALOG_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_help_text: test_help_text.c $(HELP_TEXT_SRC) $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
@@ -84,6 +88,9 @@ run: all
 	@echo ""
 	@echo "=== Running Command Catalog Tests ==="
 	./test_command_catalog
+	@echo ""
+	@echo "=== Running Exec Catalog Tests ==="
+	./test_exec_catalog
 	@echo ""
 	@echo "=== Running Help Text Tests ==="
 	./test_help_text

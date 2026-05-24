@@ -51,6 +51,7 @@ STRUCTURE
   src/bootstrap.c     SSH auth/session bootstrap
   src/chat_room.c     broadcast and room state
   src/commands.c      COMMAND-mode command dispatch
+  src/exec_catalog.c  SSH exec command metadata
   src/exec.c          SSH exec command dispatch
   src/message.c       persistence, search
   src/history_view.c  message viewport / scroll state

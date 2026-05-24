@@ -15,6 +15,7 @@ tests/unit/test_history_view
 tests/unit/test_i18n
 tests/unit/test_system_message
 tests/unit/test_command_catalog
+tests/unit/test_exec_catalog
 tests/unit/test_help_text
 tests/unit/test_manual_text
 tests/unit/test_support_text
