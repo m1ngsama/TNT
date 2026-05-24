@@ -51,8 +51,8 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         " 按键 "
     },
     [I18N_HELP_STATUS_FORMAT] = {
-        "-- KEY REFERENCE -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close",
-        "-- 按键参考 -- (%d/%d) j/k:滚动 g/G:首尾 e/z:语言 q:关闭"
+        "-- KEY REFERENCE -- (%d/%d) j/k:scroll g/G:top/bottom l:lang q:close",
+        "-- 按键参考 -- (%d/%d) j/k:滚动 g/G:首尾 l:语言 q:关闭"
     },
     [I18N_COMMAND_OUTPUT_TITLE] = {
         " COMMAND OUTPUT ",

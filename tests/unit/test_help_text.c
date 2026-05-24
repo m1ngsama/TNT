@@ -31,7 +31,8 @@ TEST(full_help_matches_language) {
     assert(strstr(en, ":inbox") != NULL);
     assert(strstr(en, ":support") == NULL);
     assert(strstr(en, ":commands") == NULL);
-    assert(strstr(en, "Switch English/Chinese") != NULL);
+    assert(strstr(en, "Cycle UI language") != NULL);
+    assert(strstr(en, "Switch English/Chinese") == NULL);
 
     assert(strstr(zh, "TNT 按键参考") != NULL);
     assert(strstr(zh, "可用命令") != NULL);
@@ -43,7 +44,8 @@ TEST(full_help_matches_language) {
     assert(strstr(zh, "@用户名") == NULL);
     assert(strstr(zh, ":support") == NULL);
     assert(strstr(zh, ":commands") == NULL);
-    assert(strstr(zh, "切换英文/中文") != NULL);
+    assert(strstr(zh, "切换界面语言") != NULL);
+    assert(strstr(zh, "切换英文/中文") == NULL);
     assert_ascii_angle_placeholders(zh);
 }
 

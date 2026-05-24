@@ -257,12 +257,8 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
         if (key == 'q' || key == 27) {
             client->show_help = false;
             tui_render_screen(client);
-        } else if (key == 'e' || key == 'E') {
-            client->ui_lang = UI_LANG_EN;
-            client->help_scroll_pos = 0;
-            tui_render_help(client);
-        } else if (key == 'z' || key == 'Z') {
-            client->ui_lang = UI_LANG_ZH;
+        } else if (key == 'l' || key == 'L') {
+            client->ui_lang = i18n_next_ui_lang(client->ui_lang);
             client->help_scroll_pos = 0;
             tui_render_help(client);
         } else if (key == 'j') {

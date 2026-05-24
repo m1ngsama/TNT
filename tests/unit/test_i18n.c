@@ -89,8 +89,12 @@ TEST(text_lookup_matches_language) {
                   "匿名聊天室") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_HELP_STATUS_FORMAT),
                   "KEY REFERENCE") != NULL);
+    assert(strstr(i18n_text(UI_LANG_EN, I18N_HELP_STATUS_FORMAT),
+                  "l:lang") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_HELP_STATUS_FORMAT),
                   "按键参考") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH, I18N_HELP_STATUS_FORMAT),
+                  "l:语言") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_COMMAND_OUTPUT_TITLE),
                   "COMMAND") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_COMMAND_OUTPUT_TITLE),
@@ -141,6 +145,8 @@ TEST(text_lookup_matches_language) {
                   "未知命令") != NULL);
     assert(strcmp(i18n_ui_lang_code(UI_LANG_EN), "en") == 0);
     assert(strcmp(i18n_ui_lang_code(UI_LANG_ZH), "zh") == 0);
+    assert(i18n_next_ui_lang(UI_LANG_EN) == UI_LANG_ZH);
+    assert(i18n_next_ui_lang(UI_LANG_ZH) == UI_LANG_EN);
 }
 
 TEST(text_catalog_is_complete) {

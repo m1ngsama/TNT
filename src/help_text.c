@@ -56,7 +56,7 @@ void help_text_append_full(char *buffer, size_t buf_size, size_t *pos,
                        "  Ctrl+D/U   - Scroll half page down/up\n"
                        "  Ctrl+F/B   - Scroll full page down/up\n"
                        "  g/G        - Jump to top/bottom\n"
-                       "  e/z        - Switch English/Chinese\n");
+                       "  l          - Cycle UI language\n");
         return;
     }
 
@@ -111,5 +111,5 @@ void help_text_append_full(char *buffer, size_t buf_size, size_t *pos,
                    "  Ctrl+D/U   - 向下/上滚动半页\n"
                    "  Ctrl+F/B   - 向下/上滚动整页\n"
                    "  g/G        - 跳到顶部/底部\n"
-                   "  e/z        - 切换英文/中文\n");
+                   "  l          - 切换界面语言\n");
 }

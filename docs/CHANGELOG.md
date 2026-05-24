@@ -46,6 +46,8 @@
 - Language selection is limited to stable codes (`en`, `zh`) and
   locale-shaped environment values; natural-language labels are not accepted
   as command arguments.
+- Full-screen help now uses `l` to cycle the UI language through the i18n
+  module instead of hard-coding one key per language.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 

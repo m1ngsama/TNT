@@ -58,6 +58,7 @@ typedef enum {
 bool i18n_try_parse_ui_lang(const char *value, ui_lang_t *lang);
 ui_lang_t i18n_parse_ui_lang(const char *value, ui_lang_t fallback);
 ui_lang_t i18n_default_ui_lang(void);
+ui_lang_t i18n_next_ui_lang(ui_lang_t lang);
 const char *i18n_ui_lang_code(ui_lang_t lang);
 const char *i18n_text(ui_lang_t lang, i18n_text_id_t id);
 

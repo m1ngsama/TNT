@@ -81,6 +81,10 @@ ui_lang_t i18n_default_ui_lang(void) {
     return i18n_parse_ui_lang(locale, UI_LANG_EN);
 }
 
+ui_lang_t i18n_next_ui_lang(ui_lang_t lang) {
+    return lang == UI_LANG_EN ? UI_LANG_ZH : UI_LANG_EN;
+}
+
 const char *i18n_ui_lang_code(ui_lang_t lang) {
     return lang == UI_LANG_ZH ? "zh" : "en";
 }
