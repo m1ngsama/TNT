@@ -49,10 +49,25 @@ TEST(full_help_matches_language) {
     assert_ascii_angle_placeholders(zh);
 }
 
+TEST(full_help_falls_back_to_english) {
+    char text[8192] = {0};
+    size_t pos = 0;
+
+    help_text_append_full(text, sizeof(text), &pos, (ui_lang_t)99);
+
+    assert(strstr(text, "TNT KEY REFERENCE") != NULL);
+    assert(strstr(text, "AVAILABLE COMMANDS") != NULL);
+    assert(strstr(text, "COMMAND OUTPUT KEYS") != NULL);
+    assert(strstr(text, "Cycle UI language") != NULL);
+    assert(strstr(text, "TNT 按键参考") == NULL);
+    assert(strstr(text, "切换界面语言") == NULL);
+}
+
 int main(void) {
     printf("Running help text unit tests...\n\n");
 
     RUN_TEST(full_help_matches_language);
+    RUN_TEST(full_help_falls_back_to_english);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;
