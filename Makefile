@@ -31,7 +31,7 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test stress-test info
 
 all: $(TARGET)
 
@@ -124,6 +124,10 @@ connection-limit-test: all
 security-test: all
 	@echo "Running security feature tests..."
 	@cd tests && PORT=$${PORT:-13600} ./test_security_features.sh
+
+stress-test: all
+	@echo "Running stress tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_stress.sh $${CLIENTS:-10} $${DURATION:-30}
 
 ci-test:
 	@$(MAKE) test PORT=$(CI_TEST_PORT)

@@ -56,6 +56,8 @@
 - Anonymous access checks now use isolated state, wait for real SSH health,
   avoid external `timeout` helpers, and run through `make anonymous-access-test`
   as part of `make ci-test`.
+- Stress testing now uses isolated state, waits for real SSH health, avoids
+  external `timeout` helpers, and is available through `make stress-test`.
 - Refreshed README and quick-reference module maps to match the current
   `cli_text`, `help_text`, `support_text`, i18n, exec, and rate-limit modules.
 - NORMAL mode now opens at the latest visible messages instead of the oldest

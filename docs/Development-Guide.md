@@ -164,6 +164,7 @@ make test-advisory # Run integration tests as advisory checks
 make anonymous-access-test # Verify default anonymous login behavior
 make connection-limit-test # Verify per-IP concurrency and rate limits
 make security-test # Run security feature checks
+make stress-test   # Run configurable concurrent-client stress test
 make ci-test       # Run the same checks as GitHub Actions
 
 # Individual tests

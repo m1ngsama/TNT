@@ -205,6 +205,7 @@ make test-advisory # run integration tests as advisory checks
 make anonymous-access-test # verify default anonymous login behavior
 make connection-limit-test # verify per-IP concurrency and rate limits
 make security-test # run security feature checks
+make stress-test   # run configurable concurrent-client stress test
 make ci-test       # run the same checks as GitHub Actions
 
 # Individual tests
@@ -220,7 +221,7 @@ cd tests
 - Basic functionality: 3 tests
 - Anonymous access: 2 tests
 - Security features: 12 tests
-- Stress test: concurrent connections
+- Stress test: configurable concurrent clients (`CLIENTS=20 DURATION=60 make stress-test`)
 
 ### Dependencies
 

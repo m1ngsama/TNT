@@ -14,6 +14,7 @@ TEST
   make anonymous-access-test default anonymous login checks
   make connection-limit-test per-IP concurrency/rate-limit checks
   make security-test        security feature checks
+  make stress-test          concurrent-client stress test
   make ci-test              same checks as GitHub Actions
 
 DEBUG
