@@ -26,6 +26,11 @@ TEST(help_matches_language) {
 
     memset(output, 0, sizeof(output));
     pos = 0;
+    cli_text_append_help(output, sizeof(output), &pos, "", (ui_lang_t)99);
+    assert(strstr(output, "Usage: tnt [options]") != NULL);
+
+    memset(output, 0, sizeof(output));
+    pos = 0;
     cli_text_append_help(output, sizeof(output), &pos, "tnt", UI_LANG_ZH);
     assert(strstr(output, "匿名 SSH 聊天服务器") != NULL);
     assert(strstr(output, "用法: tnt [options]") != NULL);
@@ -46,6 +51,8 @@ TEST(error_formats_match_language) {
                   "Usage: %s [-p PORT] [-d DIR] [-h]\n") == 0);
     assert(strcmp(cli_text_short_usage_format(UI_LANG_ZH),
                   "用法: %s [-p PORT] [-d DIR] [-h]\n") == 0);
+    assert(strcmp(cli_text_invalid_port_format((ui_lang_t)99),
+                  "Invalid port: %s\n") == 0);
 }
 
 int main(void) {
