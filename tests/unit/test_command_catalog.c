@@ -61,8 +61,8 @@ TEST(generates_localized_help_sections) {
     size_t en_pos = 0;
     size_t zh_pos = 0;
 
-    command_catalog_append_full(en, sizeof(en), &en_pos, LANG_EN);
-    command_catalog_append_full(zh, sizeof(zh), &zh_pos, LANG_ZH);
+    command_catalog_append_full(en, sizeof(en), &en_pos, UI_LANG_EN);
+    command_catalog_append_full(zh, sizeof(zh), &zh_pos, UI_LANG_ZH);
 
     assert(strstr(en, ":users, :list, :who") != NULL);
     assert(strstr(en, "Show online users") != NULL);

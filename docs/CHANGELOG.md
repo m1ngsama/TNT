@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Changed
+- Renamed the internal language state from help-oriented names to
+  UI-language names (`ui_lang_t`, `client->ui_lang`, and
+  `i18n_*_ui_lang`) so future i18n work has a correctly named seam.
 - Command names, aliases, help summaries, concise-manual command rows, and
   unknown-command suggestions now share a dedicated `command_catalog` module.
 - COMMAND-mode output is now a small scrollable pager with `j/k`, page
@@ -28,7 +31,7 @@
 ### Added
 - Added a first i18n boundary: `TNT_LANG` / locale detection now chooses the
   default interactive UI language (`en` or `zh`) for username prompts, status
-  hints, help language, and `:support`.
+  hints, help output, and `:support`.
 - Added `:lang <en|zh>` so users can switch the interactive UI language for
   their current session.
 - COMMAND-mode `:help`, unknown-command guidance, language command output, and

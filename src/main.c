@@ -20,7 +20,7 @@ static void signal_handler(int sig) {
 
 int main(int argc, char **argv) {
     int port = DEFAULT_PORT;
-    help_lang_t lang = i18n_default_lang();
+    ui_lang_t lang = i18n_default_ui_lang();
 
     /* Environment provides defaults; command-line flags override it. */
     const char *port_env = getenv("PORT");

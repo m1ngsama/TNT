@@ -13,13 +13,13 @@ void tui_status_append(char *buffer, size_t buf_size, size_t *pos,
                            "\033[2;37m›\033[0m  "
                            "\033[2;37m%s\033[0m"
                            "\033[K",
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_INSERT_HINT_WIDE));
         } else if (client->width >= 36) {
             buffer_appendf(buffer, buf_size, pos,
                            "\033[2;37m›\033[0m  "
                            "\033[2;37m%s\033[0m\033[K",
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_INSERT_HINT_NARROW));
         } else {
             buffer_appendf(buffer, buf_size, pos, "\033[2;37m›\033[0m \033[K");
@@ -36,16 +36,16 @@ void tui_status_append(char *buffer, size_t buf_size, size_t *pos,
                            "  \033[2;37m%d-%d / %d\033[0m"
                            "   \033[33m▼ %d %s · %s\033[0m\033[K",
                            range_start, range_end, total, unseen,
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_NORMAL_NEW_MESSAGES),
-                           i18n_text(client->help_lang, I18N_NORMAL_LATEST));
+                           i18n_text(client->ui_lang, I18N_NORMAL_LATEST));
         } else {
             buffer_appendf(buffer, buf_size, pos,
                            "\033[7;33m NORMAL \033[0m"
                            "  \033[2;37m%d-%d / %d\033[0m"
                            "   \033[2;37m%s\033[0m\033[K",
                            range_start, range_end, total,
-                           i18n_text(client->help_lang, I18N_NORMAL_LATEST));
+                           i18n_text(client->ui_lang, I18N_NORMAL_LATEST));
         }
     } else if (client->mode == MODE_COMMAND) {
         buffer_appendf(buffer, buf_size, pos,

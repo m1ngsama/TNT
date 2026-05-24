@@ -417,6 +417,9 @@ keys.
 
 2. **Stable language identifiers**
    - Interactive `:lang` accepts only stable language codes: `en` and `zh`.
+   - Code should name this concept `ui_lang`, not `help_lang`; the same value
+     controls prompts, status text, help, command output, MOTD chrome, and
+     system messages.
    - Locale detection may accept locale-shaped values such as
      `en_US.UTF-8`, `zh_CN.UTF-8`, `C`, and `POSIX`.
    - Do not accept natural-language labels such as `english`, `chinese`,

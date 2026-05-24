@@ -3,8 +3,8 @@
 #include "command_catalog.h"
 
 void manual_text_append_interactive(char *buffer, size_t buf_size,
-                                    size_t *pos, help_lang_t lang) {
-    if (lang == LANG_ZH) {
+                                    size_t *pos, ui_lang_t lang) {
+    if (lang == UI_LANG_ZH) {
         buffer_appendf(buffer, buf_size, pos,
                        "\033[1;36mTNT(1) 帮助\033[0m\n"
                        "\n"

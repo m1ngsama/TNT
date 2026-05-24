@@ -18,14 +18,14 @@ static int tests_passed = 0;
 TEST(join_leave_follow_language) {
     message_t msg;
 
-    system_message_make_join(&msg, "alice", LANG_ZH);
+    system_message_make_join(&msg, "alice", UI_LANG_ZH);
     assert(strcmp(msg.username, "系统") == 0);
     assert(strstr(msg.content, "alice") != NULL);
     assert(strstr(msg.content, "加入了聊天室") != NULL);
     assert(system_message_is_system(&msg));
     assert(system_message_is_join_leave(&msg));
 
-    system_message_make_leave(&msg, "bob", LANG_EN);
+    system_message_make_leave(&msg, "bob", UI_LANG_EN);
     assert(strcmp(msg.username, "system") == 0);
     assert(strstr(msg.content, "bob") != NULL);
     assert(strstr(msg.content, "left the room") != NULL);
@@ -36,7 +36,7 @@ TEST(join_leave_follow_language) {
 TEST(nick_messages_are_system_events_not_join_leave) {
     message_t msg;
 
-    system_message_make_nick(&msg, "old", "new", LANG_EN);
+    system_message_make_nick(&msg, "old", "new", UI_LANG_EN);
     assert(strcmp(msg.username, "system") == 0);
     assert(strstr(msg.content, "old") != NULL);
     assert(strstr(msg.content, "new") != NULL);
@@ -44,7 +44,7 @@ TEST(nick_messages_are_system_events_not_join_leave) {
     assert(system_message_is_system(&msg));
     assert(!system_message_is_join_leave(&msg));
 
-    system_message_make_nick(&msg, "旧", "新", LANG_ZH);
+    system_message_make_nick(&msg, "旧", "新", UI_LANG_ZH);
     assert(strcmp(msg.username, "系统") == 0);
     assert(strstr(msg.content, "更名为") != NULL);
     assert(system_message_is_system(&msg));

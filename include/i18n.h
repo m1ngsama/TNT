@@ -63,10 +63,10 @@ typedef enum {
     I18N_EXEC_UNKNOWN_COMMAND_FORMAT
 } i18n_text_id_t;
 
-bool i18n_try_parse_lang(const char *value, help_lang_t *lang);
-help_lang_t i18n_parse_lang(const char *value, help_lang_t fallback);
-help_lang_t i18n_default_lang(void);
-const char *i18n_lang_code(help_lang_t lang);
-const char *i18n_text(help_lang_t lang, i18n_text_id_t id);
+bool i18n_try_parse_ui_lang(const char *value, ui_lang_t *lang);
+ui_lang_t i18n_parse_ui_lang(const char *value, ui_lang_t fallback);
+ui_lang_t i18n_default_ui_lang(void);
+const char *i18n_ui_lang_code(ui_lang_t lang);
+const char *i18n_text(ui_lang_t lang, i18n_text_id_t id);
 
 #endif /* I18N_H */

@@ -93,17 +93,17 @@ void commands_dispatch(client_t *client) {
     if (!command_catalog_match(cmd, &command_id, &arg)) {
         const char *suggestion = command_catalog_suggest(cmd);
         buffer_appendf(output, sizeof(output), &pos,
-                       i18n_text(client->help_lang,
+                       i18n_text(client->ui_lang,
                                  I18N_UNKNOWN_COMMAND_FORMAT),
                        cmd);
         if (suggestion) {
             buffer_appendf(output, sizeof(output), &pos,
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_DID_YOU_MEAN_FORMAT),
                            suggestion);
         }
         buffer_appendf(output, sizeof(output), &pos, "%s",
-                       i18n_text(client->help_lang, I18N_UNKNOWN_GUIDANCE));
+                       i18n_text(client->ui_lang, I18N_UNKNOWN_GUIDANCE));
         goto cmd_done;
     }
 
@@ -112,7 +112,7 @@ void commands_dispatch(client_t *client) {
         int total = g_room->client_count;
         buffer_appendf(output, sizeof(output), &pos,
                        "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
-                       i18n_text(client->help_lang, I18N_USERS_TITLE), total);
+                       i18n_text(client->ui_lang, I18N_USERS_TITLE), total);
 
         time_t now = time(NULL);
         for (int i = 0; i < total; i++) {
@@ -137,25 +137,25 @@ void commands_dispatch(client_t *client) {
 
     } else if (command_id == TNT_COMMAND_HELP) {
         manual_append_interactive_panel(output, sizeof(output), &pos,
-                                        client->help_lang);
+                                        client->ui_lang);
 
     } else if (command_id == TNT_COMMAND_LANG) {
-        help_lang_t next_lang;
+        ui_lang_t next_lang;
 
         if (!arg || arg[0] == '\0') {
             buffer_appendf(output, sizeof(output), &pos,
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_LANG_CURRENT_FORMAT),
-                           i18n_lang_code(client->help_lang));
-        } else if (i18n_try_parse_lang(arg, &next_lang)) {
-            client->help_lang = next_lang;
+                           i18n_ui_lang_code(client->ui_lang));
+        } else if (i18n_try_parse_ui_lang(arg, &next_lang)) {
+            client->ui_lang = next_lang;
             buffer_appendf(output, sizeof(output), &pos,
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_LANG_SET_FORMAT),
-                           i18n_lang_code(client->help_lang));
+                           i18n_ui_lang_code(client->ui_lang));
         } else {
             buffer_appendf(output, sizeof(output), &pos,
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_LANG_UNSUPPORTED_FORMAT),
                            arg);
         }
@@ -172,7 +172,7 @@ void commands_dispatch(client_t *client) {
 
         if (target_name[0] == '\0' || rest[0] == '\0') {
             buffer_appendf(output, sizeof(output), &pos, "%s",
-                           i18n_text(client->help_lang, I18N_MSG_USAGE));
+                           i18n_text(client->ui_lang, I18N_MSG_USAGE));
         } else {
             bool found = false;
             client_t *target = NULL;
@@ -220,12 +220,12 @@ void commands_dispatch(client_t *client) {
 
             if (found) {
                 buffer_appendf(output, sizeof(output), &pos,
-                               i18n_text(client->help_lang,
+                               i18n_text(client->ui_lang,
                                          I18N_MSG_SENT_FORMAT),
                                target_name);
             } else {
                 buffer_appendf(output, sizeof(output), &pos,
-                               i18n_text(client->help_lang,
+                               i18n_text(client->ui_lang,
                                          I18N_MSG_USER_NOT_FOUND_FORMAT),
                                target_name);
             }
@@ -245,12 +245,12 @@ void commands_dispatch(client_t *client) {
 
         buffer_appendf(output, sizeof(output), &pos,
                        "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
-                       i18n_text(client->help_lang, I18N_INBOX_TITLE),
+                       i18n_text(client->ui_lang, I18N_INBOX_TITLE),
                        snap_count);
         if (snap_count == 0) {
             buffer_appendf(output, sizeof(output), &pos,
                            "  \033[2;37m%s\033[0m\n",
-                           i18n_text(client->help_lang, I18N_INBOX_EMPTY));
+                           i18n_text(client->ui_lang, I18N_INBOX_EMPTY));
         }
         for (int i = 0; i < snap_count; i++) {
             char ts[20];
@@ -268,10 +268,10 @@ void commands_dispatch(client_t *client) {
 
         if (new_name[0] == '\0') {
             buffer_appendf(output, sizeof(output), &pos, "%s",
-                           i18n_text(client->help_lang, I18N_NICK_USAGE));
+                           i18n_text(client->ui_lang, I18N_NICK_USAGE));
         } else if (!is_valid_username(new_name)) {
             buffer_appendf(output, sizeof(output), &pos, "%s",
-                           i18n_text(client->help_lang, I18N_NICK_INVALID));
+                           i18n_text(client->ui_lang, I18N_NICK_INVALID));
         } else {
             char validated_name[MAX_USERNAME_LEN];
             snprintf(validated_name, sizeof(validated_name), "%s", new_name);
@@ -303,22 +303,22 @@ void commands_dispatch(client_t *client) {
 
             if (taken) {
                 buffer_appendf(output, sizeof(output), &pos,
-                               i18n_text(client->help_lang,
+                               i18n_text(client->ui_lang,
                                          I18N_NICK_TAKEN_FORMAT),
                                validated_name);
             } else if (strcmp(validated_name, old_name) == 0) {
                 buffer_appendf(output, sizeof(output), &pos, "%s",
-                               i18n_text(client->help_lang,
+                               i18n_text(client->ui_lang,
                                          I18N_NICK_UNCHANGED));
             } else {
                 message_t nick_msg;
                 system_message_make_nick(&nick_msg, old_name,
-                                         client->username, client->help_lang);
+                                         client->username, client->ui_lang);
                 room_broadcast(g_room, &nick_msg);
                 message_save(&nick_msg);
 
                 buffer_appendf(output, sizeof(output), &pos,
-                               i18n_text(client->help_lang,
+                               i18n_text(client->ui_lang,
                                          I18N_NICK_CHANGED_FORMAT),
                                old_name, client->username);
             }
@@ -332,7 +332,7 @@ void commands_dispatch(client_t *client) {
             long val = strtol(arg, &endp, 10);
             if (*endp != '\0' || val < 1 || val > 50) {
                 buffer_appendf(output, sizeof(output), &pos, "%s",
-                               i18n_text(client->help_lang, I18N_LAST_USAGE));
+                               i18n_text(client->ui_lang, I18N_LAST_USAGE));
                 goto cmd_done;
             }
             n = (int)val;
@@ -341,7 +341,7 @@ void commands_dispatch(client_t *client) {
         message_t *last_msgs = NULL;
         int last_count = message_load(&last_msgs, n);
         buffer_appendf(output, sizeof(output), &pos,
-                       i18n_text(client->help_lang, I18N_LAST_HEADER_FORMAT),
+                       i18n_text(client->ui_lang, I18N_LAST_HEADER_FORMAT),
                        last_count);
         for (int i = 0; i < last_count; i++) {
             char ts[20];
@@ -358,12 +358,12 @@ void commands_dispatch(client_t *client) {
         while (*query == ' ') query++;
         if (*query == '\0') {
             buffer_appendf(output, sizeof(output), &pos, "%s",
-                           i18n_text(client->help_lang, I18N_SEARCH_USAGE));
+                           i18n_text(client->ui_lang, I18N_SEARCH_USAGE));
         } else {
             message_t *found = NULL;
             int found_count = message_search(query, &found, 15);
             buffer_appendf(output, sizeof(output), &pos,
-                           i18n_text(client->help_lang,
+                           i18n_text(client->ui_lang,
                                      I18N_SEARCH_HEADER_FORMAT),
                            query, found_count);
             for (int i = 0; i < found_count; i++) {
@@ -386,8 +386,8 @@ void commands_dispatch(client_t *client) {
     } else if (command_id == TNT_COMMAND_MUTE_JOINS) {
         client->mute_joins = !client->mute_joins;
         buffer_appendf(output, sizeof(output), &pos,
-                       i18n_text(client->help_lang, I18N_MUTE_JOINS_FORMAT),
-                       i18n_text(client->help_lang,
+                       i18n_text(client->ui_lang, I18N_MUTE_JOINS_FORMAT),
+                       i18n_text(client->ui_lang,
                                  client->mute_joins ?
                                  I18N_MUTE_JOINS_MUTED :
                                  I18N_MUTE_JOINS_UNMUTED));
@@ -398,7 +398,7 @@ void commands_dispatch(client_t *client) {
 
     } else if (command_id == TNT_COMMAND_CLEAR) {
         buffer_appendf(output, sizeof(output), &pos, "%s",
-                       i18n_text(client->help_lang, I18N_CLEAR_DONE));
+                       i18n_text(client->ui_lang, I18N_CLEAR_DONE));
     }
 
 cmd_done:

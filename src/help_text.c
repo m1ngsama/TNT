@@ -3,8 +3,8 @@
 #include "command_catalog.h"
 
 void help_text_append_full(char *buffer, size_t buf_size, size_t *pos,
-                           help_lang_t lang) {
-    if (lang == LANG_EN) {
+                           ui_lang_t lang) {
+    if (lang == UI_LANG_EN) {
         buffer_appendf(buffer, buf_size, pos,
                        "TNT KEY REFERENCE\n"
                        "\n"

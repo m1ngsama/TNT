@@ -221,11 +221,11 @@ const char *command_catalog_suggest(const char *name) {
 }
 
 void command_catalog_append_full(char *buffer, size_t buf_size, size_t *pos,
-                                 help_lang_t lang) {
+                                 ui_lang_t lang) {
     for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
-        const char *usage = lang == LANG_ZH ? entries[i].full_usage_zh
+        const char *usage = lang == UI_LANG_ZH ? entries[i].full_usage_zh
                                             : entries[i].full_usage_en;
-        const char *summary = lang == LANG_ZH ? entries[i].summary_zh
+        const char *summary = lang == UI_LANG_ZH ? entries[i].summary_zh
                                               : entries[i].summary_en;
         buffer_appendf(buffer, buf_size, pos, "  %-40s - %s\n",
                        usage, summary);
@@ -233,7 +233,7 @@ void command_catalog_append_full(char *buffer, size_t buf_size, size_t *pos,
 }
 
 void command_catalog_append_manual(char *buffer, size_t buf_size, size_t *pos,
-                                   help_lang_t lang) {
+                                   ui_lang_t lang) {
     for (int group = 1; group <= 3; group++) {
         bool first = true;
 
@@ -243,7 +243,7 @@ void command_catalog_append_manual(char *buffer, size_t buf_size, size_t *pos,
             if (entries[i].manual_group != group) {
                 continue;
             }
-            usage = lang == LANG_ZH ? entries[i].manual_usage_zh
+            usage = lang == UI_LANG_ZH ? entries[i].manual_usage_zh
                                     : entries[i].manual_usage_en;
             if (!usage) {
                 continue;

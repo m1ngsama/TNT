@@ -154,8 +154,8 @@ void tui_render_welcome(client_t *client) {
 
     /* Lines, in display order.  Width is computed in display columns. */
     const char *line1 = "TNT · " TNT_VERSION;
-    const char *line2 = i18n_text(client->help_lang, I18N_WELCOME_SUBTITLE);
-    const char *line3 = i18n_text(client->help_lang, I18N_WELCOME_TAGLINE);
+    const char *line2 = i18n_text(client->ui_lang, I18N_WELCOME_SUBTITLE);
+    const char *line3 = i18n_text(client->ui_lang, I18N_WELCOME_TAGLINE);
 
     int inner_w = utf8_string_width(line1);
     int w2 = utf8_string_width(line2);
@@ -169,7 +169,7 @@ void tui_render_welcome(client_t *client) {
         char fallback_text[96];
         char fallback[128];
         snprintf(fallback_text, sizeof(fallback_text),
-                 i18n_text(client->help_lang, I18N_WELCOME_FALLBACK_FORMAT),
+                 i18n_text(client->ui_lang, I18N_WELCOME_FALLBACK_FORMAT),
                  TNT_VERSION);
         int n = snprintf(fallback, sizeof(fallback), ANSI_CLEAR ANSI_HOME "%s",
                          fallback_text);
@@ -355,7 +355,7 @@ void tui_render_screen(client_t *client) {
 
     char online_buf[32];
     snprintf(online_buf, sizeof(online_buf),
-             i18n_text(client->help_lang, I18N_TITLE_ONLINE_FORMAT),
+             i18n_text(client->ui_lang, I18N_TITLE_ONLINE_FORMAT),
              online);
     chips[chip_count].value = online_buf;
     chips[chip_count].value_color = "\033[37m";
@@ -373,9 +373,9 @@ void tui_render_screen(client_t *client) {
     chips[chip_count].value_color = mode_color;
     chip_count++;
 
-    const char *hint = i18n_text(client->help_lang, I18N_TITLE_HELP_HINT);
+    const char *hint = i18n_text(client->ui_lang, I18N_TITLE_HELP_HINT);
     int hint_width = utf8_string_width(hint);
-    const char *mute_label = i18n_text(client->help_lang, I18N_TITLE_MUTED);
+    const char *mute_label = i18n_text(client->ui_lang, I18N_TITLE_MUTED);
     int mute_width = client->mute_joins ? utf8_string_width(mute_label) + 2 : 0;
 
     /* Unread @-mentions chip — high-priority, gets a bright yellow star.
@@ -623,7 +623,7 @@ void tui_render_command_output(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
     /* Title */
-    const char *title = i18n_text(client->help_lang,
+    const char *title = i18n_text(client->ui_lang,
                                   I18N_COMMAND_OUTPUT_TITLE);
     char title_display[64];
     utf8_ansi_truncate(title, title_display, sizeof(title_display), rw);
@@ -676,7 +676,7 @@ void tui_render_command_output(client_t *client) {
     }
 
     buffer_appendf(buffer, sizeof(buffer), &pos,
-                   i18n_text(client->help_lang,
+                   i18n_text(client->ui_lang,
                              I18N_COMMAND_OUTPUT_STATUS_FORMAT),
                    start + 1, max_scroll + 1);
 
@@ -706,7 +706,7 @@ void tui_render_motd(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
     /* Top border with a localized title chip. */
-    const char *title = i18n_text(client->help_lang, I18N_MOTD_TITLE);
+    const char *title = i18n_text(client->ui_lang, I18N_MOTD_TITLE);
     int title_w = utf8_string_width(title);
     int top_dash_fill = rw - 2 - title_w - 1;  /* 2 corners, 1 leading ─ */
     if (top_dash_fill < 0) top_dash_fill = 0;
@@ -758,7 +758,7 @@ void tui_render_motd(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos, "\r\n");
 
     /* Bottom border with a localized continue hint. */
-    const char *footer = i18n_text(client->help_lang,
+    const char *footer = i18n_text(client->ui_lang,
                                    I18N_MOTD_CONTINUE_HINT);
     int footer_w = utf8_string_width(footer);
     int bot_dash_fill = rw - 2 - footer_w - 1;
@@ -790,7 +790,7 @@ void tui_render_help(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
 
     /* Title */
-    const char *title = i18n_text(client->help_lang, I18N_HELP_TITLE);
+    const char *title = i18n_text(client->ui_lang, I18N_HELP_TITLE);
     int title_width = utf8_string_width(title);
     int padding = rw - title_width;
     if (padding < 0) padding = 0;
@@ -805,7 +805,7 @@ void tui_render_help(client_t *client) {
     size_t help_pos = 0;
     help_copy[0] = '\0';
     help_text_append_full(help_copy, sizeof(help_copy), &help_pos,
-                          client->help_lang);
+                          client->ui_lang);
 
     /* Split into lines and display with scrolling */
     char *lines[100];
@@ -836,7 +836,7 @@ void tui_render_help(client_t *client) {
 
     /* Status line */
     buffer_appendf(buffer, sizeof(buffer), &pos,
-                   i18n_text(client->help_lang, I18N_HELP_STATUS_FORMAT),
+                   i18n_text(client->ui_lang, I18N_HELP_STATUS_FORMAT),
                    start + 1, max_scroll + 1);
 
     client_send(client, buffer, pos);

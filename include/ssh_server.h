@@ -26,7 +26,7 @@ typedef struct client {
     _Atomic int width;
     _Atomic int height;
     client_mode_t mode;
-    help_lang_t help_lang;
+    ui_lang_t ui_lang;
     int scroll_pos;
     bool follow_tail;                /* NORMAL stays pinned to latest until user scrolls up */
     int help_scroll_pos;

@@ -21,11 +21,11 @@
 #include <time.h>
 
 static int g_idle_timeout = DEFAULT_IDLE_TIMEOUT;
-static help_lang_t g_default_lang = LANG_EN;
+static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 
 void input_init(void) {
     g_idle_timeout = env_int("TNT_IDLE_TIMEOUT", DEFAULT_IDLE_TIMEOUT, 0, 86400);
-    g_default_lang = i18n_default_lang();
+    g_default_ui_lang = i18n_default_ui_lang();
 }
 
 static int read_username(client_t *client) {
@@ -34,7 +34,7 @@ static int read_username(client_t *client) {
     char buf[4];
 
     tui_render_welcome(client);
-    client_printf(client, "%s", i18n_text(client->help_lang,
+    client_printf(client, "%s", i18n_text(client->ui_lang,
                                           I18N_USERNAME_PROMPT));
 
     while (1) {
@@ -117,7 +117,7 @@ static int read_username(client_t *client) {
 
         /* Validate username for security */
         if (!is_valid_username(client->username)) {
-            client_printf(client, "%s", i18n_text(client->help_lang,
+            client_printf(client, "%s", i18n_text(client->ui_lang,
                                                   I18N_INVALID_USERNAME));
             strcpy(client->username, "anonymous");
         } else {
@@ -258,11 +258,11 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             client->show_help = false;
             tui_render_screen(client);
         } else if (key == 'e' || key == 'E') {
-            client->help_lang = LANG_EN;
+            client->ui_lang = UI_LANG_EN;
             client->help_scroll_pos = 0;
             tui_render_help(client);
         } else if (key == 'z' || key == 'Z') {
-            client->help_lang = LANG_ZH;
+            client->ui_lang = UI_LANG_ZH;
             client->help_scroll_pos = 0;
             tui_render_help(client);
         } else if (key == 'j') {
@@ -726,7 +726,7 @@ void input_run_session(client_t *client) {
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
     client->follow_tail = true;
-    client->help_lang = g_default_lang;
+    client->ui_lang = g_default_ui_lang;
     client->connected = true;
     client->command_history_count = 0;
     client->command_history_pos = 0;
@@ -751,7 +751,7 @@ void input_run_session(client_t *client) {
 
     /* Add to room */
     if (room_add_client(g_room, client) < 0) {
-        client_printf(client, "%s", i18n_text(client->help_lang,
+        client_printf(client, "%s", i18n_text(client->ui_lang,
                                               I18N_ROOM_FULL));
         goto cleanup;
     }
@@ -765,7 +765,7 @@ void input_run_session(client_t *client) {
 
     /* Broadcast join message */
     message_t join_msg;
-    system_message_make_join(&join_msg, client->username, client->help_lang);
+    system_message_make_join(&join_msg, client->username, client->ui_lang);
     room_broadcast(g_room, &join_msg);
     message_save(&join_msg);
 
@@ -851,7 +851,7 @@ main_loop:
             if (g_idle_timeout > 0 && joined_room &&
                 time(NULL) - client->last_active >= g_idle_timeout) {
                 client_printf(client,
-                              i18n_text(client->help_lang,
+                              i18n_text(client->ui_lang,
                                         I18N_IDLE_TIMEOUT_FORMAT),
                               g_idle_timeout / 60);
                 break;
@@ -956,7 +956,7 @@ cleanup:
     if (joined_room) {
         message_t leave_msg;
         system_message_make_leave(&leave_msg, client->username,
-                                  client->help_lang);
+                                  client->ui_lang);
 
         client->connected = false;
         room_remove_client(g_room, client);

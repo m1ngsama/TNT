@@ -44,11 +44,11 @@ typedef enum {
     MODE_HELP
 } client_mode_t;
 
-/* Help language */
+/* UI language */
 typedef enum {
-    LANG_EN,
-    LANG_ZH
-} help_lang_t;
+    UI_LANG_EN,
+    UI_LANG_ZH
+} ui_lang_t;
 
 /* Runtime helpers */
 const char* tnt_state_dir(void);

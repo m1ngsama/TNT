@@ -4,6 +4,6 @@
 #include "common.h"
 
 void help_text_append_full(char *buffer, size_t buf_size, size_t *pos,
-                           help_lang_t lang);
+                           ui_lang_t lang);
 
 #endif /* HELP_TEXT_H */

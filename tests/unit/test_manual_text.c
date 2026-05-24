@@ -34,8 +34,8 @@ TEST(interactive_manual_matches_language) {
     size_t en_pos = 0;
     size_t zh_pos = 0;
 
-    manual_text_append_interactive(en, sizeof(en), &en_pos, LANG_EN);
-    manual_text_append_interactive(zh, sizeof(zh), &zh_pos, LANG_ZH);
+    manual_text_append_interactive(en, sizeof(en), &en_pos, UI_LANG_EN);
+    manual_text_append_interactive(zh, sizeof(zh), &zh_pos, UI_LANG_ZH);
 
     assert(strstr(en, "TNT(1) help") != NULL);
     assert(strstr(en, "Use") != NULL);

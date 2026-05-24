@@ -4,7 +4,7 @@
 #include <string.h>
 #include <time.h>
 
-static void system_message_init(message_t *msg, help_lang_t lang) {
+static void system_message_init(message_t *msg, ui_lang_t lang) {
     if (!msg) {
         return;
     }
@@ -16,7 +16,7 @@ static void system_message_init(message_t *msg, help_lang_t lang) {
 }
 
 void system_message_make_join(message_t *msg, const char *username,
-                              help_lang_t lang) {
+                              ui_lang_t lang) {
     system_message_init(msg, lang);
     if (!msg) {
         return;
@@ -28,7 +28,7 @@ void system_message_make_join(message_t *msg, const char *username,
 }
 
 void system_message_make_leave(message_t *msg, const char *username,
-                               help_lang_t lang) {
+                               ui_lang_t lang) {
     system_message_init(msg, lang);
     if (!msg) {
         return;
@@ -40,7 +40,7 @@ void system_message_make_leave(message_t *msg, const char *username,
 }
 
 void system_message_make_nick(message_t *msg, const char *old_name,
-                              const char *new_name, help_lang_t lang) {
+                              const char *new_name, ui_lang_t lang) {
     system_message_init(msg, lang);
     if (!msg) {
         return;

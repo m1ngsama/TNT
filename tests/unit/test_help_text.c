@@ -21,8 +21,8 @@ TEST(full_help_matches_language) {
     size_t en_pos = 0;
     size_t zh_pos = 0;
 
-    help_text_append_full(en, sizeof(en), &en_pos, LANG_EN);
-    help_text_append_full(zh, sizeof(zh), &zh_pos, LANG_ZH);
+    help_text_append_full(en, sizeof(en), &en_pos, UI_LANG_EN);
+    help_text_append_full(zh, sizeof(zh), &zh_pos, UI_LANG_ZH);
 
     assert(strstr(en, "TNT KEY REFERENCE") != NULL);
     assert(strstr(en, "AVAILABLE COMMANDS") != NULL);

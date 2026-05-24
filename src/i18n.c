@@ -36,38 +36,38 @@ static bool starts_with_lang(const char *value, const char *prefix) {
     return is_lang_boundary(value);
 }
 
-bool i18n_try_parse_lang(const char *value, help_lang_t *lang) {
+bool i18n_try_parse_ui_lang(const char *value, ui_lang_t *lang) {
     if (!value || value[0] == '\0') {
         return false;
     }
 
     if (starts_with_lang(value, "zh")) {
-        if (lang) *lang = LANG_ZH;
+        if (lang) *lang = UI_LANG_ZH;
         return true;
     }
 
     if (starts_with_lang(value, "en") ||
         starts_with_lang(value, "c") ||
         starts_with_lang(value, "posix")) {
-        if (lang) *lang = LANG_EN;
+        if (lang) *lang = UI_LANG_EN;
         return true;
     }
 
     return false;
 }
 
-help_lang_t i18n_parse_lang(const char *value, help_lang_t fallback) {
-    help_lang_t lang;
-    if (i18n_try_parse_lang(value, &lang)) {
+ui_lang_t i18n_parse_ui_lang(const char *value, ui_lang_t fallback) {
+    ui_lang_t lang;
+    if (i18n_try_parse_ui_lang(value, &lang)) {
         return lang;
     }
     return fallback;
 }
 
-help_lang_t i18n_default_lang(void) {
+ui_lang_t i18n_default_ui_lang(void) {
     const char *explicit_lang = getenv("TNT_LANG");
     if (explicit_lang && explicit_lang[0] != '\0') {
-        return i18n_parse_lang(explicit_lang, LANG_EN);
+        return i18n_parse_ui_lang(explicit_lang, UI_LANG_EN);
     }
 
     const char *locale = getenv("LC_ALL");
@@ -78,15 +78,15 @@ help_lang_t i18n_default_lang(void) {
         locale = getenv("LANG");
     }
 
-    return i18n_parse_lang(locale, LANG_EN);
+    return i18n_parse_ui_lang(locale, UI_LANG_EN);
 }
 
-const char *i18n_lang_code(help_lang_t lang) {
-    return lang == LANG_ZH ? "zh" : "en";
+const char *i18n_ui_lang_code(ui_lang_t lang) {
+    return lang == UI_LANG_ZH ? "zh" : "en";
 }
 
-const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
-    if (lang == LANG_ZH) {
+const char *i18n_text(ui_lang_t lang, i18n_text_id_t id) {
+    if (lang == UI_LANG_ZH) {
         switch (id) {
             case I18N_USERNAME_PROMPT:
                 return "  请输入用户名 (留空 anonymous): ";

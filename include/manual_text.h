@@ -4,6 +4,6 @@
 #include "common.h"
 
 void manual_text_append_interactive(char *buffer, size_t buf_size,
-                                    size_t *pos, help_lang_t lang);
+                                    size_t *pos, ui_lang_t lang);
 
 #endif /* MANUAL_TEXT_H */

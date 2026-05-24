@@ -116,7 +116,7 @@ static void resolve_exec_username(const client_t *client, char *buffer,
 }
 
 static int exec_command_help(client_t *client) {
-    const char *help_text = i18n_text(client->help_lang, I18N_EXEC_HELP);
+    const char *help_text = i18n_text(client->ui_lang, I18N_EXEC_HELP);
 
     return client_send(client, help_text, strlen(help_text)) == 0 ? 0 : 1;
 }
@@ -285,7 +285,7 @@ static int exec_command_tail(client_t *client, const char *args) {
 
     if (parse_tail_count(args, &requested) < 0) {
         client_printf(client, "%s",
-                      i18n_text(client->help_lang, I18N_EXEC_TAIL_USAGE));
+                      i18n_text(client->ui_lang, I18N_EXEC_TAIL_USAGE));
         return 64;
     }
 
@@ -339,7 +339,7 @@ static int exec_command_post(client_t *client, const char *args) {
 
     if (!args || args[0] == '\0') {
         client_printf(client, "%s",
-                      i18n_text(client->help_lang, I18N_EXEC_POST_USAGE));
+                      i18n_text(client->ui_lang, I18N_EXEC_POST_USAGE));
         return 64;
     }
 
@@ -349,13 +349,13 @@ static int exec_command_post(client_t *client, const char *args) {
 
     if (content[0] == '\0') {
         client_printf(client, "%s",
-                      i18n_text(client->help_lang, I18N_EXEC_POST_EMPTY));
+                      i18n_text(client->ui_lang, I18N_EXEC_POST_EMPTY));
         return 64;
     }
 
     if (!utf8_is_valid_string(content)) {
         client_printf(client, "%s",
-                      i18n_text(client->help_lang,
+                      i18n_text(client->ui_lang,
                                 I18N_EXEC_POST_INVALID_UTF8));
         return 1;
     }
@@ -426,7 +426,7 @@ int exec_dispatch(client_t *client) {
     if (strcmp(cmd, "users") == 0) {
         if (args && strcmp(args, "--json") != 0) {
             client_printf(client, "%s",
-                          i18n_text(client->help_lang,
+                          i18n_text(client->ui_lang,
                                     I18N_EXEC_USERS_USAGE));
             return 64;
         }
@@ -435,7 +435,7 @@ int exec_dispatch(client_t *client) {
     if (strcmp(cmd, "stats") == 0) {
         if (args && strcmp(args, "--json") != 0) {
             client_printf(client, "%s",
-                          i18n_text(client->help_lang,
+                          i18n_text(client->ui_lang,
                                     I18N_EXEC_STATS_USAGE));
             return 64;
         }
@@ -452,7 +452,7 @@ int exec_dispatch(client_t *client) {
     }
 
     client_printf(client,
-                  i18n_text(client->help_lang,
+                  i18n_text(client->ui_lang,
                             I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
                   cmd);
     return 64;

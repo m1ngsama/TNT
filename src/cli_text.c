@@ -1,12 +1,12 @@
 #include "cli_text.h"
 
 void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
-                          const char *program_name, help_lang_t lang) {
+                          const char *program_name, ui_lang_t lang) {
     const char *program = (program_name && program_name[0] != '\0')
                               ? program_name
                               : "tnt";
 
-    if (lang == LANG_ZH) {
+    if (lang == UI_LANG_ZH) {
         buffer_appendf(buffer, buf_size, pos,
                        "tnt %s - 匿名 SSH 聊天服务器\n\n"
                        "用法: %s [选项]\n\n"
@@ -48,15 +48,15 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
                    TNT_VERSION, program, DEFAULT_PORT);
 }
 
-const char *cli_text_invalid_port_format(help_lang_t lang) {
-    return lang == LANG_ZH ? "端口无效: %s\n" : "Invalid port: %s\n";
+const char *cli_text_invalid_port_format(ui_lang_t lang) {
+    return lang == UI_LANG_ZH ? "端口无效: %s\n" : "Invalid port: %s\n";
 }
 
-const char *cli_text_unknown_option_format(help_lang_t lang) {
-    return lang == LANG_ZH ? "未知选项: %s\n" : "Unknown option: %s\n";
+const char *cli_text_unknown_option_format(ui_lang_t lang) {
+    return lang == UI_LANG_ZH ? "未知选项: %s\n" : "Unknown option: %s\n";
 }
 
-const char *cli_text_short_usage_format(help_lang_t lang) {
-    return lang == LANG_ZH ? "用法: %s [-p PORT] [-d DIR] [-h]\n"
+const char *cli_text_short_usage_format(ui_lang_t lang) {
+    return lang == UI_LANG_ZH ? "用法: %s [-p PORT] [-d DIR] [-h]\n"
                            : "Usage: %s [-p PORT] [-d DIR] [-h]\n";
 }
