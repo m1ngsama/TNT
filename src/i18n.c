@@ -2,6 +2,17 @@
 
 #include <ctype.h>
 
+typedef struct {
+    ui_lang_t lang;
+    const char *code;
+    const char *prefixes[4];
+} ui_lang_definition_t;
+
+static const ui_lang_definition_t ui_lang_defs[] = {
+    {UI_LANG_EN, "en", {"en", "c", "posix", NULL}},
+    {UI_LANG_ZH, "zh", {"zh", NULL}}
+};
+
 static const char *skip_space(const char *value) {
     while (value && *value &&
            isspace((unsigned char)*value)) {
@@ -41,16 +52,15 @@ bool i18n_try_parse_ui_lang(const char *value, ui_lang_t *lang) {
         return false;
     }
 
-    if (starts_with_lang(value, "zh")) {
-        if (lang) *lang = UI_LANG_ZH;
-        return true;
-    }
-
-    if (starts_with_lang(value, "en") ||
-        starts_with_lang(value, "c") ||
-        starts_with_lang(value, "posix")) {
-        if (lang) *lang = UI_LANG_EN;
-        return true;
+    for (size_t i = 0; i < sizeof(ui_lang_defs) / sizeof(ui_lang_defs[0]); i++) {
+        for (size_t j = 0; ui_lang_defs[i].prefixes[j]; j++) {
+            if (starts_with_lang(value, ui_lang_defs[i].prefixes[j])) {
+                if (lang) {
+                    *lang = ui_lang_defs[i].lang;
+                }
+                return true;
+            }
+        }
     }
 
     return false;
@@ -82,9 +92,23 @@ ui_lang_t i18n_default_ui_lang(void) {
 }
 
 ui_lang_t i18n_next_ui_lang(ui_lang_t lang) {
-    return lang == UI_LANG_EN ? UI_LANG_ZH : UI_LANG_EN;
+    size_t count = sizeof(ui_lang_defs) / sizeof(ui_lang_defs[0]);
+
+    for (size_t i = 0; i < count; i++) {
+        if (ui_lang_defs[i].lang == lang) {
+            return ui_lang_defs[(i + 1) % count].lang;
+        }
+    }
+
+    return ui_lang_defs[0].lang;
 }
 
 const char *i18n_ui_lang_code(ui_lang_t lang) {
-    return lang == UI_LANG_ZH ? "zh" : "en";
+    for (size_t i = 0; i < sizeof(ui_lang_defs) / sizeof(ui_lang_defs[0]); i++) {
+        if (ui_lang_defs[i].lang == lang) {
+            return ui_lang_defs[i].code;
+        }
+    }
+
+    return ui_lang_defs[0].code;
 }

@@ -145,8 +145,10 @@ TEST(text_lookup_matches_language) {
                   "未知命令") != NULL);
     assert(strcmp(i18n_ui_lang_code(UI_LANG_EN), "en") == 0);
     assert(strcmp(i18n_ui_lang_code(UI_LANG_ZH), "zh") == 0);
+    assert(strcmp(i18n_ui_lang_code((ui_lang_t)99), "en") == 0);
     assert(i18n_next_ui_lang(UI_LANG_EN) == UI_LANG_ZH);
     assert(i18n_next_ui_lang(UI_LANG_ZH) == UI_LANG_EN);
+    assert(i18n_next_ui_lang((ui_lang_t)99) == UI_LANG_EN);
 }
 
 TEST(text_catalog_is_complete) {

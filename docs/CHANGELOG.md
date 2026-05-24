@@ -48,6 +48,8 @@
   as command arguments.
 - Full-screen help now uses `l` to cycle the UI language through the i18n
   module instead of hard-coding one key per language.
+- Language parsing, language-code output, and help-language cycling now share
+  one internal language registry.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 
