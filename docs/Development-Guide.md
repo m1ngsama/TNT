@@ -81,7 +81,8 @@ src/
 ├── history_view.c   - NORMAL-mode scroll window rules
 ├── tui.c            - Terminal UI rendering (ANSI escape codes)
 ├── tui_status.c     - Mode/status/input-line rendering
-├── i18n.c           - Language selection and shared UI text
+├── i18n.c           - UI language selection and locale parsing
+├── i18n_text.c      - Shared UI text catalog
 ├── help_text.c      - Full-screen key reference text
 ├── manual.c         - Concise manual panel rendering
 ├── manual_text.c    - Concise manual text
@@ -395,7 +396,8 @@ case MODE_INSERT:
 }
 ```
 
-2. **Update `src/help_text.c` and status hints in `src/i18n.c` / `src/tui_status.c` if the binding is user-visible.**
+2. **Update `src/help_text.c` and status hints in `src/i18n_text.c` /
+   `src/tui_status.c` if the binding is user-visible.**
 
 3. **Document in README.md**
 

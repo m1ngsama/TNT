@@ -50,6 +50,8 @@
   module instead of hard-coding one key per language.
 - Language parsing, language-code output, and help-language cycling now share
   one internal language registry.
+- Removed the unused `MODE_HELP` enum value and refreshed development-guide
+  module descriptions for the split between language parsing and text lookup.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 

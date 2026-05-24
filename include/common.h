@@ -40,8 +40,7 @@
 typedef enum {
     MODE_INSERT,
     MODE_NORMAL,
-    MODE_COMMAND,
-    MODE_HELP
+    MODE_COMMAND
 } client_mode_t;
 
 /* UI language */
