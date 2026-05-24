@@ -38,6 +38,20 @@ TEST(parse_unknown_uses_fallback) {
     assert(i18n_parse_lang("fr_FR.UTF-8", LANG_ZH) == LANG_ZH);
 }
 
+TEST(parse_ignores_surrounding_whitespace) {
+    help_lang_t lang;
+
+    assert(i18n_try_parse_lang("  zh  ", &lang) == true);
+    assert(lang == LANG_ZH);
+    assert(i18n_parse_lang("\ten_US.UTF-8\n", LANG_ZH) == LANG_EN);
+    assert(i18n_parse_lang(" english ", LANG_ZH) == LANG_EN);
+    assert(i18n_try_parse_lang("zh CN", &lang) == false);
+
+    setenv("TNT_LANG", " zh ", 1);
+    setenv("LC_ALL", "en_US.UTF-8", 1);
+    assert(i18n_default_lang() == LANG_ZH);
+}
+
 TEST(default_prefers_tnt_lang) {
     setenv("TNT_LANG", "zh_CN.UTF-8", 1);
     setenv("LC_ALL", "en_US.UTF-8", 1);
@@ -123,6 +137,7 @@ int main(void) {
 
     RUN_TEST(parse_explicit_languages);
     RUN_TEST(parse_unknown_uses_fallback);
+    RUN_TEST(parse_ignores_surrounding_whitespace);
     RUN_TEST(default_prefers_tnt_lang);
     RUN_TEST(default_uses_locale_when_no_tnt_lang);
     RUN_TEST(text_lookup_matches_language);

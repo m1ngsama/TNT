@@ -2,9 +2,28 @@
 
 #include <ctype.h>
 
+static const char *skip_space(const char *value) {
+    while (value && *value &&
+           isspace((unsigned char)*value)) {
+        value++;
+    }
+    return value;
+}
+
+static bool is_lang_boundary(const char *value) {
+    if (*value == '\0' || *value == '_' || *value == '-' || *value == '.') {
+        return true;
+    }
+    if (!isspace((unsigned char)*value)) {
+        return false;
+    }
+    return *skip_space(value) == '\0';
+}
+
 static bool starts_with_lang(const char *value, const char *prefix) {
     if (!value || !prefix) return false;
 
+    value = skip_space(value);
     while (*prefix) {
         if (tolower((unsigned char)*value) !=
             tolower((unsigned char)*prefix)) {
@@ -14,7 +33,7 @@ static bool starts_with_lang(const char *value, const char *prefix) {
         prefix++;
     }
 
-    return *value == '\0' || *value == '_' || *value == '-' || *value == '.';
+    return is_lang_boundary(value);
 }
 
 bool i18n_try_parse_lang(const char *value, help_lang_t *lang) {
@@ -30,6 +49,7 @@ bool i18n_try_parse_lang(const char *value, help_lang_t *lang) {
     }
 
     if (starts_with_lang(value, "en") ||
+        starts_with_lang(value, "english") ||
         starts_with_lang(value, "c") ||
         starts_with_lang(value, "posix")) {
         if (lang) *lang = LANG_EN;
