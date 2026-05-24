@@ -16,8 +16,13 @@
 static int tests_passed = 0;
 
 TEST(full_help_matches_language) {
-    const char *en = help_text_full(LANG_EN);
-    const char *zh = help_text_full(LANG_ZH);
+    char en[8192] = {0};
+    char zh[8192] = {0};
+    size_t en_pos = 0;
+    size_t zh_pos = 0;
+
+    help_text_append_full(en, sizeof(en), &en_pos, LANG_EN);
+    help_text_append_full(zh, sizeof(zh), &zh_pos, LANG_ZH);
 
     assert(strstr(en, "TNT KEY REFERENCE") != NULL);
     assert(strstr(en, "AVAILABLE COMMANDS") != NULL);

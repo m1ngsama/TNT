@@ -777,11 +777,11 @@ void tui_render_help(client_t *client) {
     }
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_RESET "\r\n");
 
-    /* Help content */
-    const char *help_text = help_text_full(client->help_lang);
     char help_copy[8192];
-    strncpy(help_copy, help_text, sizeof(help_copy) - 1);
-    help_copy[sizeof(help_copy) - 1] = '\0';
+    size_t help_pos = 0;
+    help_copy[0] = '\0';
+    help_text_append_full(help_copy, sizeof(help_copy), &help_pos,
+                          client->help_lang);
 
     /* Split into lines and display with scrolling */
     char *lines[100];

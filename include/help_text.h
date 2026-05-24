@@ -3,6 +3,7 @@
 
 #include "common.h"
 
-const char *help_text_full(help_lang_t lang);
+void help_text_append_full(char *buffer, size_t buf_size, size_t *pos,
+                           help_lang_t lang);
 
 #endif /* HELP_TEXT_H */

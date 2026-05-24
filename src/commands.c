@@ -7,6 +7,7 @@
 #include "commands.h"
 #include "chat_room.h"
 #include "client.h"
+#include "command_catalog.h"
 #include "common.h"
 #include "i18n.h"
 #include "manual.h"
@@ -46,65 +47,6 @@ static void append_highlighted(char *output, size_t buf_size, size_t *pos,
     }
 }
 
-static int min3(int a, int b, int c) {
-    int m = a < b ? a : b;
-    return m < c ? m : c;
-}
-
-static int command_edit_distance(const char *a, const char *b) {
-    size_t la = strlen(a);
-    size_t lb = strlen(b);
-    int prev[32];
-    int curr[32];
-
-    if (la >= 32 || lb >= 32) {
-        return 99;
-    }
-
-    for (size_t j = 0; j <= lb; j++) {
-        prev[j] = (int)j;
-    }
-
-    for (size_t i = 1; i <= la; i++) {
-        curr[0] = (int)i;
-        for (size_t j = 1; j <= lb; j++) {
-            int cost = a[i - 1] == b[j - 1] ? 0 : 1;
-            curr[j] = min3(prev[j] + 1, curr[j - 1] + 1,
-                           prev[j - 1] + cost);
-        }
-        for (size_t j = 0; j <= lb; j++) {
-            prev[j] = curr[j];
-        }
-    }
-
-    return prev[lb];
-}
-
-static const char *suggest_command(const char *cmd) {
-    static const char *commands[] = {
-        "list", "users", "who", "nick", "name", "msg", "w", "inbox",
-        "last", "search", "mute-joins", "mute", "lang", "language",
-        "help", "clear", "cls",
-        "q", "quit", "exit"
-    };
-    const char *best = NULL;
-    int best_distance = 99;
-
-    if (!cmd || !*cmd) {
-        return NULL;
-    }
-
-    for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
-        int distance = command_edit_distance(cmd, commands[i]);
-        if (distance < best_distance) {
-            best_distance = distance;
-            best = commands[i];
-        }
-    }
-
-    return best_distance <= 2 ? best : NULL;
-}
-
 void commands_dispatch(client_t *client) {
     char cmd_buf[256];
     strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
@@ -138,8 +80,34 @@ void commands_dispatch(client_t *client) {
         client->command_history_pos = client->command_history_count;
     }
 
-    if (strcmp(cmd, "list") == 0 || strcmp(cmd, "users") == 0 ||
-        strcmp(cmd, "who") == 0) {
+    if (cmd[0] == '\0') {
+        /* Empty command */
+        client->mode = MODE_NORMAL;
+        client->command_input[0] = '\0';
+        tui_render_screen(client);
+        return;
+    }
+
+    tnt_command_id_t command_id;
+    const char *arg = "";
+    if (!command_catalog_match(cmd, &command_id, &arg)) {
+        const char *suggestion = command_catalog_suggest(cmd);
+        buffer_appendf(output, sizeof(output), &pos,
+                       i18n_text(client->help_lang,
+                                 I18N_UNKNOWN_COMMAND_FORMAT),
+                       cmd);
+        if (suggestion) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->help_lang,
+                                     I18N_DID_YOU_MEAN_FORMAT),
+                           suggestion);
+        }
+        buffer_appendf(output, sizeof(output), &pos, "%s",
+                       i18n_text(client->help_lang, I18N_UNKNOWN_GUIDANCE));
+        goto cmd_done;
+    }
+
+    if (command_id == TNT_COMMAND_USERS) {
         pthread_rwlock_rdlock(&g_room->lock);
         int total = g_room->client_count;
         buffer_appendf(output, sizeof(output), &pos,
@@ -167,21 +135,12 @@ void commands_dispatch(client_t *client) {
         }
         pthread_rwlock_unlock(&g_room->lock);
 
-    } else if (strcmp(cmd, "help") == 0) {
+    } else if (command_id == TNT_COMMAND_HELP) {
         manual_append_interactive_panel(output, sizeof(output), &pos,
                                         client->help_lang);
 
-    } else if (strcmp(cmd, "lang") == 0 || strcmp(cmd, "language") == 0 ||
-               strncmp(cmd, "lang ", 5) == 0 ||
-               strncmp(cmd, "language ", 9) == 0) {
-        char *arg = NULL;
+    } else if (command_id == TNT_COMMAND_LANG) {
         help_lang_t next_lang;
-
-        if (strncmp(cmd, "lang ", 5) == 0) {
-            arg = cmd + 5;
-        } else if (strncmp(cmd, "language ", 9) == 0) {
-            arg = cmd + 9;
-        }
 
         if (!arg || arg[0] == '\0') {
             buffer_appendf(output, sizeof(output), &pos,
@@ -201,9 +160,8 @@ void commands_dispatch(client_t *client) {
                            arg);
         }
 
-    } else if (strcmp(cmd, "msg") == 0 || strcmp(cmd, "w") == 0 ||
-               strncmp(cmd, "msg ", 4) == 0 || strncmp(cmd, "w ", 2) == 0) {
-        char *rest = (cmd[0] == 'w') ? cmd + 1 : cmd + 3;
+    } else if (command_id == TNT_COMMAND_MSG) {
+        const char *rest = arg;
         while (*rest == ' ') rest++;
         char target_name[MAX_USERNAME_LEN] = {0};
         int ti = 0;
@@ -273,7 +231,7 @@ void commands_dispatch(client_t *client) {
             }
         }
 
-    } else if (strcmp(cmd, "inbox") == 0) {
+    } else if (command_id == TNT_COMMAND_INBOX) {
         /* Snapshot the inbox under io_lock so a concurrent sender doesn't
          * tear what we're rendering.  Counter reset happens after copy. */
         whisper_t snapshot[WHISPER_INBOX_SIZE];
@@ -304,9 +262,8 @@ void commands_dispatch(client_t *client) {
                            ts, snapshot[i].from, snapshot[i].content);
         }
 
-    } else if (strcmp(cmd, "nick") == 0 || strcmp(cmd, "name") == 0 ||
-               strncmp(cmd, "nick ", 5) == 0 || strncmp(cmd, "name ", 5) == 0) {
-        char *new_name = cmd + 4;
+    } else if (command_id == TNT_COMMAND_NICK) {
+        const char *new_name = arg;
         while (*new_name == ' ') new_name++;
 
         if (new_name[0] == '\0') {
@@ -367,8 +324,7 @@ void commands_dispatch(client_t *client) {
             }
         }
 
-    } else if (strncmp(cmd, "last", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\0')) {
-        char *arg = cmd + 4;
+    } else if (command_id == TNT_COMMAND_LAST) {
         while (*arg == ' ') arg++;
         int n = 10;
         if (*arg != '\0') {
@@ -397,8 +353,8 @@ void commands_dispatch(client_t *client) {
         }
         free(last_msgs);
 
-    } else if (strcmp(cmd, "search") == 0 || strncmp(cmd, "search ", 7) == 0) {
-        char *query = cmd + 6;
+    } else if (command_id == TNT_COMMAND_SEARCH) {
+        const char *query = arg;
         while (*query == ' ') query++;
         if (*query == '\0') {
             buffer_appendf(output, sizeof(output), &pos, "%s",
@@ -427,7 +383,7 @@ void commands_dispatch(client_t *client) {
             free(found);
         }
 
-    } else if (strcmp(cmd, "mute-joins") == 0 || strcmp(cmd, "mute") == 0) {
+    } else if (command_id == TNT_COMMAND_MUTE_JOINS) {
         client->mute_joins = !client->mute_joins;
         buffer_appendf(output, sizeof(output), &pos,
                        i18n_text(client->help_lang, I18N_MUTE_JOINS_FORMAT),
@@ -436,36 +392,13 @@ void commands_dispatch(client_t *client) {
                                  I18N_MUTE_JOINS_MUTED :
                                  I18N_MUTE_JOINS_UNMUTED));
 
-    } else if (strcmp(cmd, "q") == 0 || strcmp(cmd, "quit") == 0 ||
-               strcmp(cmd, "exit") == 0) {
+    } else if (command_id == TNT_COMMAND_QUIT) {
         client->connected = false;
         return;
 
-    } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
+    } else if (command_id == TNT_COMMAND_CLEAR) {
         buffer_appendf(output, sizeof(output), &pos, "%s",
                        i18n_text(client->help_lang, I18N_CLEAR_DONE));
-
-    } else if (cmd[0] == '\0') {
-        /* Empty command */
-        client->mode = MODE_NORMAL;
-        client->command_input[0] = '\0';
-        tui_render_screen(client);
-        return;
-
-    } else {
-        const char *suggestion = suggest_command(cmd);
-        buffer_appendf(output, sizeof(output), &pos,
-                       i18n_text(client->help_lang,
-                                 I18N_UNKNOWN_COMMAND_FORMAT),
-                       cmd);
-        if (suggestion) {
-            buffer_appendf(output, sizeof(output), &pos,
-                           i18n_text(client->help_lang,
-                                     I18N_DID_YOU_MEAN_FORMAT),
-                           suggestion);
-        }
-        buffer_appendf(output, sizeof(output), &pos, "%s",
-                       i18n_text(client->help_lang, I18N_UNKNOWN_GUIDANCE));
     }
 
 cmd_done:

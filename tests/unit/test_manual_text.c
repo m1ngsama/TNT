@@ -29,14 +29,20 @@ static int count_lines(const char *text) {
 }
 
 TEST(interactive_manual_matches_language) {
-    const char *en = manual_text_interactive(LANG_EN);
-    const char *zh = manual_text_interactive(LANG_ZH);
+    char en[4096] = {0};
+    char zh[4096] = {0};
+    size_t en_pos = 0;
+    size_t zh_pos = 0;
+
+    manual_text_append_interactive(en, sizeof(en), &en_pos, LANG_EN);
+    manual_text_append_interactive(zh, sizeof(zh), &zh_pos, LANG_ZH);
 
     assert(strstr(en, "TNT(1) help") != NULL);
     assert(strstr(en, "Use") != NULL);
     assert(strstr(en, "Commands") != NULL);
     assert(strstr(en, ":lang en|zh") != NULL);
     assert(strstr(en, ":mute-joins") != NULL);
+    assert(strstr(en, ":mute-joins, :clear, :q") != NULL);
     assert(strstr(en, ":support") == NULL);
     assert(strstr(en, ":commands") == NULL);
     assert(count_lines(en) <= 20);
@@ -46,6 +52,7 @@ TEST(interactive_manual_matches_language) {
     assert(strstr(zh, "命令") != NULL);
     assert(strstr(zh, ":lang en|zh") != NULL);
     assert(strstr(zh, ":mute-joins") != NULL);
+    assert(strstr(zh, ":mute-joins, :clear, :q") != NULL);
     assert(strstr(zh, ":support") == NULL);
     assert(strstr(zh, ":commands") == NULL);
     assert(count_lines(zh) <= 20);

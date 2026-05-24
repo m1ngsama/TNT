@@ -3,6 +3,7 @@
 
 #include "common.h"
 
-const char *manual_text_interactive(help_lang_t lang);
+void manual_text_append_interactive(char *buffer, size_t buf_size,
+                                    size_t *pos, help_lang_t lang);
 
 #endif /* MANUAL_TEXT_H */

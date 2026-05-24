@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Changed
+- Command names, aliases, help summaries, concise-manual command rows, and
+  unknown-command suggestions now share a dedicated `command_catalog` module.
 - Collapsed the interactive help surface around a concise Unix-style `:help`
   manual and the `?` full key reference; `:support` is no longer a user-facing
   command.

@@ -13,6 +13,7 @@ endif
 UTF8_SRC = ../../src/utf8.c
 MESSAGE_SRC = ../../src/message.c
 COMMON_SRC = ../../src/common.c
+COMMAND_CATALOG_SRC = ../../src/command_catalog.c
 CLI_TEXT_SRC = ../../src/cli_text.c
 CHAT_ROOM_SRC = ../../src/chat_room.c
 HISTORY_VIEW_SRC = ../../src/history_view.c
@@ -22,7 +23,7 @@ HELP_TEXT_SRC = ../../src/help_text.c
 MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
 
-TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_help_text test_manual_text test_cli_text test_ratelimit
+TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_help_text test_manual_text test_cli_text test_ratelimit
 
 .PHONY: all clean run
 
@@ -46,10 +47,13 @@ test_i18n: test_i18n.c $(I18N_SRC)
 test_system_message: test_system_message.c $(SYSTEM_MESSAGE_SRC) $(I18N_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_help_text: test_help_text.c $(HELP_TEXT_SRC) $(COMMON_SRC)
+test_command_catalog: test_command_catalog.c $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_manual_text: test_manual_text.c $(MANUAL_TEXT_SRC)
+test_help_text: test_help_text.c $(HELP_TEXT_SRC) $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test_manual_text: test_manual_text.c $(MANUAL_TEXT_SRC) $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_cli_text: test_cli_text.c $(CLI_TEXT_SRC) $(COMMON_SRC)
@@ -76,6 +80,9 @@ run: all
 	@echo ""
 	@echo "=== Running System Message Tests ==="
 	./test_system_message
+	@echo ""
+	@echo "=== Running Command Catalog Tests ==="
+	./test_command_catalog
 	@echo ""
 	@echo "=== Running Help Text Tests ==="
 	./test_help_text

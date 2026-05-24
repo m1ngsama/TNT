@@ -73,6 +73,7 @@ src/
 ├── bootstrap.c      - SSH authentication/session bootstrap
 ├── input.c          - Interactive session loop and key handling
 ├── commands.c       - COMMAND-mode command dispatch
+├── command_catalog.c - COMMAND-mode names, aliases, and help summaries
 ├── exec.c           - SSH exec command dispatch
 ├── chat_room.c      - Chat room logic and message broadcasting
 ├── message.c        - Message persistence (RFC3339 format)
@@ -97,6 +98,7 @@ include/
 ├── bootstrap.h      - SSH session bootstrap interface
 ├── chat_room.h      - Chat room interface
 ├── message.h        - Message structure and persistence
+├── command_catalog.h - COMMAND-mode command metadata interface
 ├── history_view.h   - Scroll-state helpers
 ├── tui.h            - TUI rendering functions
 ├── i18n.h           - Language and shared text IDs

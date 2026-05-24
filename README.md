@@ -250,6 +250,7 @@ TNT/
 ├── src/              # source code
 │   ├── main.c        # entry point
 │   ├── cli_text.c    # startup CLI help and option text
+│   ├── command_catalog.c # command metadata
 │   ├── ssh_server.c  # SSH server implementation
 │   ├── bootstrap.c   # SSH authentication and session bootstrap
 │   ├── chat_room.c   # chat room logic

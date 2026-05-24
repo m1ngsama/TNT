@@ -46,6 +46,7 @@ INSERT MODE
 STRUCTURE
   src/main.c          entry, signals
   src/cli_text.c      startup CLI text
+  src/command_catalog.c command metadata
   src/ssh_server.c    SSH listener and server setup
   src/bootstrap.c     SSH auth/session bootstrap
   src/chat_room.c     broadcast and room state
