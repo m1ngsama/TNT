@@ -1,17 +1,15 @@
 #include "command_catalog.h"
 
+#include "i18n.h"
+
 #include <string.h>
 
 typedef struct {
     tnt_command_spec_t spec;
-    const char *full_usage_en;
-    const char *full_usage_zh;
-    const char *summary_en;
-    const char *summary_zh;
-    const char *manual_usage_en;
-    const char *manual_usage_zh;
-    const char *error_usage_en;
-    const char *error_usage_zh;
+    i18n_string_t full_usage;
+    i18n_string_t summary;
+    i18n_string_t manual_usage;
+    i18n_string_t error_usage;
     int manual_group;
     bool no_args;
     bool requires_args;
@@ -20,95 +18,97 @@ typedef struct {
 static const command_catalog_entry_t entries[] = {
     {
         {TNT_COMMAND_USERS, "users", {"users", "list", "who", NULL}},
-        ":users, :list, :who", ":users, :list, :who",
-        "Show online users", "显示在线用户",
-        ":users", ":users",
-        "Usage: users\n", "用法: users\n",
+        I18N_STRING(":users, :list, :who", ":users, :list, :who"),
+        I18N_STRING("Show online users", "显示在线用户"),
+        I18N_STRING(":users", ":users"),
+        I18N_STRING("Usage: users\n", "用法: users\n"),
         1, true, false
     },
     {
         {TNT_COMMAND_MSG, "msg", {"msg", "w", NULL}},
-        ":msg <user> <message>, :w <user> <message>",
-        ":msg <user> <message>, :w <user> <message>",
-        "Send private message", "发送私信",
-        ":msg <user> <message>", ":msg <user> <message>",
-        "Usage: msg <user> <message>\n"
-        "       w <user> <message>\n",
-        "用法: msg <user> <message>\n"
-        "      w <user> <message>\n",
+        I18N_STRING(":msg <user> <message>, :w <user> <message>",
+                    ":msg <user> <message>, :w <user> <message>"),
+        I18N_STRING("Send private message", "发送私信"),
+        I18N_STRING(":msg <user> <message>", ":msg <user> <message>"),
+        I18N_STRING("Usage: msg <user> <message>\n"
+                    "       w <user> <message>\n",
+                    "用法: msg <user> <message>\n"
+                    "      w <user> <message>\n"),
         2, false, true
     },
     {
         {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}},
-        ":inbox", ":inbox",
-        "Show private messages", "查看私信",
-        ":inbox", ":inbox",
-        "Usage: inbox\n", "用法: inbox\n",
+        I18N_STRING(":inbox", ":inbox"),
+        I18N_STRING("Show private messages", "查看私信"),
+        I18N_STRING(":inbox", ":inbox"),
+        I18N_STRING("Usage: inbox\n", "用法: inbox\n"),
         2, true, false
     },
     {
         {TNT_COMMAND_NICK, "nick", {"nick", "name", NULL}},
-        ":nick <name>, :name <name>", ":nick <name>, :name <name>",
-        "Change nickname", "更改昵称",
-        ":nick <name>", ":nick <name>",
-        "Usage: nick <name>\n", "用法: nick <name>\n",
+        I18N_STRING(":nick <name>, :name <name>",
+                    ":nick <name>, :name <name>"),
+        I18N_STRING("Change nickname", "更改昵称"),
+        I18N_STRING(":nick <name>", ":nick <name>"),
+        I18N_STRING("Usage: nick <name>\n", "用法: nick <name>\n"),
         2, false, true
     },
     {
         {TNT_COMMAND_LAST, "last", {"last", NULL}},
-        ":last [N]", ":last [N]",
-        "Show last N messages (max 50)", "显示最后 N 条消息(最多50)",
-        ":last [N]", ":last [N]",
-        "Usage: last [N]  (N: 1-50, default 10)\n",
-        "用法: last [N]  (N: 1-50，默认 10)\n",
+        I18N_STRING(":last [N]", ":last [N]"),
+        I18N_STRING("Show last N messages (max 50)",
+                    "显示最后 N 条消息(最多50)"),
+        I18N_STRING(":last [N]", ":last [N]"),
+        I18N_STRING("Usage: last [N]  (N: 1-50, default 10)\n",
+                    "用法: last [N]  (N: 1-50，默认 10)\n"),
         1, false, false
     },
     {
         {TNT_COMMAND_SEARCH, "search", {"search", NULL}},
-        ":search <keyword>", ":search <keyword>",
-        "Search message history", "搜索消息历史",
-        ":search <keyword>", ":search <keyword>",
-        "Usage: search <keyword>\n", "用法: search <keyword>\n",
+        I18N_STRING(":search <keyword>", ":search <keyword>"),
+        I18N_STRING("Search message history", "搜索消息历史"),
+        I18N_STRING(":search <keyword>", ":search <keyword>"),
+        I18N_STRING("Usage: search <keyword>\n", "用法: search <keyword>\n"),
         1, false, true
     },
     {
         {TNT_COMMAND_MUTE_JOINS, "mute-joins", {"mute-joins", "mute", NULL}},
-        ":mute-joins, :mute", ":mute-joins, :mute",
-        "Toggle join/leave notices", "切换加入/离开提示",
-        ":mute-joins", ":mute-joins",
-        "Usage: mute-joins\n", "用法: mute-joins\n",
+        I18N_STRING(":mute-joins, :mute", ":mute-joins, :mute"),
+        I18N_STRING("Toggle join/leave notices", "切换加入/离开提示"),
+        I18N_STRING(":mute-joins", ":mute-joins"),
+        I18N_STRING("Usage: mute-joins\n", "用法: mute-joins\n"),
         3, true, false
     },
     {
         {TNT_COMMAND_HELP, "help", {"help", NULL}},
-        ":help", ":help",
-        "Show concise manual", "显示简明手册",
-        NULL, NULL,
-        "Usage: help\n", "用法: help\n",
+        I18N_STRING(":help", ":help"),
+        I18N_STRING("Show concise manual", "显示简明手册"),
+        I18N_STRING(NULL, NULL),
+        I18N_STRING("Usage: help\n", "用法: help\n"),
         0, true, false
     },
     {
         {TNT_COMMAND_LANG, "lang", {"lang", "language", NULL}},
-        ":lang <en|zh>", ":lang <en|zh>",
-        "Switch UI language", "切换界面语言",
-        NULL, NULL,
-        "Usage: lang <en|zh>\n", "用法: lang <en|zh>\n",
+        I18N_STRING(":lang <en|zh>", ":lang <en|zh>"),
+        I18N_STRING("Switch UI language", "切换界面语言"),
+        I18N_STRING(NULL, NULL),
+        I18N_STRING("Usage: lang <en|zh>\n", "用法: lang <en|zh>\n"),
         0, false, false
     },
     {
         {TNT_COMMAND_CLEAR, "clear", {"clear", "cls", NULL}},
-        ":clear, :cls", ":clear, :cls",
-        "Clear command output", "清空命令输出",
-        ":clear", ":clear",
-        "Usage: clear\n", "用法: clear\n",
+        I18N_STRING(":clear, :cls", ":clear, :cls"),
+        I18N_STRING("Clear command output", "清空命令输出"),
+        I18N_STRING(":clear", ":clear"),
+        I18N_STRING("Usage: clear\n", "用法: clear\n"),
         3, true, false
     },
     {
         {TNT_COMMAND_QUIT, "q", {"q", "quit", "exit", NULL}},
-        ":q, :quit, :exit", ":q, :quit, :exit",
-        "Disconnect", "断开连接",
-        ":q", ":q",
-        "Usage: q\n", "用法: q\n",
+        I18N_STRING(":q, :quit, :exit", ":q, :quit, :exit"),
+        I18N_STRING("Disconnect", "断开连接"),
+        I18N_STRING(":q", ":q"),
+        I18N_STRING("Usage: q\n", "用法: q\n"),
         3, true, false
     }
 };
@@ -265,10 +265,8 @@ const char *command_catalog_suggest(const char *name) {
 void command_catalog_append_full(char *buffer, size_t buf_size, size_t *pos,
                                  ui_lang_t lang) {
     for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
-        const char *usage = lang == UI_LANG_ZH ? entries[i].full_usage_zh
-                                            : entries[i].full_usage_en;
-        const char *summary = lang == UI_LANG_ZH ? entries[i].summary_zh
-                                              : entries[i].summary_en;
+        const char *usage = i18n_string(entries[i].full_usage, lang);
+        const char *summary = i18n_string(entries[i].summary, lang);
         buffer_appendf(buffer, buf_size, pos, "  %-40s - %s\n",
                        usage, summary);
     }
@@ -285,9 +283,8 @@ void command_catalog_append_manual(char *buffer, size_t buf_size, size_t *pos,
             if (entries[i].manual_group != group) {
                 continue;
             }
-            usage = lang == UI_LANG_ZH ? entries[i].manual_usage_zh
-                                    : entries[i].manual_usage_en;
-            if (!usage) {
+            usage = i18n_string(entries[i].manual_usage, lang);
+            if (!usage || usage[0] == '\0') {
                 continue;
             }
             if (!first) {
@@ -309,7 +306,6 @@ void command_catalog_append_usage(char *buffer, size_t buf_size, size_t *pos,
         return;
     }
 
-    usage = lang == UI_LANG_ZH ? entry->error_usage_zh
-                               : entry->error_usage_en;
+    usage = i18n_string(entry->error_usage, lang);
     buffer_appendf(buffer, buf_size, pos, "%s", usage);
 }

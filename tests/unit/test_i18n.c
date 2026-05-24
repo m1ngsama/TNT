@@ -79,6 +79,12 @@ TEST(default_uses_locale_when_no_tnt_lang) {
 }
 
 TEST(text_lookup_matches_language) {
+    i18n_string_t sample = I18N_STRING("fallback", "替代");
+
+    assert(strcmp(i18n_string(sample, UI_LANG_EN), "fallback") == 0);
+    assert(strcmp(i18n_string(sample, UI_LANG_ZH), "替代") == 0);
+    assert(strcmp(i18n_string(sample, (ui_lang_t)99), "fallback") == 0);
+
     assert(strstr(i18n_text(UI_LANG_EN, I18N_USERNAME_PROMPT),
                   "display name") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_USERNAME_PROMPT),

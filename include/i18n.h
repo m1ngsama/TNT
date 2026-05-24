@@ -3,6 +3,13 @@
 
 #include "common.h"
 
+typedef struct {
+    const char *text[UI_LANG_COUNT];
+} i18n_string_t;
+
+#define I18N_STRING(en_text, zh_text) \
+    {{ [UI_LANG_EN] = (en_text), [UI_LANG_ZH] = (zh_text) }}
+
 typedef enum {
     I18N_USERNAME_PROMPT,
     I18N_INVALID_USERNAME,
@@ -61,5 +68,18 @@ ui_lang_t i18n_default_ui_lang(void);
 ui_lang_t i18n_next_ui_lang(ui_lang_t lang);
 const char *i18n_ui_lang_code(ui_lang_t lang);
 const char *i18n_text(ui_lang_t lang, i18n_text_id_t id);
+
+static inline const char *i18n_string(i18n_string_t value, ui_lang_t lang) {
+    if ((int)lang < 0 || lang >= UI_LANG_COUNT) {
+        lang = UI_LANG_EN;
+    }
+    if (value.text[lang]) {
+        return value.text[lang];
+    }
+    if (value.text[UI_LANG_EN]) {
+        return value.text[UI_LANG_EN];
+    }
+    return "";
+}
 
 #endif /* I18N_H */

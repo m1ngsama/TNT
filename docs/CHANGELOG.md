@@ -54,6 +54,8 @@
   module descriptions for the split between language parsing and text lookup.
 - `i18n_text` now indexes localized strings by `UI_LANG_*` instead of storing
   English/Chinese as hard-coded struct fields.
+- `command_catalog` now uses the shared localized-string helper for help,
+  manual, and usage text instead of per-field English/Chinese members.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 

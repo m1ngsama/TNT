@@ -119,6 +119,12 @@ TEST(generates_localized_usage) {
     assert(strcmp(en, "Usage: last [N]  (N: 1-50, default 10)\n") == 0);
     assert(strcmp(zh, "用法: msg <user> <message>\n"
                       "      w <user> <message>\n") == 0);
+
+    en[0] = '\0';
+    en_pos = 0;
+    command_catalog_append_usage(en, sizeof(en), &en_pos,
+                                 TNT_COMMAND_USERS, (ui_lang_t)99);
+    assert(strcmp(en, "Usage: users\n") == 0);
 }
 
 int main(void) {
