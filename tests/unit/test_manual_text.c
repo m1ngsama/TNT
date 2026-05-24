@@ -1,6 +1,7 @@
 /* Unit tests for concise manual text language selection */
 
 #include "../../include/manual_text.h"
+#include "text_assert.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -58,6 +59,7 @@ TEST(interactive_manual_matches_language) {
     assert(strstr(zh, ":support") == NULL);
     assert(strstr(zh, ":commands") == NULL);
     assert(count_lines(zh) <= 20);
+    assert_ascii_angle_placeholders(zh);
 }
 
 int main(void) {

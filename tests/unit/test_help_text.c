@@ -1,6 +1,7 @@
 /* Unit tests for help text ownership and language selection */
 
 #include "../../include/help_text.h"
+#include "text_assert.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -43,6 +44,7 @@ TEST(full_help_matches_language) {
     assert(strstr(zh, ":support") == NULL);
     assert(strstr(zh, ":commands") == NULL);
     assert(strstr(zh, "切换英文/中文") != NULL);
+    assert_ascii_angle_placeholders(zh);
 }
 
 int main(void) {

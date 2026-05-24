@@ -9,7 +9,7 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
     if (lang == UI_LANG_ZH) {
         buffer_appendf(buffer, buf_size, pos,
                        "tnt %s - 匿名 SSH 聊天服务器\n\n"
-                       "用法: %s [选项]\n\n"
+                       "用法: %s [options]\n\n"
                        "选项:\n"
                        "  -p, --port PORT       监听 PORT (默认: %d)\n"
                        "  -d, --state-dir DIR   将主机密钥和日志存放在 DIR\n"

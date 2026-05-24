@@ -28,7 +28,8 @@ TEST(help_matches_language) {
     pos = 0;
     cli_text_append_help(output, sizeof(output), &pos, "tnt", UI_LANG_ZH);
     assert(strstr(output, "匿名 SSH 聊天服务器") != NULL);
-    assert(strstr(output, "用法: tnt [选项]") != NULL);
+    assert(strstr(output, "用法: tnt [options]") != NULL);
+    assert(strstr(output, "[选项]") == NULL);
     assert(strstr(output, "TNT_LANG") != NULL);
 }
 

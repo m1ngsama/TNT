@@ -10,6 +10,8 @@
   usage text now uses ASCII metavariables such as `<user>` and `<message>`.
 - Standardized user-facing `:msg` / `:inbox` terminology around "private
   message" / "私信" instead of mixing it with "whisper" wording.
+- Kept localized startup CLI syntax stable by using `用法: tnt [options]`
+  instead of localizing the `[options]` metavariable.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.

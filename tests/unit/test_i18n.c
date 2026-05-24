@@ -1,6 +1,7 @@
 /* Unit tests for i18n language selection and text lookup */
 
 #include "../../include/i18n.h"
+#include "text_assert.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -164,6 +165,8 @@ TEST(text_catalog_is_complete) {
     for (int id = 0; id < I18N_TEXT_COUNT; id++) {
         assert(i18n_text(UI_LANG_EN, (i18n_text_id_t)id)[0] != '\0');
         assert(i18n_text(UI_LANG_ZH, (i18n_text_id_t)id)[0] != '\0');
+        assert_ascii_angle_placeholders(
+            i18n_text(UI_LANG_ZH, (i18n_text_id_t)id));
     }
 
     assert(strcmp(i18n_text(UI_LANG_EN,

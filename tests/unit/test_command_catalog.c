@@ -1,6 +1,7 @@
 /* Unit tests for command catalog names, aliases, and generated help text */
 
 #include "../../include/command_catalog.h"
+#include "text_assert.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -77,6 +78,7 @@ TEST(generates_localized_help_sections) {
     assert(strstr(zh, "<用户>") == NULL);
     assert(strstr(zh, "<消息>") == NULL);
     assert(strstr(zh, ":support") == NULL);
+    assert_ascii_angle_placeholders(zh);
 }
 
 int main(void) {
