@@ -26,6 +26,7 @@ TEST(full_help_matches_language) {
 
     assert(strstr(en, "TNT KEY REFERENCE") != NULL);
     assert(strstr(en, "AVAILABLE COMMANDS") != NULL);
+    assert(strstr(en, "COMMAND OUTPUT KEYS") != NULL);
     assert(strstr(en, ":inbox") != NULL);
     assert(strstr(en, ":support") == NULL);
     assert(strstr(en, ":commands") == NULL);
@@ -33,6 +34,7 @@ TEST(full_help_matches_language) {
 
     assert(strstr(zh, "TNT 按键参考") != NULL);
     assert(strstr(zh, "可用命令") != NULL);
+    assert(strstr(zh, "命令输出按键") != NULL);
     assert(strstr(zh, ":inbox") != NULL);
     assert(strstr(zh, ":support") == NULL);
     assert(strstr(zh, ":commands") == NULL);

@@ -114,6 +114,8 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "-- 按键参考 -- (%d/%d) j/k:滚动 g/G:首尾 e/z:语言 q:关闭";
             case I18N_COMMAND_OUTPUT_TITLE:
                 return " 命令输出 ";
+            case I18N_COMMAND_OUTPUT_STATUS_FORMAT:
+                return "-- 命令输出 -- (%d/%d) j/k:滚动 Ctrl-D/U:半页 g/G:首尾 q:关闭";
             case I18N_MOTD_TITLE:
                 return " 公告 ";
             case I18N_MOTD_CONTINUE_HINT:
@@ -213,8 +215,6 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
                 return "post: 输入不是有效 UTF-8\n";
             case I18N_EXEC_UNKNOWN_COMMAND_FORMAT:
                 return "未知命令: %s\n";
-            case I18N_CONTINUE_PROMPT:
-                return "\n按任意键继续...";
         }
     }
 
@@ -245,6 +245,8 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "-- KEY REFERENCE -- (%d/%d) j/k:scroll g/G:top/bottom e/z:lang q:close";
         case I18N_COMMAND_OUTPUT_TITLE:
             return " COMMAND OUTPUT ";
+        case I18N_COMMAND_OUTPUT_STATUS_FORMAT:
+            return "-- COMMAND OUTPUT -- (%d/%d) j/k:scroll Ctrl-D/U:half g/G:top/bottom q:close";
         case I18N_MOTD_TITLE:
             return " NOTICE ";
         case I18N_MOTD_CONTINUE_HINT:
@@ -344,8 +346,6 @@ const char *i18n_text(help_lang_t lang, i18n_text_id_t id) {
             return "post: invalid UTF-8 input\n";
         case I18N_EXEC_UNKNOWN_COMMAND_FORMAT:
             return "Unknown command: %s\n";
-        case I18N_CONTINUE_PROMPT:
-            return "\nPress any key to continue...";
     }
 
     return "";

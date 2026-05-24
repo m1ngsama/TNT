@@ -615,7 +615,7 @@ void tui_render_command_output(client_t *client) {
     if (rw < 10) rw = 10;
     if (rh < 4) rh = 4;
 
-    char buffer[4096];
+    char buffer[MAX_COMMAND_OUTPUT_LEN + 1024];
     size_t pos = 0;
     buffer[0] = '\0';
 
@@ -639,22 +639,46 @@ void tui_render_command_output(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_RESET "\r\n");
 
     /* Command output - use a copy to avoid strtok corruption */
-    char output_copy[2048];
+    char output_copy[MAX_COMMAND_OUTPUT_LEN];
     strncpy(output_copy, client->command_output, sizeof(output_copy) - 1);
     output_copy[sizeof(output_copy) - 1] = '\0';
 
-    char *line = strtok(output_copy, "\n");
+    char *lines[256];
     int line_count = 0;
-    int max_lines = rh - 2;
+    char *line = strtok(output_copy, "\n");
+    while (line && line_count < (int)(sizeof(lines) / sizeof(lines[0]))) {
+        lines[line_count++] = line;
+        line = strtok(NULL, "\n");
+    }
 
-    while (line && line_count < max_lines) {
+    int content_height = rh - 2;
+    if (content_height < 1) content_height = 1;
+    int max_scroll = line_count - content_height;
+    if (max_scroll < 0) max_scroll = 0;
+    if (client->command_output_scroll < 0) client->command_output_scroll = 0;
+    if (client->command_output_scroll > max_scroll) {
+        client->command_output_scroll = max_scroll;
+    }
+
+    int start = client->command_output_scroll;
+    int end = start + content_height;
+    if (end > line_count) end = line_count;
+
+    for (int i = start; i < end; i++) {
         char truncated[1024];
-        utf8_ansi_truncate(line, truncated, sizeof(truncated), rw);
+        utf8_ansi_truncate(lines[i], truncated, sizeof(truncated), rw);
 
         buffer_appendf(buffer, sizeof(buffer), &pos, "%s\r\n", truncated);
-        line = strtok(NULL, "\n");
-        line_count++;
     }
+
+    for (int i = end - start; i < content_height; i++) {
+        buffer_appendf(buffer, sizeof(buffer), &pos, "\033[K\r\n");
+    }
+
+    buffer_appendf(buffer, sizeof(buffer), &pos,
+                   i18n_text(client->help_lang,
+                             I18N_COMMAND_OUTPUT_STATUS_FORMAT),
+                   start + 1, max_scroll + 1);
 
     client_send(client, buffer, pos);
 }

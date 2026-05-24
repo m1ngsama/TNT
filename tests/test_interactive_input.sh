@@ -146,14 +146,14 @@ send -- ":"
 expect ":"
 send -- "help\r"
 expect "TNT\\(1\\) 帮助"
-expect "按任意键"
+expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "lang en\r"
 expect "Language set to: en"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 sleep 0.2
 send -- "\003"
@@ -185,7 +185,7 @@ send -- ":"
 expect ":"
 send -- "hlep\r"
 expect "你是想输入 :help 吗?"
-expect "按任意键"
+expect "q:关闭"
 send -- "q"
 sleep 0.2
 send -- "\003"
@@ -219,14 +219,14 @@ send -- "mute-joins\r"
 expect "命令输出"
 expect "加入/离开提示"
 expect "已静音"
-expect "按任意键"
+expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "lang en\r"
 expect "Language set to: en"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 expect "NORMAL"
 expect "online"
@@ -235,7 +235,7 @@ expect ":"
 send -- "users\r"
 expect "COMMAND OUTPUT"
 expect "Online users"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 sleep 0.2
 send -- "\003"
@@ -267,28 +267,28 @@ send -- ":"
 expect ":"
 send -- "search\r"
 expect "用法: search <关键词>"
-expect "按任意键"
+expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "msg\r"
 expect "用法: msg <用户名> <消息>"
-expect "按任意键"
+expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "nick\r"
 expect "用法: nick <新用户名>"
-expect "按任意键"
+expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "lang en\r"
 expect "Language set to: en"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 expect "NORMAL"
 send -- ":"
@@ -296,14 +296,14 @@ expect ":"
 send -- "inbox\r"
 expect "Whispers"
 expect "(empty)"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "last 999\r"
 expect "Usage: last \\[N\\]"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 sleep 0.2
 send -- "\003"
@@ -322,6 +322,49 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+scroll_ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+scroll_i=1
+while [ "$scroll_i" -le 30 ]; do
+    printf '%s|fixture|scroll fixture %02d\n' "$scroll_ts" "$scroll_i" >>"$STATE_DIR/messages.log"
+    scroll_i=$((scroll_i + 1))
+done
+
+COMMAND_OUTPUT_SCROLL_SCRIPT="$STATE_DIR/command-output-scroll.expect"
+cat >"$COMMAND_OUTPUT_SCROLL_SCRIPT" <<EOF
+set timeout 10
+stty rows 8 columns 80
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "pageruser\r"
+expect ":help"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "last 50\r"
+expect "j/k:滚动"
+expect -re {\(1/[2-9][0-9]*\)}
+send -- "j"
+expect -re {\(2/[2-9][0-9]*\)}
+send -- "q"
+expect "NORMAL"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$COMMAND_OUTPUT_SCROLL_SCRIPT" >"$STATE_DIR/command-output-scroll.log" 2>&1; then
+    echo "✓ command output can scroll before closing"
+    PASS=$((PASS + 1))
+else
+    echo "x command output scrolling failed"
+    sed -n '1,220p' "$STATE_DIR/command-output-scroll.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 SYSTEM_MESSAGES_SCRIPT="$STATE_DIR/system-messages.expect"
 cat >"$SYSTEM_MESSAGES_SCRIPT" <<EOF
 set timeout 10
@@ -335,14 +378,14 @@ send -- ":"
 expect ":"
 send -- "lang en\r"
 expect "Language set to: en"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "nick systemuser2\r"
 expect "Nickname changed: systemuser -> systemuser2"
-expect "Press any key"
+expect "q:close"
 send -- "q"
 sleep 0.2
 send -- "\003"

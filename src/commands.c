@@ -52,7 +52,7 @@ void commands_dispatch(client_t *client) {
     strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
     cmd_buf[sizeof(cmd_buf) - 1] = '\0';
     char *cmd = cmd_buf;
-    char output[2048] = {0};
+    char output[MAX_COMMAND_OUTPUT_LEN] = {0};
     size_t pos = 0;
 
     /* Trim whitespace */
@@ -402,10 +402,8 @@ void commands_dispatch(client_t *client) {
     }
 
 cmd_done:
-    buffer_appendf(output, sizeof(output), &pos, "%s",
-                   i18n_text(client->help_lang, I18N_CONTINUE_PROMPT));
-
     snprintf(client->command_output, sizeof(client->command_output), "%s", output);
+    client->command_output_scroll = 0;
     client->command_input[0] = '\0';
     tui_render_command_output(client);
 }

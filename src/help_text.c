@@ -39,6 +39,13 @@ void help_text_append_full(char *buffer, size_t buf_size, size_t *pos,
         command_catalog_append_full(buffer, buf_size, pos, lang);
         buffer_appendf(buffer, buf_size, pos,
                        "\n"
+                       "COMMAND OUTPUT KEYS:\n"
+                       "  q, ESC     - Close output\n"
+                       "  j/k        - Scroll down/up\n"
+                       "  Ctrl+D/U   - Scroll half page down/up\n"
+                       "  Ctrl+F/B   - Scroll full page down/up\n"
+                       "  g/G        - Jump to top/bottom\n"
+                       "\n"
                        "SPECIAL MESSAGES:\n"
                        "  /me <action>      - Send action (e.g. /me waves)\n"
                        "  @username         - Mention user (bell + highlight)\n"
@@ -86,6 +93,13 @@ void help_text_append_full(char *buffer, size_t buf_size, size_t *pos,
                    "可用命令:\n");
     command_catalog_append_full(buffer, buf_size, pos, lang);
     buffer_appendf(buffer, buf_size, pos,
+                   "\n"
+                   "命令输出按键:\n"
+                   "  q, ESC     - 关闭输出\n"
+                   "  j/k        - 向下/上滚动\n"
+                   "  Ctrl+D/U   - 向下/上滚动半页\n"
+                   "  Ctrl+F/B   - 向下/上滚动整页\n"
+                   "  g/G        - 跳到顶部/底部\n"
                    "\n"
                    "特殊消息:\n"
                    "  /me <动作>        - 发送动作 (如 /me 挥手)\n"

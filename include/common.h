@@ -20,6 +20,7 @@
 #define MAX_USERNAME_LEN 64
 #define MAX_MESSAGE_LEN 1024
 #define MAX_EXEC_COMMAND_LEN 1024
+#define MAX_COMMAND_OUTPUT_LEN 8192
 #define MAX_CLIENTS 64
 #define LOG_FILE "messages.log"
 #define MAX_LOG_SIZE (10 * 1024 * 1024)  /* 10 MiB */

@@ -5,6 +5,9 @@
 ### Changed
 - Command names, aliases, help summaries, concise-manual command rows, and
   unknown-command suggestions now share a dedicated `command_catalog` module.
+- COMMAND-mode output is now a small scrollable pager with `j/k`, page
+  movement, `g/G`, and `q`/Esc close controls, so long `:last` and `:search`
+  results are readable instead of being cut off by the terminal height.
 - Collapsed the interactive help surface around a concise Unix-style `:help`
   manual and the `?` full key reference; `:support` is no longer a user-facing
   command.

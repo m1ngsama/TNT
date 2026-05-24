@@ -205,12 +205,32 @@ static void normal_scroll_by(client_t *client, int delta) {
                            history_view_height(client->height), delta);
 }
 
+static void dismiss_command_output(client_t *client) {
+    bool was_motd;
+
+    if (!client) return;
+
+    was_motd = client->show_motd;
+    client->command_output[0] = '\0';
+    client->command_output_scroll = 0;
+    client->show_motd = false;
+    client->mode = MODE_NORMAL;
+    if (was_motd) {
+        normal_scroll_to_latest(client);
+    }
+    tui_render_screen(client);
+}
+
 /* Handle a single key press.  Returns true if the key was fully consumed
  * (no further character buffering needed). */
 static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Handle Ctrl+C (Exit or switch to NORMAL) */
     if (key == 3) {
         client_mode_t previous_mode = client->mode;
+        if (client->command_output[0] != '\0') {
+            dismiss_command_output(client);
+            return true;
+        }
         if (previous_mode != MODE_NORMAL) {
             client->mode = MODE_NORMAL;
             client->command_input[0] = '\0';
@@ -275,16 +295,57 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
         return true;  /* Key consumed */
     }
 
-    /* Handle command output / MOTD display: any key dismisses */
+    /* Handle command output / MOTD display.  MOTD remains a simple notice;
+     * command output behaves like a small pager so long results can be read. */
     if (client->command_output[0] != '\0') {
-        bool was_motd = client->show_motd;
-        client->command_output[0] = '\0';
-        client->show_motd = false;
-        client->mode = MODE_NORMAL;
-        if (was_motd) {
-            normal_scroll_to_latest(client);
+        int page = client->height - 2;
+        int half;
+
+        if (client->show_motd) {
+            dismiss_command_output(client);
+            return true;
         }
-        tui_render_screen(client);
+
+        if (page < 1) page = 1;
+        half = page / 2;
+        if (half < 1) half = 1;
+
+        if (key == 'q' || key == 27) {
+            dismiss_command_output(client);
+        } else if (key == 'j') {
+            client->command_output_scroll++;
+            tui_render_command_output(client);
+        } else if (key == 'k') {
+            client->command_output_scroll--;
+            if (client->command_output_scroll < 0) {
+                client->command_output_scroll = 0;
+            }
+            tui_render_command_output(client);
+        } else if (key == 4) {  /* Ctrl+D: half page down */
+            client->command_output_scroll += half;
+            tui_render_command_output(client);
+        } else if (key == 21) {  /* Ctrl+U: half page up */
+            client->command_output_scroll -= half;
+            if (client->command_output_scroll < 0) {
+                client->command_output_scroll = 0;
+            }
+            tui_render_command_output(client);
+        } else if (key == 6) {  /* Ctrl+F: full page down */
+            client->command_output_scroll += page;
+            tui_render_command_output(client);
+        } else if (key == 2) {  /* Ctrl+B: full page up */
+            client->command_output_scroll -= page;
+            if (client->command_output_scroll < 0) {
+                client->command_output_scroll = 0;
+            }
+            tui_render_command_output(client);
+        } else if (key == 'g') {
+            client->command_output_scroll = 0;
+            tui_render_command_output(client);
+        } else if (key == 'G') {
+            client->command_output_scroll = 999;
+            tui_render_command_output(client);
+        }
         return true;  /* Key consumed */
     }
 
@@ -669,6 +730,7 @@ void input_run_session(client_t *client) {
     client->connected = true;
     client->command_history_count = 0;
     client->command_history_pos = 0;
+    client->command_output_scroll = 0;
     client->connect_time = time(NULL);
     client->last_active = time(NULL);
 
@@ -721,6 +783,7 @@ void input_run_session(client_t *client) {
                     snprintf(client->command_output,
                              sizeof(client->command_output),
                              "%s", motd_buf);
+                    client->command_output_scroll = 0;
                     client->show_motd = true;
                     tui_render_motd(client);
                     seen_update_seq = room_get_update_seq(g_room);

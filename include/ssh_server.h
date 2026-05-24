@@ -40,7 +40,8 @@ typedef struct client {
     char insert_history[16][MAX_MESSAGE_LEN];
     int insert_history_count;
     int insert_history_pos;
-    char command_output[2048];
+    char command_output[MAX_COMMAND_OUTPUT_LEN];
+    int command_output_scroll;
     bool show_motd;                  /* command_output holds MOTD text */
     char exec_command[MAX_EXEC_COMMAND_LEN];
     char ssh_login[MAX_USERNAME_LEN];
