@@ -57,7 +57,8 @@ STRUCTURE
   src/help_text.c     full-screen key reference text
   src/manual.c        concise manual panel rendering
   src/manual_text.c   concise manual content
-  src/i18n.c          language selection and shared text
+  src/i18n.c          UI language and locale selection
+  src/i18n_text.c     shared UI text catalog
   src/ratelimit.c     connection limits and rate limiting
   src/tui.c           rendering
   src/tui_status.c    status/input line rendering

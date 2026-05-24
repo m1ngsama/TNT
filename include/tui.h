@@ -32,5 +32,4 @@ void tui_clear_screen(struct client *client);
  * itself afterwards. */
 void tui_render_welcome(struct client *client);
 
-/* Get help text based on language */
 #endif /* TUI_H */

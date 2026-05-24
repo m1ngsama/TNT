@@ -259,7 +259,8 @@ TNT/
 │   ├── help_text.c   # full-screen key reference content
 │   ├── manual.c      # concise manual panel rendering
 │   ├── manual_text.c # concise manual content
-│   ├── i18n.c        # language selection and shared UI text
+│   ├── i18n.c        # UI language and locale selection
+│   ├── i18n_text.c   # shared UI text catalog
 │   ├── ratelimit.c   # connection limits and rate limiting
 │   ├── tui.c         # terminal UI rendering
 │   ├── tui_status.c  # status/input line rendering

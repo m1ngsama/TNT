@@ -449,11 +449,11 @@ keys.
 
 ### Current Limitations
 
-The current `src/i18n.c` implementation is a small-project translation table
-implemented in C, not a full gettext catalog.  It is acceptable for two
-languages, but adding more languages should first split message lookup from
-language parsing and move toward catalog-like storage.  Do not grow the
-current approach by adding ad hoc branches for every locale.
+The current `src/i18n_text.c` implementation is a small-project translation
+table implemented in C, not a full gettext catalog.  It is acceptable for two
+languages because message lookup is already split from language parsing in
+`src/i18n.c`, but adding more languages should move toward catalog-like
+storage instead of adding ad hoc branches for every locale.
 
 Relevant conventions:
 - POSIX locale variables: `LANG`, `LC_ALL`, `LC_MESSAGES`.

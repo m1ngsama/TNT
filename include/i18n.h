@@ -60,7 +60,8 @@ typedef enum {
     I18N_EXEC_POST_USAGE,
     I18N_EXEC_POST_EMPTY,
     I18N_EXEC_POST_INVALID_UTF8,
-    I18N_EXEC_UNKNOWN_COMMAND_FORMAT
+    I18N_EXEC_UNKNOWN_COMMAND_FORMAT,
+    I18N_TEXT_COUNT
 } i18n_text_id_t;
 
 bool i18n_try_parse_ui_lang(const char *value, ui_lang_t *lang);

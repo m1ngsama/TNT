@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Changed
+- Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
+  locale/code parsing, while `src/i18n_text.c` owns the table-driven text
+  catalog with coverage checks for every message ID.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.

@@ -146,6 +146,18 @@ TEST(text_lookup_matches_language) {
     assert(strcmp(i18n_ui_lang_code(UI_LANG_ZH), "zh") == 0);
 }
 
+TEST(text_catalog_is_complete) {
+    for (int id = 0; id < I18N_TEXT_COUNT; id++) {
+        assert(i18n_text(UI_LANG_EN, (i18n_text_id_t)id)[0] != '\0');
+        assert(i18n_text(UI_LANG_ZH, (i18n_text_id_t)id)[0] != '\0');
+    }
+
+    assert(strcmp(i18n_text(UI_LANG_EN,
+                            (i18n_text_id_t)I18N_TEXT_COUNT), "") == 0);
+    assert(strcmp(i18n_text(UI_LANG_ZH,
+                            (i18n_text_id_t)I18N_TEXT_COUNT), "") == 0);
+}
+
 int main(void) {
     printf("Running i18n unit tests...\n\n");
 
@@ -155,6 +167,7 @@ int main(void) {
     RUN_TEST(default_prefers_tnt_lang);
     RUN_TEST(default_uses_locale_when_no_tnt_lang);
     RUN_TEST(text_lookup_matches_language);
+    RUN_TEST(text_catalog_is_complete);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;

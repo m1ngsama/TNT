@@ -18,6 +18,7 @@ CLI_TEXT_SRC = ../../src/cli_text.c
 CHAT_ROOM_SRC = ../../src/chat_room.c
 HISTORY_VIEW_SRC = ../../src/history_view.c
 I18N_SRC = ../../src/i18n.c
+I18N_TEXT_SRC = ../../src/i18n_text.c
 SYSTEM_MESSAGE_SRC = ../../src/system_message.c
 HELP_TEXT_SRC = ../../src/help_text.c
 MANUAL_TEXT_SRC = ../../src/manual_text.c
@@ -41,10 +42,10 @@ test_chat_room: test_chat_room.c $(CHAT_ROOM_SRC) $(MESSAGE_SRC) $(UTF8_SRC) $(C
 test_history_view: test_history_view.c $(HISTORY_VIEW_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_i18n: test_i18n.c $(I18N_SRC)
+test_i18n: test_i18n.c $(I18N_SRC) $(I18N_TEXT_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_system_message: test_system_message.c $(SYSTEM_MESSAGE_SRC) $(I18N_SRC)
+test_system_message: test_system_message.c $(SYSTEM_MESSAGE_SRC) $(I18N_SRC) $(I18N_TEXT_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_command_catalog: test_command_catalog.c $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
