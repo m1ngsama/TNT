@@ -8,6 +8,7 @@ FAIL=0
 BIN="../tnt"
 SERVER_PID=""
 STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-basic-test.XXXXXX")
+SSH_HEALTH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
 
 cleanup() {
     if [ -n "$SERVER_PID" ]; then
@@ -18,6 +19,19 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+wait_for_health() {
+    out=""
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        if [ -n "$SERVER_PID" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            return 1
+        fi
+        out=$(ssh $SSH_HEALTH_OPTS localhost health 2>/dev/null || true)
+        [ "$out" = "ok" ] && return 0
+        sleep 1
+    done
+    return 1
+}
 
 echo "=== TNT Basic Tests ==="
 
@@ -34,10 +48,9 @@ fi
 # Start server
 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
-sleep 2
 
-# Test 1: Server started
-if kill -0 $SERVER_PID 2>/dev/null; then
+# Test 1: Server started and accepts exec health checks
+if wait_for_health; then
     echo "✓ Server started"
     PASS=$((PASS + 1))
 else
