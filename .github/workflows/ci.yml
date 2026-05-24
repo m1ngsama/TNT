@@ -42,7 +42,56 @@ jobs:
     - name: Check for memory leaks
       if: runner.os == 'Linux'
       run: |
+        set -eu
         sudo apt-get install -y valgrind
-        timeout 10 valgrind --leak-check=full --error-exitcode=1 ./tnt &
-        sleep 5
-        pkill tnt || true
+        STATE_DIR=$(mktemp -d)
+        SERVER_LOG="$STATE_DIR/server.log"
+        VALGRIND_LOG="$STATE_DIR/valgrind.log"
+        PORT=13990
+        SERVER_PID=""
+
+        cleanup() {
+          if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          fi
+          rm -rf "$STATE_DIR"
+        }
+        trap cleanup EXIT
+
+        TNT_RATE_LIMIT=0 valgrind --leak-check=full --error-exitcode=99 --log-file="$VALGRIND_LOG" \
+          ./tnt -p "$PORT" -d "$STATE_DIR" >"$SERVER_LOG" 2>&1 &
+        SERVER_PID=$!
+
+        READY=0
+        for _ in $(seq 1 15); do
+          if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            break
+          fi
+          OUT=$(ssh -n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o BatchMode=yes -p "$PORT" localhost health 2>/dev/null || true)
+          if [ "$OUT" = "ok" ]; then
+            READY=1
+            break
+          fi
+          sleep 1
+        done
+
+        if [ "$READY" -ne 1 ]; then
+          echo "::group::server log"
+          cat "$SERVER_LOG" || true
+          echo "::endgroup::"
+          echo "::group::valgrind log"
+          cat "$VALGRIND_LOG" || true
+          echo "::endgroup::"
+          exit 1
+        fi
+
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+        SERVER_PID=""
+
+        if ! grep -q "ERROR SUMMARY: 0 errors" "$VALGRIND_LOG"; then
+          cat "$VALGRIND_LOG"
+          exit 1
+        fi

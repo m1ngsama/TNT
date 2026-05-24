@@ -62,6 +62,8 @@
   sleeping for a fixed startup delay.
 - Connection-limit tests now use shared SSH health readiness checks for both
   concurrent-session and connection-rate scenarios.
+- CI memory-leak smoke checks now use an isolated state directory, wait for
+  real SSH readiness, and clean up the exact server PID instead of `pkill`.
 - Refreshed README and quick-reference module maps to match the current
   `cli_text`, `help_text`, `support_text`, i18n, exec, and rate-limit modules.
 - NORMAL mode now opens at the latest visible messages instead of the oldest
