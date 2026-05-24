@@ -3,17 +3,19 @@
 ## Build
 
 ```sh
-make              # normal build
-make debug        # with symbols
-make asan         # AddressSanitizer
-make release      # optimized
+make                    # normal build
+make debug              # with symbols
+make asan               # AddressSanitizer
+make release            # optimized
+make release-check      # release preflight
 ```
 
 ## Test
 
 ```sh
-./test_basic.sh           # functional tests
-./test_stress.sh 20 60    # 20 clients, 60 seconds
+make test                 # unit + integration tests
+make ci-test              # local CI-equivalent checks
+make stress-test          # concurrent-client stress test
 ```
 
 ## Debug
@@ -34,10 +36,21 @@ make check
 
 ```
 main.c           → entry point, signal handling
-ssh_server.c     → SSH protocol, client threads
+cli_text.c       → startup CLI text
+command_catalog.c → COMMAND-mode command metadata
+commands.c       → COMMAND-mode command dispatch
+exec_catalog.c   → SSH exec help metadata
+exec.c           → SSH exec command dispatch
+ssh_server.c     → SSH listener setup
+bootstrap.c      → SSH authentication/session bootstrap
+input.c          → interactive session loop
 chat_room.c      → client list, message broadcast
+history_view.c   → message viewport and scroll state
+i18n.c           → UI language and locale selection
+i18n_text.c      → shared UI text catalog
 message.c        → persistent storage
 tui.c            → terminal rendering
+tui_status.c     → status/input-line rendering
 utf8.c           → UTF-8 string handling
 ```
 
@@ -70,9 +83,12 @@ utf8.c           → UTF-8 string handling
 
 ## Adding Features
 
-1. Add new command in `execute_command()` (ssh_server.c:190)
-2. Add new mode in `client_mode_t` enum (common.h:30)
-3. Add new vim key in `handle_key()` (ssh_server.c:220)
+1. Add interactive command metadata in `src/command_catalog.c`.
+2. Add interactive command behavior in `src/commands.c`.
+3. Add SSH exec metadata in `src/exec_catalog.c` and dispatch in `src/exec.c`
+   only when the feature should be scriptable.
+4. Put shared localized strings in `src/i18n_text.c`.
+5. Add or update the narrowest unit/integration test for the behavior.
 
 ## Debugging Tips
 

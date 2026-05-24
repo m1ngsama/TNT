@@ -357,29 +357,31 @@ void utf8_remove_last_word(char *str) {
 
 ### Adding a New Command
 
-1. **For interactive COMMAND mode, add to `commands_dispatch()` in `src/commands.c`:**
+1. **For interactive COMMAND mode, add command metadata in `src/command_catalog.c`:**
 ```c
-if (strcmp(cmd, "newcmd") == 0) {
-    pos += snprintf(output + pos, sizeof(output) - pos,
-                   "New command output\n");
+{
+    {TNT_COMMAND_NEWCMD, "newcmd", {"newcmd", NULL}, false},
+    ":newcmd", ":newcmd",
+    "Show new output", "显示新输出",
+    ":newcmd", ":newcmd", 3
 }
 ```
 
-2. **For SSH exec mode, add the stable command path in `src/exec.c` if it should work non-interactively.**
+2. **Add interactive behavior in `src/commands.c` by switching on the command ID.**
 
-3. **Move user-facing strings through `src/i18n.c` when they need localization or are reused.**
+3. **For SSH exec mode, add help metadata in `src/exec_catalog.c` and the stable command path in `src/exec.c` if it should work non-interactively.**
 
-4. **Update user help text in `src/manual_text.c` and `src/help_text.c`:**
-```c
-"AVAILABLE COMMANDS:\n"
-"  newcmd         - Description of new command\n"
-```
+4. **Move shared user-facing strings through `src/i18n_text.c` when they need localization or are reused.  Keep command syntax and metavariables ASCII.**
 
-5. **Add tests in the narrowest target:**
+5. **Update user help surfaces through their catalogs.  Avoid duplicating command rows by hand.**
+
+6. **Add tests in the narrowest target:**
 ```sh
 tests/test_exec_mode.sh          # exec command behavior
 tests/test_interactive_input.sh  # COMMAND-mode/TUI behavior
 tests/unit/test_i18n.c           # localized shared text
+tests/unit/test_command_catalog.c # interactive command metadata
+tests/unit/test_exec_catalog.c   # exec command help metadata
 ```
 
 ### Adding a New Keybinding

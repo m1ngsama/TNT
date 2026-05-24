@@ -14,6 +14,9 @@
   instead of localizing the `[options]` metavariable.
 - Moved SSH exec help rows into an `exec_catalog` module so command metadata
   no longer lives as one large translated blob inside the shared i18n table.
+- Refreshed contributor and development guidance so new commands are added
+  through `command_catalog`, `exec_catalog`, and `i18n_text` instead of stale
+  `ssh_server.c` / inline-`strcmp` instructions.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.
