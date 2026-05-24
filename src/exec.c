@@ -126,6 +126,17 @@ static int exec_command_help(client_t *client) {
     return client_send(client, help_text, pos) == 0 ? 0 : 1;
 }
 
+static int exec_command_usage(client_t *client, tnt_exec_command_id_t id) {
+    char usage[128];
+    size_t pos = 0;
+
+    usage[0] = '\0';
+    exec_catalog_append_usage(usage, sizeof(usage), &pos, id,
+                              client->ui_lang);
+    client_printf(client, "%s", usage);
+    return 64;
+}
+
 static int exec_command_health(client_t *client) {
     static const char ok[] = "ok\n";
     return client_send(client, ok, sizeof(ok) - 1) == 0 ? 0 : 1;
@@ -289,9 +300,7 @@ static int exec_command_tail(client_t *client, const char *args) {
     int rc;
 
     if (parse_tail_count(args, &requested) < 0) {
-        client_printf(client, "%s",
-                      i18n_text(client->ui_lang, I18N_EXEC_TAIL_USAGE));
-        return 64;
+        return exec_command_usage(client, TNT_EXEC_COMMAND_TAIL);
     }
 
     pthread_rwlock_rdlock(&g_room->lock);
@@ -343,9 +352,7 @@ static int exec_command_post(client_t *client, const char *args) {
     };
 
     if (!args || args[0] == '\0') {
-        client_printf(client, "%s",
-                      i18n_text(client->ui_lang, I18N_EXEC_POST_USAGE));
-        return 64;
+        return exec_command_usage(client, TNT_EXEC_COMMAND_POST);
     }
 
     strncpy(content, args, sizeof(content) - 1);
@@ -409,26 +416,18 @@ int exec_dispatch(client_t *client) {
     }
 
     if (exec_catalog_match(command_copy, &command_id, &args)) {
+        if (!exec_catalog_args_valid(command_id, args)) {
+            return exec_command_usage(client, command_id);
+        }
+
         switch (command_id) {
             case TNT_EXEC_COMMAND_HELP:
                 return exec_command_help(client);
             case TNT_EXEC_COMMAND_HEALTH:
                 return exec_command_health(client);
             case TNT_EXEC_COMMAND_USERS:
-                if (args && strcmp(args, "--json") != 0) {
-                    client_printf(client, "%s",
-                                  i18n_text(client->ui_lang,
-                                            I18N_EXEC_USERS_USAGE));
-                    return 64;
-                }
                 return exec_command_users(client, args != NULL);
             case TNT_EXEC_COMMAND_STATS:
-                if (args && strcmp(args, "--json") != 0) {
-                    client_printf(client, "%s",
-                                  i18n_text(client->ui_lang,
-                                            I18N_EXEC_STATS_USAGE));
-                    return 64;
-                }
                 return exec_command_stats(client, args != NULL);
             case TNT_EXEC_COMMAND_TAIL:
                 return exec_command_tail(client, args);

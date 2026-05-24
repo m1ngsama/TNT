@@ -51,6 +51,17 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+HEALTH_USAGE=$(ssh $SSH_OPTS localhost health extra 2>/dev/null || true)
+printf '%s\n' "$HEALTH_USAGE" | grep -q '^health: 用法: health$'
+if [ $? -eq 0 ]; then
+    echo "✓ no-arg exec usage follows TNT_LANG"
+    PASS=$((PASS + 1))
+else
+    echo "✗ no-arg exec usage output unexpected"
+    printf '%s\n' "$HEALTH_USAGE"
+    FAIL=$((FAIL + 1))
+fi
+
 STATS_OUTPUT=$(ssh $SSH_OPTS localhost stats 2>/dev/null || true)
 printf '%s\n' "$STATS_OUTPUT" | grep -q '^status ok$' &&
 printf '%s\n' "$STATS_OUTPUT" | grep -q '^online_users 0$'
@@ -106,6 +117,17 @@ if [ $? -eq 0 ]; then
 else
     echo "✗ post usage output unexpected"
     printf '%s\n' "$POST_USAGE"
+    FAIL=$((FAIL + 1))
+fi
+
+USERS_USAGE=$(ssh $SSH_OPTS localhost users --xml 2>/dev/null || true)
+printf '%s\n' "$USERS_USAGE" | grep -q '^users: 用法: users \[--json\]$'
+if [ $? -eq 0 ]; then
+    echo "✓ users usage follows TNT_LANG"
+    PASS=$((PASS + 1))
+else
+    echo "✗ users usage output unexpected"
+    printf '%s\n' "$USERS_USAGE"
     FAIL=$((FAIL + 1))
 fi
 

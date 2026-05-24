@@ -208,22 +208,6 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         "Type :help for help\n",
         "输入 :help 查看帮助\n"
     },
-    [I18N_EXEC_USERS_USAGE] = {
-        "users: usage: users [--json]\n",
-        "users: 用法: users [--json]\n"
-    },
-    [I18N_EXEC_STATS_USAGE] = {
-        "stats: usage: stats [--json]\n",
-        "stats: 用法: stats [--json]\n"
-    },
-    [I18N_EXEC_TAIL_USAGE] = {
-        "tail: usage: tail [N] | tail -n N\n",
-        "tail: 用法: tail [N] | tail -n N\n"
-    },
-    [I18N_EXEC_POST_USAGE] = {
-        "post: usage: post MESSAGE\n",
-        "post: 用法: post MESSAGE\n"
-    },
     [I18N_EXEC_POST_EMPTY] = {
         "post: message cannot be empty\n",
         "post: 消息不能为空\n"

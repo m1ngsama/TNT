@@ -5,30 +5,51 @@ typedef struct {
     const char *name;
     const char *alias;
     const char *usage;
+    const char *usage_syntax;
     const char *summary_en;
     const char *summary_zh;
+    bool no_args;
+    bool optional_json;
+    bool requires_args;
 } exec_catalog_entry_t;
 
 static const exec_catalog_entry_t entries[] = {
     {TNT_EXEC_COMMAND_HELP, "help", "--help",
-     "help", "Show this help", "显示此帮助"},
+     "help", "help", "Show this help", "显示此帮助", true, false, false},
     {TNT_EXEC_COMMAND_HEALTH, "health", NULL,
-     "health", "Print service health", "输出服务健康状态"},
+     "health", "health", "Print service health", "输出服务健康状态",
+     true, false, false},
     {TNT_EXEC_COMMAND_USERS, "users", NULL,
-     "users [--json]", "List online users", "列出在线用户"},
+     "users [--json]", "users [--json]",
+     "List online users", "列出在线用户", false, true, false},
     {TNT_EXEC_COMMAND_STATS, "stats", NULL,
-     "stats [--json]", "Print room statistics", "输出房间统计"},
+     "stats [--json]", "stats [--json]",
+     "Print room statistics", "输出房间统计", false, true, false},
     {TNT_EXEC_COMMAND_TAIL, "tail", NULL,
-     "tail [N]", "Print recent messages", "输出最近消息"},
+     "tail [N]", "tail [N] | tail -n N",
+     "Print recent messages", "输出最近消息", false, false, false},
     {TNT_EXEC_COMMAND_TAIL, "tail", NULL,
-     "tail -n N", "Print recent messages", "输出最近消息"},
+     "tail -n N", "tail [N] | tail -n N",
+     "Print recent messages", "输出最近消息", false, false, false},
     {TNT_EXEC_COMMAND_POST, "post", NULL,
-     "post MESSAGE", "Post a message non-interactively", "非交互发送消息"},
+     "post MESSAGE", "post MESSAGE",
+     "Post a message non-interactively", "非交互发送消息",
+     false, false, true},
     {TNT_EXEC_COMMAND_POST, "post", NULL,
-     "post \"/me act\"", "Post an action message", "发送动作消息"},
+     "post \"/me act\"", "post MESSAGE",
+     "Post an action message", "发送动作消息", false, false, true},
     {TNT_EXEC_COMMAND_EXIT, "exit", NULL,
-     "exit", "Exit successfully", "成功退出"}
+     "exit", "exit", "Exit successfully", "成功退出", true, false, false}
 };
+
+static const exec_catalog_entry_t *entry_for_id(tnt_exec_command_id_t id) {
+    for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
+        if (entries[i].id == id) {
+            return &entries[i];
+        }
+    }
+    return NULL;
+}
 
 static const char *skip_spaces(const char *value) {
     while (value && *value && (*value == ' ' || *value == '\t')) {
@@ -84,6 +105,24 @@ bool exec_catalog_match(const char *line, tnt_exec_command_id_t *id,
     return false;
 }
 
+bool exec_catalog_args_valid(tnt_exec_command_id_t id, const char *args) {
+    const exec_catalog_entry_t *entry = entry_for_id(id);
+
+    if (!entry) {
+        return false;
+    }
+    if (entry->no_args) {
+        return !args || args[0] == '\0';
+    }
+    if (entry->optional_json) {
+        return !args || strcmp(args, "--json") == 0;
+    }
+    if (entry->requires_args) {
+        return args && args[0] != '\0';
+    }
+    return true;
+}
+
 void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
                               ui_lang_t lang) {
     if (lang == UI_LANG_ZH) {
@@ -98,4 +137,20 @@ void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
         buffer_appendf(buffer, buf_size, pos, "  %-15s %s\n",
                        entries[i].usage, summary);
     }
+}
+
+void exec_catalog_append_usage(char *buffer, size_t buf_size, size_t *pos,
+                               tnt_exec_command_id_t id, ui_lang_t lang) {
+    const exec_catalog_entry_t *entry = entry_for_id(id);
+
+    if (!entry) {
+        return;
+    }
+    if (lang == UI_LANG_ZH) {
+        buffer_appendf(buffer, buf_size, pos, "%s: 用法: %s\n",
+                       entry->name, entry->usage_syntax);
+        return;
+    }
+    buffer_appendf(buffer, buf_size, pos, "%s: usage: %s\n",
+                   entry->name, entry->usage_syntax);
 }

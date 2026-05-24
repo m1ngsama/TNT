@@ -21,6 +21,8 @@
   reducing duplicate command knowledge in `src/exec.c`.
 - Replaced hard-coded `chat.m1ng.space` examples with `chat.example.com` so
   public documentation does not imply a specific production host.
+- Moved SSH exec usage text and argument-shape checks into `exec_catalog`, so
+  `src/exec.c` no longer duplicates `--json` and required-message validation.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.
