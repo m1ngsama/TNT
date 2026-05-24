@@ -41,15 +41,12 @@ bool i18n_try_parse_lang(const char *value, help_lang_t *lang) {
         return false;
     }
 
-    if (starts_with_lang(value, "zh") ||
-        starts_with_lang(value, "cn") ||
-        starts_with_lang(value, "chinese")) {
+    if (starts_with_lang(value, "zh")) {
         if (lang) *lang = LANG_ZH;
         return true;
     }
 
     if (starts_with_lang(value, "en") ||
-        starts_with_lang(value, "english") ||
         starts_with_lang(value, "c") ||
         starts_with_lang(value, "posix")) {
         if (lang) *lang = LANG_EN;

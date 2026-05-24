@@ -10,6 +10,13 @@
   instead of the removed support entry.
 - The concise manual module is now named `manual_text`, and the redundant
   interactive `:commands` entrypoint was removed.
+- The concise `:help` manual now stays within one command-output screen so it
+  does not truncate on normal terminal sizes.
+- Language selection is limited to stable codes (`en`, `zh`) and
+  locale-shaped environment values; natural-language labels are not accepted
+  as command arguments.
+- Documented i18n and user-facing text rules for English-first source text,
+  stable command syntax, concise help copy, and translation-only localization.
 
 ## 1.0.1 - 2026-05-24 - Release candidate hardening
 

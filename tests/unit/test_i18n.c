@@ -21,14 +21,20 @@ TEST(parse_explicit_languages) {
 
     assert(i18n_parse_lang("zh", LANG_EN) == LANG_ZH);
     assert(i18n_parse_lang("zh_CN.UTF-8", LANG_EN) == LANG_ZH);
-    assert(i18n_parse_lang("cn", LANG_EN) == LANG_ZH);
     assert(i18n_parse_lang("en", LANG_ZH) == LANG_EN);
     assert(i18n_parse_lang("en_US.UTF-8", LANG_ZH) == LANG_EN);
+    assert(i18n_parse_lang("C", LANG_ZH) == LANG_EN);
+    assert(i18n_parse_lang("POSIX", LANG_ZH) == LANG_EN);
 
     assert(i18n_try_parse_lang("zh", &lang) == true);
     assert(lang == LANG_ZH);
     assert(i18n_try_parse_lang("en", &lang) == true);
     assert(lang == LANG_EN);
+    assert(i18n_try_parse_lang("cn", &lang) == false);
+    assert(i18n_try_parse_lang("english", &lang) == false);
+    assert(i18n_try_parse_lang("chinese", &lang) == false);
+    assert(i18n_try_parse_lang("中文", &lang) == false);
+    assert(i18n_try_parse_lang("英文", &lang) == false);
     assert(i18n_try_parse_lang("fr", &lang) == false);
 }
 
@@ -44,7 +50,7 @@ TEST(parse_ignores_surrounding_whitespace) {
     assert(i18n_try_parse_lang("  zh  ", &lang) == true);
     assert(lang == LANG_ZH);
     assert(i18n_parse_lang("\ten_US.UTF-8\n", LANG_ZH) == LANG_EN);
-    assert(i18n_parse_lang(" english ", LANG_ZH) == LANG_EN);
+    assert(i18n_try_parse_lang(" english ", &lang) == false);
     assert(i18n_try_parse_lang("zh CN", &lang) == false);
 
     setenv("TNT_LANG", " zh ", 1);
@@ -109,9 +115,9 @@ TEST(text_lookup_matches_language) {
     assert(strstr(i18n_text(LANG_ZH, I18N_SEARCH_HEADER_FORMAT),
                   "搜索") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_LANG_CURRENT_FORMAT),
-                  "Current language") != NULL);
+                  "lang <en|zh>") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_LANG_CURRENT_FORMAT),
-                  "当前语言") != NULL);
+                  "lang <en|zh>") != NULL);
     assert(strstr(i18n_text(LANG_EN, I18N_UNKNOWN_COMMAND_FORMAT),
                   "Unknown command") != NULL);
     assert(strstr(i18n_text(LANG_ZH, I18N_UNKNOWN_COMMAND_FORMAT),

@@ -9,9 +9,10 @@ Complete guide for TNT developers and contributors.
 3. [Building and Testing](#building-and-testing)
 4. [Core Components](#core-components)
 5. [Adding Features](#adding-features)
-6. [Debugging](#debugging)
-7. [Performance Optimization](#performance-optimization)
-8. [Contributing Guidelines](#contributing-guidelines)
+6. [User-Facing Text and i18n](#user-facing-text-and-i18n)
+7. [Debugging](#debugging)
+8. [Performance Optimization](#performance-optimization)
+9. [Contributing Guidelines](#contributing-guidelines)
 
 ---
 
@@ -392,6 +393,67 @@ case MODE_INSERT:
 2. **Update `src/help_text.c` and status hints in `src/i18n.c` / `src/tui_status.c` if the binding is user-visible.**
 
 3. **Document in README.md**
+
+---
+
+## User-Facing Text and i18n
+
+TNT should follow Unix/open-source conventions for user-facing text:
+English is the source language, command syntax is stable ASCII, and
+translations are presentation only.  A localized interface must never create
+localized command names, localized option names, or localized configuration
+keys.
+
+### Principles
+
+1. **English-first source text**
+   - Keep code identifiers, comments, command names, option names, and
+     documentation source in English.
+   - Treat English text as the canonical source text for future gettext-style
+     catalogs.
+   - Do not use translated text as a programmatic key.
+
+2. **Stable language identifiers**
+   - Interactive `:lang` accepts only stable language codes: `en` and `zh`.
+   - Locale detection may accept locale-shaped values such as
+     `en_US.UTF-8`, `zh_CN.UTF-8`, `C`, and `POSIX`.
+   - Do not accept natural-language labels such as `english`, `chinese`,
+     `中文`, or `英文` as command arguments.
+   - If regional variants are added later, add explicit locale identifiers
+     such as `zh_TW` instead of overloading `zh`.
+
+3. **Concise writing**
+   - Prefer imperative verbs: "Show", "Switch", "Disconnect".
+   - Keep command descriptions noun-like or verb-like, not explanatory prose.
+   - Avoid tutorial language in `:help`; put detailed behavior in `tnt(1)`.
+   - Keep `:help` within one command-output screen.  `?` is the full key
+     reference.
+
+4. **One behavior, one name**
+   - Do not create parallel help commands for the same task.
+   - Keep `:help` for the concise manual and `?` for the full key reference.
+   - Keep SSH exec commands small, scriptable, and stable.
+
+5. **Translation safety**
+   - Use whole sentences or whole phrases; do not concatenate translated
+     fragments.
+   - Keep placeholders visible and stable, for example `%s`, `%d`,
+     `<user>`, and `<message>`.
+   - Every new user-facing string needs tests for at least English fallback
+     and Chinese output while this project has two UI languages.
+
+### Current Limitations
+
+The current `src/i18n.c` implementation is a small-project translation table
+implemented in C, not a full gettext catalog.  It is acceptable for two
+languages, but adding more languages should first split message lookup from
+language parsing and move toward catalog-like storage.  Do not grow the
+current approach by adding ad hoc branches for every locale.
+
+Relevant conventions:
+- POSIX locale variables: `LANG`, `LC_ALL`, `LC_MESSAGES`.
+- GNU gettext source preparation: decent English, whole sentences, and
+  format placeholders rather than string concatenation.
 
 ---
 
