@@ -22,10 +22,10 @@ static const command_catalog_entry_t entries[] = {
     },
     {
         {TNT_COMMAND_MSG, "msg", {"msg", "w", NULL}, true},
-        ":msg <user> <text>, :w <user> <text>",
-        ":msg <用户> <文本>, :w <用户> <文本>",
-        "Whisper to user", "私聊",
-        ":msg <user> <text>", ":msg <用户> <文本>", 2
+        ":msg <user> <message>, :w <user> <message>",
+        ":msg <user> <message>, :w <user> <message>",
+        "Send private message", "发送私信",
+        ":msg <user> <message>", ":msg <user> <message>", 2
     },
     {
         {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}, false},
@@ -35,9 +35,9 @@ static const command_catalog_entry_t entries[] = {
     },
     {
         {TNT_COMMAND_NICK, "nick", {"nick", "name", NULL}, true},
-        ":nick <name>, :name <name>", ":nick <名字>, :name <名字>",
+        ":nick <name>, :name <name>", ":nick <name>, :name <name>",
         "Change nickname", "更改昵称",
-        ":nick <name>", ":nick <名字>", 2
+        ":nick <name>", ":nick <name>", 2
     },
     {
         {TNT_COMMAND_LAST, "last", {"last", NULL}, true},
@@ -47,9 +47,9 @@ static const command_catalog_entry_t entries[] = {
     },
     {
         {TNT_COMMAND_SEARCH, "search", {"search", NULL}, true},
-        ":search <keyword>", ":search <关键词>",
+        ":search <keyword>", ":search <keyword>",
         "Search message history", "搜索消息历史",
-        ":search <keyword>", ":search <词>", 1
+        ":search <keyword>", ":search <keyword>", 1
     },
     {
         {TNT_COMMAND_MUTE_JOINS, "mute-joins", {"mute-joins", "mute", NULL}, false},

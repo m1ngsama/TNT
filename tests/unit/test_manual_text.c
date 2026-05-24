@@ -52,6 +52,8 @@ TEST(interactive_manual_matches_language) {
     assert(strstr(zh, "命令") != NULL);
     assert(strstr(zh, ":lang en|zh") != NULL);
     assert(strstr(zh, ":mute-joins") != NULL);
+    assert(strstr(zh, ":msg <user> <message>") != NULL);
+    assert(strstr(zh, "<用户>") == NULL);
     assert(strstr(zh, ":mute-joins, :clear, :q") != NULL);
     assert(strstr(zh, ":support") == NULL);
     assert(strstr(zh, ":commands") == NULL);

@@ -107,10 +107,10 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         "在线用户"
     },
     [I18N_MSG_USAGE] = {
-        "Usage: msg <username> <message>\n"
-        "       w <username> <message>\n",
-        "用法: msg <用户名> <消息>\n"
-        "      w <用户名> <消息>\n"
+        "Usage: msg <user> <message>\n"
+        "       w <user> <message>\n",
+        "用法: msg <user> <message>\n"
+        "      w <user> <message>\n"
     },
     [I18N_MSG_SENT_FORMAT] = {
         "Whisper sent to %s\n",
@@ -129,8 +129,8 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
         "(空)"
     },
     [I18N_NICK_USAGE] = {
-        "Usage: nick <new_username>\n",
-        "用法: nick <新用户名>\n"
+        "Usage: nick <name>\n",
+        "用法: nick <name>\n"
     },
     [I18N_NICK_INVALID] = {
         "Invalid username\n",
@@ -158,7 +158,7 @@ static const i18n_text_entry_t text_catalog[I18N_TEXT_COUNT] = {
     },
     [I18N_SEARCH_USAGE] = {
         "Usage: search <keyword>\n",
-        "用法: search <关键词>\n"
+        "用法: search <keyword>\n"
     },
     [I18N_SEARCH_HEADER_FORMAT] = {
         "--- Search: \"%s\" (%d match(es)) ---\n",
