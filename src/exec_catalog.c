@@ -1,13 +1,14 @@
 #include "exec_catalog.h"
 
+#include "i18n.h"
+
 typedef struct {
     tnt_exec_command_id_t id;
     const char *name;
     const char *alias;
     const char *usage;
     const char *usage_syntax;
-    const char *summary_en;
-    const char *summary_zh;
+    i18n_string_t summary;
     bool no_args;
     bool optional_json;
     bool requires_args;
@@ -15,31 +16,39 @@ typedef struct {
 
 static const exec_catalog_entry_t entries[] = {
     {TNT_EXEC_COMMAND_HELP, "help", "--help",
-     "help", "help", "Show this help", "显示此帮助", true, false, false},
+     "help", "help", I18N_STRING("Show this help", "显示此帮助"),
+     true, false, false},
     {TNT_EXEC_COMMAND_HEALTH, "health", NULL,
-     "health", "health", "Print service health", "输出服务健康状态",
+     "health", "health",
+     I18N_STRING("Print service health", "输出服务健康状态"),
      true, false, false},
     {TNT_EXEC_COMMAND_USERS, "users", NULL,
      "users [--json]", "users [--json]",
-     "List online users", "列出在线用户", false, true, false},
+     I18N_STRING("List online users", "列出在线用户"),
+     false, true, false},
     {TNT_EXEC_COMMAND_STATS, "stats", NULL,
      "stats [--json]", "stats [--json]",
-     "Print room statistics", "输出房间统计", false, true, false},
+     I18N_STRING("Print room statistics", "输出房间统计"),
+     false, true, false},
     {TNT_EXEC_COMMAND_TAIL, "tail", NULL,
      "tail [N]", "tail [N] | tail -n N",
-     "Print recent messages", "输出最近消息", false, false, false},
+     I18N_STRING("Print recent messages", "输出最近消息"),
+     false, false, false},
     {TNT_EXEC_COMMAND_TAIL, "tail", NULL,
      "tail -n N", "tail [N] | tail -n N",
-     "Print recent messages", "输出最近消息", false, false, false},
+     I18N_STRING("Print recent messages", "输出最近消息"),
+     false, false, false},
     {TNT_EXEC_COMMAND_POST, "post", NULL,
      "post MESSAGE", "post MESSAGE",
-     "Post a message non-interactively", "非交互发送消息",
+     I18N_STRING("Post a message non-interactively", "非交互发送消息"),
      false, false, true},
     {TNT_EXEC_COMMAND_POST, "post", NULL,
      "post \"/me act\"", "post MESSAGE",
-     "Post an action message", "发送动作消息", false, false, true},
+     I18N_STRING("Post an action message", "发送动作消息"),
+     false, false, true},
     {TNT_EXEC_COMMAND_EXIT, "exit", NULL,
-     "exit", "exit", "Exit successfully", "成功退出", true, false, false}
+     "exit", "exit", I18N_STRING("Exit successfully", "成功退出"),
+     true, false, false}
 };
 
 static const exec_catalog_entry_t *entry_for_id(tnt_exec_command_id_t id) {
@@ -132,8 +141,7 @@ void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
     }
 
     for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
-        const char *summary = lang == UI_LANG_ZH ? entries[i].summary_zh
-                                                 : entries[i].summary_en;
+        const char *summary = i18n_string(entries[i].summary, lang);
         buffer_appendf(buffer, buf_size, pos, "  %-15s %s\n",
                        entries[i].usage, summary);
     }

@@ -37,6 +37,12 @@ TEST(generates_localized_exec_help) {
     assert(strstr(zh, "post MESSAGE") != NULL);
     assert(strstr(zh, "support") == NULL);
     assert_ascii_angle_placeholders(zh);
+
+    en[0] = '\0';
+    en_pos = 0;
+    exec_catalog_append_help(en, sizeof(en), &en_pos, (ui_lang_t)99);
+    assert(strstr(en, "TNT exec interface") != NULL);
+    assert(strstr(en, "Show this help") != NULL);
 }
 
 TEST(matches_exec_commands_and_args) {

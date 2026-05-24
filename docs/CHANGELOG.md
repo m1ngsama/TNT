@@ -56,6 +56,8 @@
   English/Chinese as hard-coded struct fields.
 - `command_catalog` now uses the shared localized-string helper for help,
   manual, and usage text instead of per-field English/Chinese members.
+- `exec_catalog` now uses the same localized-string helper for exec help
+  summaries.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 
