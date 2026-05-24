@@ -17,6 +17,8 @@
 - Refreshed contributor and development guidance so new commands are added
   through `command_catalog`, `exec_catalog`, and `i18n_text` instead of stale
   `ssh_server.c` / inline-`strcmp` instructions.
+- `exec_catalog` now owns SSH exec command matching as well as help metadata,
+  reducing duplicate command knowledge in `src/exec.c`.
 - Renamed the internal language state from help-oriented names to
   UI-language names (`ui_lang_t`, `client->ui_lang`, and
   `i18n_*_ui_lang`) so future i18n work has a correctly named seam.

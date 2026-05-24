@@ -39,7 +39,7 @@ main.c           → entry point, signal handling
 cli_text.c       → startup CLI text
 command_catalog.c → COMMAND-mode command metadata
 commands.c       → COMMAND-mode command dispatch
-exec_catalog.c   → SSH exec help metadata
+exec_catalog.c   → SSH exec command matching and help metadata
 exec.c           → SSH exec command dispatch
 ssh_server.c     → SSH listener setup
 bootstrap.c      → SSH authentication/session bootstrap

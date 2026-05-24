@@ -74,7 +74,7 @@ src/
 ├── input.c          - Interactive session loop and key handling
 ├── commands.c       - COMMAND-mode command dispatch
 ├── command_catalog.c - COMMAND-mode names, aliases, and help summaries
-├── exec_catalog.c   - SSH exec command help metadata
+├── exec_catalog.c   - SSH exec command matching and help metadata
 ├── exec.c           - SSH exec command dispatch
 ├── chat_room.c      - Chat room logic and message broadcasting
 ├── message.c        - Message persistence (RFC3339 format)

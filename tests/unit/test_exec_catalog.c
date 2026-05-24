@@ -39,10 +39,43 @@ TEST(generates_localized_exec_help) {
     assert_ascii_angle_placeholders(zh);
 }
 
+TEST(matches_exec_commands_and_args) {
+    tnt_exec_command_id_t id;
+    const char *args;
+
+    assert(exec_catalog_match("help", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_HELP);
+    assert(args == NULL);
+
+    assert(exec_catalog_match("--help", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_HELP);
+    assert(args == NULL);
+
+    assert(exec_catalog_match("users --json", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_USERS);
+    assert(strcmp(args, "--json") == 0);
+
+    assert(exec_catalog_match("tail -n 20", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_TAIL);
+    assert(strcmp(args, "-n 20") == 0);
+
+    assert(exec_catalog_match("post hello world", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_POST);
+    assert(strcmp(args, "hello world") == 0);
+
+    assert(exec_catalog_match("exit", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_EXIT);
+    assert(args == NULL);
+
+    assert(!exec_catalog_match("usersx", &id, &args));
+    assert(!exec_catalog_match("nope", &id, &args));
+}
+
 int main(void) {
     printf("Running exec catalog unit tests...\n\n");
 
     RUN_TEST(generates_localized_exec_help);
+    RUN_TEST(matches_exec_commands_and_args);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;

@@ -397,68 +397,57 @@ static int exec_command_post(client_t *client, const char *args) {
 
 int exec_dispatch(client_t *client) {
     char command_copy[MAX_EXEC_COMMAND_LEN];
-    char *cmd;
-    char *args;
+    tnt_exec_command_id_t command_id;
+    const char *args = NULL;
 
     strncpy(command_copy, client->exec_command, sizeof(command_copy) - 1);
     command_copy[sizeof(command_copy) - 1] = '\0';
     trim_ascii_whitespace(command_copy);
 
-    cmd = command_copy;
-    if (*cmd == '\0') {
+    if (command_copy[0] == '\0') {
         return exec_command_help(client);
     }
 
-    args = cmd;
-    while (*args && !isspace((unsigned char)*args)) {
-        args++;
-    }
-    if (*args) {
-        *args++ = '\0';
-        while (*args && isspace((unsigned char)*args)) {
-            args++;
+    if (exec_catalog_match(command_copy, &command_id, &args)) {
+        switch (command_id) {
+            case TNT_EXEC_COMMAND_HELP:
+                return exec_command_help(client);
+            case TNT_EXEC_COMMAND_HEALTH:
+                return exec_command_health(client);
+            case TNT_EXEC_COMMAND_USERS:
+                if (args && strcmp(args, "--json") != 0) {
+                    client_printf(client, "%s",
+                                  i18n_text(client->ui_lang,
+                                            I18N_EXEC_USERS_USAGE));
+                    return 64;
+                }
+                return exec_command_users(client, args != NULL);
+            case TNT_EXEC_COMMAND_STATS:
+                if (args && strcmp(args, "--json") != 0) {
+                    client_printf(client, "%s",
+                                  i18n_text(client->ui_lang,
+                                            I18N_EXEC_STATS_USAGE));
+                    return 64;
+                }
+                return exec_command_stats(client, args != NULL);
+            case TNT_EXEC_COMMAND_TAIL:
+                return exec_command_tail(client, args);
+            case TNT_EXEC_COMMAND_POST:
+                return exec_command_post(client, args);
+            case TNT_EXEC_COMMAND_EXIT:
+                return 0;
         }
-    } else {
-        args = NULL;
     }
 
-    if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0) {
-        return exec_command_help(client);
-    }
-    if (strcmp(cmd, "health") == 0) {
-        return exec_command_health(client);
-    }
-    if (strcmp(cmd, "users") == 0) {
-        if (args && strcmp(args, "--json") != 0) {
-            client_printf(client, "%s",
-                          i18n_text(client->ui_lang,
-                                    I18N_EXEC_USERS_USAGE));
-            return 64;
+    for (char *p = command_copy; *p; p++) {
+        if (isspace((unsigned char)*p)) {
+            *p = '\0';
+            break;
         }
-        return exec_command_users(client, args != NULL);
     }
-    if (strcmp(cmd, "stats") == 0) {
-        if (args && strcmp(args, "--json") != 0) {
-            client_printf(client, "%s",
-                          i18n_text(client->ui_lang,
-                                    I18N_EXEC_STATS_USAGE));
-            return 64;
-        }
-        return exec_command_stats(client, args != NULL);
-    }
-    if (strcmp(cmd, "tail") == 0) {
-        return exec_command_tail(client, args);
-    }
-    if (strcmp(cmd, "post") == 0) {
-        return exec_command_post(client, args);
-    }
-    if (strcmp(cmd, "exit") == 0) {
-        return 0;
-    }
-
     client_printf(client,
                   i18n_text(client->ui_lang,
                             I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
-                  cmd);
+                  command_copy);
     return 64;
 }
