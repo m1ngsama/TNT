@@ -28,14 +28,16 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
+SSH_COMMON_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
+SSH_OPTS="$SSH_COMMON_OPTS -p $PORT"
 
-wait_for_health() {
+wait_for_health_on_port() {
+    health_port=$1
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
         if [ -n "$SERVER_PID" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
             return 1
         fi
-        OUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
+        OUT=$(ssh $SSH_COMMON_OPTS -p "$health_port" localhost health 2>/dev/null || true)
         [ "$OUT" = "ok" ] && return 0
         sleep 1
     done
@@ -48,7 +50,7 @@ TNT_LANG=zh TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=1 "$BIN" -p "$PORT" -d "$STATE_
     >"$STATE_DIR/concurrent.log" 2>&1 &
 SERVER_PID=$!
 
-if wait_for_health; then
+if wait_for_health_on_port "$PORT"; then
     echo "✓ server started for concurrent limit test"
     PASS=$((PASS + 1))
 else
@@ -97,14 +99,16 @@ wait "$SERVER_PID" 2>/dev/null || true
 SERVER_PID=""
 
 RATE_PORT=$((PORT + 1))
-SSH_RATE_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $RATE_PORT"
+SSH_RATE_OPTS="$SSH_COMMON_OPTS -p $RATE_PORT"
 
-TNT_LANG=zh TNT_MAX_CONN_PER_IP=10 TNT_MAX_CONN_RATE_PER_IP=2 "$BIN" -p "$RATE_PORT" -d "$STATE_DIR" \
+# The health readiness probe is a real SSH connection and counts toward the
+# per-IP rate window. Use a burst of 3 so readiness consumes one slot, then the
+# test can still assert two successful client connections before the block.
+TNT_LANG=zh TNT_MAX_CONN_PER_IP=10 TNT_MAX_CONN_RATE_PER_IP=3 "$BIN" -p "$RATE_PORT" -d "$STATE_DIR" \
     >"$STATE_DIR/rate.log" 2>&1 &
 SERVER_PID=$!
 
-sleep 2
-if kill -0 "$SERVER_PID" 2>/dev/null; then
+if wait_for_health_on_port "$RATE_PORT"; then
     echo "✓ server started for rate limit test"
     PASS=$((PASS + 1))
 else
