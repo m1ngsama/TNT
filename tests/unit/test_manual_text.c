@@ -48,6 +48,11 @@ TEST(interactive_manual_matches_language) {
     assert(strstr(en, ":commands") == NULL);
     assert(count_lines(en) <= 20);
 
+    memset(en, 0, sizeof(en));
+    en_pos = 0;
+    manual_text_append_interactive(en, sizeof(en), &en_pos, (ui_lang_t)99);
+    assert(strstr(en, "TNT(1) help") != NULL);
+
     assert(strstr(zh, "TNT(1) 帮助") != NULL);
     assert(strstr(zh, "使用") != NULL);
     assert(strstr(zh, "命令") != NULL);

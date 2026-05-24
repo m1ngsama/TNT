@@ -60,6 +60,8 @@
   summaries.
 - Startup CLI help and option error formats now use the shared
   localized-string helper and English fallback path.
+- The concise `:help` manual text now uses the shared localized-string helper
+  around the command-catalog rows.
 - Documented i18n and user-facing text rules for English-first source text,
   stable command syntax, concise help copy, and translation-only localization.
 
