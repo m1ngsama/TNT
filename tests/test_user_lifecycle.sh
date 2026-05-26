@@ -36,7 +36,7 @@ fi
 SSH_OPTS="-e none -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -p $PORT"
 SSH_EXEC_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
 BOB_READY="$STATE_DIR/bob.ready"
-ALICE_DONE="$STATE_DIR/alice.done"
+PRIVATE_SENT="$STATE_DIR/private.sent"
 
 wait_for_health() {
     out=""
@@ -80,13 +80,16 @@ spawn ssh $SSH_OPTS bob@127.0.0.1
 sleep 1
 send -- "bob\r"
 expect ":help"
-exec touch "$BOB_READY"
-exec sh -c "while \[ ! -f '$ALICE_DONE' \]; do sleep 1; done"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
 expect ":"
 send -- "inbox\r"
+expect "私信"
+expect "(空)"
+expect "r:刷新"
+exec touch "$BOB_READY"
+exec sh -c "while \[ ! -f '$PRIVATE_SENT' \]; do sleep 1; done"
 expect "私信"
 expect "alice"
 expect "private lifecycle ping"
@@ -194,6 +197,7 @@ send -- ":"
 expect ":"
 send -- "msg bob private lifecycle ping\r"
 expect "私信已发送给 bob"
+exec touch "$PRIVATE_SENT"
 expect "q:关闭"
 send -- "q"
 expect "NORMAL"
@@ -208,7 +212,6 @@ send -- "i"
 expect ":help"
 send -- "/me ships lifecycle\r"
 sleep 1
-exec touch "$ALICE_DONE"
 send -- "\003"
 sleep 0.2
 send -- "\003"
@@ -222,11 +225,11 @@ else
     echo "✗ primary user lifecycle failed"
     sed -n '1,240p' "$STATE_DIR/alice.log"
     FAIL=$((FAIL + 1))
-    touch "$ALICE_DONE"
+    touch "$PRIVATE_SENT"
 fi
 
 if wait "$BOB_PID" 2>/dev/null; then
-    echo "✓ recipient read private-message inbox"
+    echo "✓ recipient inbox auto-refreshed after private message"
     PASS=$((PASS + 1))
 else
     echo "✗ recipient inbox journey failed"

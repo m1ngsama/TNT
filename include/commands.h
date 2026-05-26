@@ -19,4 +19,9 @@
  * path; callers must not hold client->io_lock before dispatching. */
 void commands_dispatch(client_t *client);
 
+/* Rebuild the currently visible command output when it is backed by live
+ * client state, such as :inbox.  Returns true if output changed and the caller
+ * should render it again. */
+bool commands_refresh_active_output(client_t *client);
+
 #endif /* COMMANDS_H */

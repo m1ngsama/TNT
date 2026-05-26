@@ -105,6 +105,10 @@ Up/Down              - Browse command history
 ESC                  - Return to NORMAL mode
 ```
 
+Command output pages use `j/k`, `Ctrl+D/U`, and `g/G` for paging.  `:inbox`
+is live: press `r` to refresh it manually, and it refreshes when a new private
+message arrives while the inbox is open.
+
 **Special messages (INSERT mode)**
 ```
 /me <action>         - Send action (e.g. /me waves)

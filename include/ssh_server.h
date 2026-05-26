@@ -17,6 +17,12 @@ typedef struct {
     char content[MAX_MESSAGE_LEN];
 } whisper_t;
 
+typedef enum {
+    TNT_COMMAND_OUTPUT_NONE,
+    TNT_COMMAND_OUTPUT_GENERIC,
+    TNT_COMMAND_OUTPUT_INBOX
+} tnt_command_output_kind_t;
+
 /* Client connection structure */
 typedef struct client {
     ssh_session session;             /* SSH session */
@@ -42,6 +48,7 @@ typedef struct client {
     int insert_history_pos;
     char command_output[MAX_COMMAND_OUTPUT_LEN];
     int command_output_scroll;
+    tnt_command_output_kind_t command_output_kind;
     bool show_motd;                  /* command_output holds MOTD text */
     char exec_command[MAX_EXEC_COMMAND_LEN];
     bool exec_command_too_long;

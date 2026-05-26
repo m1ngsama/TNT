@@ -17,6 +17,8 @@
   the main onboarding, chat, help, history, search, private-message, nickname,
   action-message, and exit paths.
 - Added a VHS tape draft for recording the core TNT terminal-chat experience.
+- Added live `:inbox` refresh behavior: `r` refreshes the inbox manually, and
+  an open inbox refreshes when a new private message arrives.
 
 ### Changed
 - `make install-systemd` now rewrites the installed unit's `ExecStart` to match
@@ -40,6 +42,8 @@
 - Interactive client writes now pass through a bounded per-client outbox and
   flush against the remote SSH window from that client's session loop.  Exec
   sessions still write synchronously to preserve script output ordering.
+- The two-user lifecycle test now covers opening `:inbox` before a private
+  message arrives, matching the way users often leave an inbox page open.
 - Private-message inbox access now uses its own mutex instead of sharing the
   SSH channel write lock, reducing unrelated contention on slow clients.
 - Client writes now check the SSH channel's remote window before writing and

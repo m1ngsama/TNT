@@ -57,6 +57,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "-- COMMAND OUTPUT -- (%d/%d) j/k:scroll Ctrl-D/U:half g/G:top/bottom q:close",
         "-- 命令输出 -- (%d/%d) j/k:滚动 Ctrl-D/U:半页 g/G:首尾 q:关闭"
     ),
+    [I18N_COMMAND_OUTPUT_REFRESH_STATUS_FORMAT] = I18N_STRING(
+        "-- COMMAND OUTPUT -- (%d/%d) j/k:scroll Ctrl-D/U:half g/G:top/bottom r:refresh q:close",
+        "-- 命令输出 -- (%d/%d) j/k:滚动 Ctrl-D/U:半页 g/G:首尾 r:刷新 q:关闭"
+    ),
     [I18N_MOTD_TITLE] = I18N_STRING(
         " NOTICE ",
         " 公告 "

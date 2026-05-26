@@ -29,6 +29,9 @@ The product path should stay short:
   they do not change the command language.
 - Private messages are visible only in the recipient inbox and are not written
   to `messages.log`.
+- `:inbox` is live enough for normal chat use: it can be refreshed with `r`
+  and refreshes automatically when a new private message arrives while the
+  inbox is open.
 - Long command output uses a small pager so `:last` and `:search` are readable
   on small terminals.
 
@@ -41,7 +44,8 @@ The product path should stay short:
   `:last` and `:search`
 - first user toggles `:mute-joins`, sends `:msg`, changes nickname, sends
   `/me`, and exits
-- second user reads `:inbox`
+- second user opens `:inbox` before the private message arrives and sees it
+  auto-refresh after delivery
 - exec `tail` sees public messages
 - `messages.log` contains public history and excludes private-message content
 

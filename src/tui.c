@@ -677,7 +677,10 @@ void tui_render_command_output(client_t *client) {
 
     buffer_appendf(buffer, sizeof(buffer), &pos,
                    i18n_text(client->ui_lang,
-                             I18N_COMMAND_OUTPUT_STATUS_FORMAT),
+                             client->command_output_kind ==
+                                     TNT_COMMAND_OUTPUT_INBOX
+                                 ? I18N_COMMAND_OUTPUT_REFRESH_STATUS_FORMAT
+                                 : I18N_COMMAND_OUTPUT_STATUS_FORMAT),
                    start + 1, max_scroll + 1);
 
     client_send(client, buffer, pos);

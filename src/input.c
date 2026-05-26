@@ -221,6 +221,7 @@ static void dismiss_command_output(client_t *client) {
     was_motd = client->show_motd;
     client->command_output[0] = '\0';
     client->command_output_scroll = 0;
+    client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
     client->show_motd = false;
     client->mode = MODE_NORMAL;
     if (was_motd) {
@@ -348,6 +349,9 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             tui_render_command_output(client);
         } else if (key == 'G') {
             client->command_output_scroll = 999;
+            tui_render_command_output(client);
+        } else if ((key == 'r' || key == 'R') &&
+                   commands_refresh_active_output(client)) {
             tui_render_command_output(client);
         }
         return true;  /* Key consumed */
@@ -735,6 +739,7 @@ void input_run_session(client_t *client) {
     client->command_history_count = 0;
     client->command_history_pos = 0;
     client->command_output_scroll = 0;
+    client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
     client->connect_time = time(NULL);
     client->last_active = time(NULL);
 
@@ -788,6 +793,7 @@ void input_run_session(client_t *client) {
                              sizeof(client->command_output),
                              "%s", motd_buf);
                     client->command_output_scroll = 0;
+                    client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
                     client->show_motd = true;
                     tui_render_motd(client);
                     seen_update_seq = room_get_update_seq(g_room);
@@ -834,6 +840,13 @@ main_loop:
             if (current_update_seq != seen_update_seq) {
                 seen_update_seq = current_update_seq;
                 room_updated = true;
+            }
+
+            if (client->command_output_kind == TNT_COMMAND_OUTPUT_INBOX &&
+                client->command_output[0] != '\0' &&
+                client->unread_whispers > 0) {
+                commands_refresh_active_output(client);
+                client->redraw_pending = true;
             }
 
             if (client->redraw_pending ||
