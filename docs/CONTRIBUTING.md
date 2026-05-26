@@ -41,6 +41,7 @@ command_catalog.c → COMMAND-mode command metadata, usage, and argument shape
 commands.c       → COMMAND-mode command dispatch
 exec_catalog.c   → SSH exec command matching, usage, and argument shape
 exec.c           → SSH exec command dispatch
+tntctl.c         → local wrapper around the SSH exec interface
 ssh_server.c     → SSH listener setup
 bootstrap.c      → SSH authentication/session bootstrap
 input.c          → interactive session loop
@@ -69,7 +70,7 @@ utf8.c           → UTF-8 string handling
 
 ## Known Limits
 
-- Max 64 clients (MAX_CLIENTS)
+- Default 64 clients, configurable with `TNT_MAX_CONNECTIONS`
 - Max 100 messages in memory (MAX_MESSAGES)
 - Max 1024 bytes per message (MAX_MESSAGE_LEN)
 - Max 64 bytes username (MAX_USERNAME_LEN)

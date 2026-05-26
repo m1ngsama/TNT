@@ -8,6 +8,14 @@
  * success, -1 if the channel is gone or a partial write fails. */
 int client_send(client_t *client, const char *data, size_t len);
 
+/* Queue an audible bell for the client's own session loop to send.  This
+ * avoids writing to another client's SSH channel from the sender's thread. */
+void client_queue_bell(client_t *client);
+
+/* Send one queued bell, if present, from the client's own session loop.
+ * Returns 0 when no bell was pending or it was written successfully. */
+int client_flush_pending_bells(client_t *client);
+
 /* printf-style wrapper around client_send().  The formatted string must
  * fit in 2048 bytes; truncation or encoding errors return -1. */
 int client_printf(client_t *client, const char *fmt, ...);

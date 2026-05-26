@@ -2,7 +2,48 @@
 
 ## Unreleased
 
+### Added
+- Documented the stable SSH exec interface contract, including exit statuses
+  and JSON field shapes for package tests, scripts, and future `tntctl` work.
+- Added a public security policy, supported-version guidance, and GitHub issue
+  templates for bug reports and feature requests.
+- Added `tntctl`, a thin local wrapper around the documented SSH exec
+  interface for health, stats, users, tail, post, help, and exit commands.
+
 ### Changed
+- `make install-systemd` now rewrites the installed unit's `ExecStart` to match
+  the selected `PREFIX`/`BINDIR`, so package builds that install to `/usr`
+  produce a unit pointing at `/usr/bin/tnt`.
+- Release preflight now checks the staged systemd unit path, and strict release
+  checks also require a clean tree, tag-at-HEAD, changelog release section, and
+  non-placeholder maintainer metadata.
+- CI and release workflows now use explicit least-privilege repository
+  permissions.
+- The release guide now documents SemVer expectations, manual release review,
+  smoke testing, and rollback steps.
+- Package installs now include `tntctl` and its man page alongside `tnt`.
+- SSH exec commands longer than the command buffer are now rejected with a
+  usage error instead of being truncated and executed.
+- SSH exec `post` now persists the message before broadcasting or returning
+  `posted`, so persistence failures are not visible as successful room events.
+- Mention and private-message bell notifications are now queued on the target
+  client and flushed by that client's own session loop, so slow SSH writes do
+  not block the sender's message path.
+- Private-message inbox access now uses its own mutex instead of sharing the
+  SSH channel write lock, reducing unrelated contention on slow clients.
+- Client writes now check the SSH channel's remote window before writing and
+  mark the client disconnected when the window is closed, avoiding the most
+  direct slow-reader blocking path.
+- Room capacity and mention notification bookkeeping now follow
+  `TNT_MAX_CONNECTIONS` instead of a hidden fixed 64-client array limit.
+- Updated the roadmap to reflect completed `tntctl`, stable exec contract, and
+  monitoring-interface work, leaving the remaining daemon naming and runtime
+  queue work explicit.
+- Strict release preflight now builds and installs from the local `vX.Y.Z` tag
+  source archive, catching untracked files that would be missing from a GitHub
+  source release.
+- Release documentation now creates the local tag before strict release checks,
+  matching the strict gate's tag-at-HEAD requirement.
 - Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
   locale/code parsing, while `src/i18n_text.c` owns the table-driven text
   catalog with coverage checks for every message ID.

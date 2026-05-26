@@ -193,6 +193,18 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "post: invalid UTF-8 input\n",
         "post: 输入不是有效 UTF-8\n"
     ),
+    [I18N_EXEC_POST_TOO_LONG] = I18N_STRING(
+        "post: message too long\n",
+        "post: 消息过长\n"
+    ),
+    [I18N_EXEC_POST_PERSIST_FAILED] = I18N_STRING(
+        "post: failed to persist message\n",
+        "post: 消息持久化失败\n"
+    ),
+    [I18N_EXEC_COMMAND_TOO_LONG] = I18N_STRING(
+        "exec: command too long\n",
+        "exec: 命令过长\n"
+    ),
     [I18N_EXEC_UNKNOWN_COMMAND_FORMAT] = I18N_STRING(
         "Unknown command: %s\n",
         "未知命令: %s\n"

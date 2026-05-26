@@ -147,6 +147,10 @@ TEST(text_lookup_matches_language) {
                   "message cannot be empty") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_EXEC_POST_EMPTY),
                   "消息不能为空") != NULL);
+    assert(strstr(i18n_text(UI_LANG_EN, I18N_EXEC_COMMAND_TOO_LONG),
+                  "command too long") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH, I18N_EXEC_COMMAND_TOO_LONG),
+                  "命令过长") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
                   "Unknown command") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_EXEC_UNKNOWN_COMMAND_FORMAT),

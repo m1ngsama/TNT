@@ -44,14 +44,16 @@ typedef struct client {
     int command_output_scroll;
     bool show_motd;                  /* command_output holds MOTD text */
     char exec_command[MAX_EXEC_COMMAND_LEN];
+    bool exec_command_too_long;
     char ssh_login[MAX_USERNAME_LEN];
     time_t connect_time;
     time_t last_active;
     atomic_bool redraw_pending;
+    _Atomic int pending_bells;       /* Bell nudges for this client's loop */
     _Atomic int unread_mentions;     /* @-mentions received since last reset */
     _Atomic int unread_whispers;     /* whispers received since last :inbox view */
-    /* Per-client whisper inbox.  Pushes serialise on io_lock; readers are
-     * the client's own thread inside :inbox handling. */
+    /* Per-client whisper inbox.  Protected separately from SSH channel I/O
+     * so slow writes do not block in-memory private-message delivery. */
     whisper_t whisper_inbox[WHISPER_INBOX_SIZE];
     int whisper_inbox_count;
     bool mute_joins;
@@ -60,6 +62,7 @@ typedef struct client {
     int ref_count;                   /* Reference count for safe cleanup */
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */
+    pthread_mutex_t whisper_lock;    /* Serialize whisper inbox access */
     struct ssh_channel_callbacks_struct *channel_cb;
 } client_t;
 

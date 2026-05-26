@@ -10,6 +10,9 @@ any public registry.
 - `homebrew/` - Homebrew tap formula draft and maintainer notes.
 - `debian/` - Ubuntu PPA / Debian packaging notes and draft metadata.
 
+Package installs include both `tnt` and `tntctl`.  `tnt` is the server process;
+`tntctl` is a thin wrapper around the documented SSH exec interface.
+
 ## Release checklist
 
 1. Confirm `TNT_VERSION` in `include/common.h` and the manpage version match.

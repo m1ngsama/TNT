@@ -134,8 +134,16 @@ static int read_username(client_t *client) {
 void notify_mentions(const char *content, const client_t *sender) {
     pthread_rwlock_rdlock(&g_room->lock);
     int count = g_room->client_count;
-    client_t *targets[MAX_CLIENTS];
+    client_t **targets = NULL;
     int target_count = 0;
+
+    if (count > 0) {
+        targets = calloc((size_t)count, sizeof(*targets));
+        if (!targets) {
+            pthread_rwlock_unlock(&g_room->lock);
+            return;
+        }
+    }
 
     for (int i = 0; i < count; i++) {
         client_t *c = g_room->clients[i];
@@ -150,11 +158,11 @@ void notify_mentions(const char *content, const client_t *sender) {
     pthread_rwlock_unlock(&g_room->lock);
 
     for (int i = 0; i < target_count; i++) {
-        client_send(targets[i], "\a", 1);
         targets[i]->unread_mentions++;
-        targets[i]->redraw_pending = true;
+        client_queue_bell(targets[i]);
         client_release(targets[i]);
     }
+    free(targets);
 }
 
 static int read_channel_exact(client_t *client, char *buf, size_t len,
@@ -731,7 +739,7 @@ void input_run_session(client_t *client) {
     client->last_active = time(NULL);
 
     /* Check for exec command */
-    if (client->exec_command[0] != '\0') {
+    if (client->exec_command[0] != '\0' || client->exec_command_too_long) {
         int exit_status = exec_dispatch(client);
         ssh_channel_request_send_exit_status(client->channel, exit_status);
         ssh_channel_send_eof(client->channel);
@@ -808,6 +816,10 @@ main_loop:
             uint64_t current_update_seq = room_get_update_seq(g_room);
 
             if (!ssh_channel_is_open(client->channel)) {
+                break;
+            }
+
+            if (client_flush_pending_bells(client) != 0) {
                 break;
             }
 

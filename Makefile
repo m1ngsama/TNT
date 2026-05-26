@@ -20,10 +20,13 @@ SRC_DIR = src
 INC_DIR = include
 OBJ_DIR = obj
 
-SOURCES = $(wildcard $(SRC_DIR)/*.c)
+SOURCES = $(filter-out $(SRC_DIR)/tntctl.c,$(wildcard $(SRC_DIR)/*.c))
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
-DEPS = $(OBJECTS:.o=.d)
+DEPS = $(OBJECTS:.o=.d) $(CTL_OBJECTS:.o=.d)
 TARGET = tnt
+CTL_TARGET = tntctl
+CTL_OBJECTS = $(OBJ_DIR)/tntctl.o
+TARGETS = $(TARGET) $(CTL_TARGET)
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
@@ -33,11 +36,15 @@ CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
 .PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test stress-test info
 
-all: $(TARGET)
+all: $(TARGETS)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
 	@echo "Build complete: $(TARGET)"
+
+$(CTL_TARGET): $(CTL_OBJECTS)
+	$(CC) $(CTL_OBJECTS) -o $@
+	@echo "Build complete: $(CTL_TARGET)"
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(DEPFLAGS) $(INCLUDES) -c $< -o $@
@@ -46,34 +53,40 @@ $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 clean:
-	rm -rf $(OBJ_DIR) $(TARGET)
+	rm -rf $(OBJ_DIR) $(TARGETS)
 	rm -f tests/*.log tests/host_key* tests/messages.log
 	@echo "Clean complete"
 
-install: $(TARGET)
+install: $(TARGETS)
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/
+	install -m 755 $(CTL_TARGET) $(DESTDIR)$(BINDIR)/
 	install -d $(DESTDIR)$(MANDIR)/man1
 	install -m 644 tnt.1 $(DESTDIR)$(MANDIR)/man1/
+	install -m 644 tntctl.1 $(DESTDIR)$(MANDIR)/man1/
 
 install-systemd:
 	install -d $(DESTDIR)$(SYSTEMD_UNIT_DIR)
-	install -m 644 tnt.service $(DESTDIR)$(SYSTEMD_UNIT_DIR)/
+	sed 's#^ExecStart=.*#ExecStart=$(BINDIR)/$(TARGET)#' tnt.service > "$(DESTDIR)$(SYSTEMD_UNIT_DIR)/tnt.service"
+	chmod 644 "$(DESTDIR)$(SYSTEMD_UNIT_DIR)/tnt.service"
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -f $(DESTDIR)$(BINDIR)/$(CTL_TARGET)
 	rm -f $(DESTDIR)$(MANDIR)/man1/tnt.1
+	rm -f $(DESTDIR)$(MANDIR)/man1/tntctl.1
 
 uninstall-systemd:
 	rm -f $(DESTDIR)$(SYSTEMD_UNIT_DIR)/tnt.service
 
 # Development targets
 debug: CFLAGS += -g -DDEBUG
-debug: clean $(TARGET)
+debug: clean $(TARGETS)
 
 release: CFLAGS += -O3 -DNDEBUG
-release: clean $(TARGET)
+release: clean $(TARGETS)
 	strip $(TARGET)
+	strip $(CTL_TARGET)
 
 release-check:
 	./scripts/release_check.sh
@@ -83,7 +96,7 @@ release-check-strict:
 
 asan: CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
 asan: LDFLAGS += -fsanitize=address
-asan: clean $(TARGET)
+asan: clean $(TARGETS)
 	@echo "AddressSanitizer build complete. Run with: ASAN_OPTIONS=detect_leaks=1 ./tnt"
 
 valgrind: debug
@@ -112,6 +125,7 @@ integration-test: all
 	@cd tests && PORT=$${PORT:-2222} ./test_basic.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh
+	@cd tests && ./test_tntctl_cli.sh
 
 anonymous-access-test: all
 	@echo "Running anonymous access tests..."

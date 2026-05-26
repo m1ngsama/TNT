@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
             if (*end != '\0' || val <= 0 || val > 65535) {
                 fprintf(stderr, cli_text_invalid_port_format(lang),
                         argv[i + 1]);
-                return 1;
+                return TNT_EXIT_USAGE;
             }
             port = (int)val;
             i++;
@@ -49,23 +49,23 @@ int main(int argc, char **argv) {
                     strcmp(argv[i], "--state-dir") == 0) && i + 1 < argc) {
             if (setenv("TNT_STATE_DIR", argv[i + 1], 1) != 0) {
                 perror("setenv TNT_STATE_DIR");
-                return 1;
+                return TNT_EXIT_ERROR;
             }
             i++;
         } else if (strcmp(argv[i], "-V") == 0 || strcmp(argv[i], "--version") == 0) {
             printf("tnt %s\n", TNT_VERSION);
-            return 0;
+            return TNT_EXIT_OK;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             char output[2048] = {0};
             size_t pos = 0;
 
             cli_text_append_help(output, sizeof(output), &pos, argv[0], lang);
             fputs(output, stdout);
-            return 0;
+            return TNT_EXIT_OK;
         } else {
             fprintf(stderr, cli_text_unknown_option_format(lang), argv[i]);
             fprintf(stderr, cli_text_short_usage_format(lang), argv[0]);
-            return 1;
+            return TNT_EXIT_USAGE;
         }
     }
 
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
     /* Initialize subsystems */
     if (tnt_ensure_state_dir() < 0) {
         fprintf(stderr, "Failed to create state directory: %s\n", tnt_state_dir());
-        return 1;
+        return TNT_EXIT_ERROR;
     }
 
     message_init();
@@ -86,14 +86,14 @@ int main(int argc, char **argv) {
     g_room = room_create();
     if (!g_room) {
         fprintf(stderr, "Failed to create chat room\n");
-        return 1;
+        return TNT_EXIT_ERROR;
     }
 
     /* Initialize server */
     if (ssh_server_init(port) < 0) {
         fprintf(stderr, "Failed to initialize server\n");
         room_destroy(g_room);
-        return 1;
+        return TNT_EXIT_ERROR;
     }
 
     /* Start server (blocking) */

@@ -144,6 +144,30 @@ ssh host \-p 2222 health
 Exit codes follow
 .BR sysexits (3)
 conventions.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Runtime error, such as I/O failure, allocation failure, or persistence failure.
+.TP
+.B 64
+Usage error, such as an unknown command, invalid option, or invalid argument
+shape.
+.TP
+.B 69
+Reserved for the local
+.BR tntctl (1)
+wrapper when SSH transport is unavailable.
+.TP
+.B 78
+Reserved for future local
+.BR tntctl (1)
+configuration errors.
+.PP
+The SSH exec JSON field contract is documented in
+.IR docs/INTERFACE.md .
 .SH ENVIRONMENT
 .TP
 .B PORT

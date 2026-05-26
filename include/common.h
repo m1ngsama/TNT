@@ -14,6 +14,14 @@
 /* Project Metadata */
 #define TNT_VERSION "1.0.1"
 
+/* Public process/exec exit statuses.  TNT follows the common sysexits(3)
+ * convention for usage errors while keeping runtime failures portable. */
+#define TNT_EXIT_OK 0
+#define TNT_EXIT_ERROR 1
+#define TNT_EXIT_USAGE 64
+#define TNT_EXIT_UNAVAILABLE 69
+#define TNT_EXIT_CONFIG 78
+
 /* Configuration constants */
 #define DEFAULT_PORT 2222
 #define MAX_MESSAGES 100
@@ -21,7 +29,8 @@
 #define MAX_MESSAGE_LEN 1024
 #define MAX_EXEC_COMMAND_LEN 1024
 #define MAX_COMMAND_OUTPUT_LEN 8192
-#define MAX_CLIENTS 64
+#define DEFAULT_MAX_CLIENTS 64
+#define MAX_CONFIGURED_CLIENTS 1024
 #define LOG_FILE "messages.log"
 #define MAX_LOG_SIZE (10 * 1024 * 1024)  /* 10 MiB */
 #define HOST_KEY_FILE "host_key"

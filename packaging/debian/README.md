@@ -44,6 +44,6 @@ debuild -S
 ## Package shape
 
 - Binary package name: `tnt-chat`
-- Installed command: `/usr/bin/tnt`
+- Installed commands: `/usr/bin/tnt`, `/usr/bin/tntctl`
 - Runtime dependency: `libssh`
 - Optional systemd unit: `/usr/lib/systemd/system/tnt.service`

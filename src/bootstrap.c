@@ -25,6 +25,7 @@ typedef struct {
     int pty_width;
     int pty_height;
     char exec_command[MAX_EXEC_COMMAND_LEN];
+    bool exec_command_too_long;
     bool auth_success;
     int auth_attempts;
     bool channel_ready;  /* Set when shell/exec request received */
@@ -294,8 +295,13 @@ static int channel_exec_request(ssh_session session, ssh_channel channel,
 
     /* Store exec command */
     if (command) {
-        strncpy(ctx->exec_command, command, sizeof(ctx->exec_command) - 1);
-        ctx->exec_command[sizeof(ctx->exec_command) - 1] = '\0';
+        if (strlen(command) >= sizeof(ctx->exec_command)) {
+            ctx->exec_command_too_long = true;
+            ctx->exec_command[0] = '\0';
+        } else {
+            strncpy(ctx->exec_command, command, sizeof(ctx->exec_command) - 1);
+            ctx->exec_command[sizeof(ctx->exec_command) - 1] = '\0';
+        }
     }
 
     /* Mark channel as ready */
@@ -363,6 +369,7 @@ void *bootstrap_run(void *arg) {
     ctx->pty_width = 80;
     ctx->pty_height = 24;
     ctx->exec_command[0] = '\0';
+    ctx->exec_command_too_long = false;
     ctx->requested_user[0] = '\0';
     ctx->auth_success = false;
     ctx->auth_attempts = 0;
@@ -451,6 +458,7 @@ void *bootstrap_run(void *arg) {
     client->ref_count = 1;
     pthread_mutex_init(&client->ref_lock, NULL);
     pthread_mutex_init(&client->io_lock, NULL);
+    pthread_mutex_init(&client->whisper_lock, NULL);
 
     if (ctx->requested_user[0] != '\0') {
         strncpy(client->ssh_login, ctx->requested_user,
@@ -466,6 +474,7 @@ void *bootstrap_run(void *arg) {
                 sizeof(client->exec_command) - 1);
         client->exec_command[sizeof(client->exec_command) - 1] = '\0';
     }
+    client->exec_command_too_long = ctx->exec_command_too_long;
 
     /* Add a ref for the channel callbacks (eof/close/window_change) so the
      * client_t outlives any in-flight callback invocation. */

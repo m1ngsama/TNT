@@ -17,26 +17,33 @@ This roadmap is intentionally strict. Each stage should leave the project easier
 
 Goal: make TNT predictable for operators, scripts, and package maintainers.
 
-- split the current surface into `tntd` (daemon) and `tntctl` (control client)
-- keep SSH exec support, but treat it as a transport for stable commands rather than the primary API shape
-- define stable subcommands and exit codes for:
+- ✅ introduce `tntctl` as a thin control client over the stable SSH exec surface
+- keep SSH exec support, but treat it as a transport for stable commands rather
+  than an ad hoc command surface
+- ✅ define stable subcommands and exit codes for:
   - `health`
   - `stats`
   - `users`
   - `tail`
   - `post`
-- support text and JSON output modes where machine use is likely
-- normalize command parsing, help text, and error reporting
+- ✅ support text and JSON output modes where machine use is likely
+- ✅ normalize command parsing, help text, and error reporting
+- decide whether the server binary should remain `tnt` or split later into a
+  separate `tntd` daemon name
 - add `--bind`, `--port`, `--state-dir`, `--public-host`, `--max-clients`, and related long options consistently
-- add a man page for `tntd` and `tntctl`
+- ✅ add man pages for `tnt` and `tntctl`
 
 ## Stage 2: Runtime Model
 
 Goal: make long-running operation boring and reliable.
 
 - move client state to a clearer ownership model with one release path
-- finish replacing ad hoc cross-thread UI mutation with per-client event delivery
-- add bounded outbound queues so slow clients cannot stall other users
+- ✅ remove cross-client SSH channel writes from mention and private-message
+  notifications
+- continue replacing ad hoc cross-thread UI mutation with per-client event
+  delivery
+- add bounded outbound queues so slow clients cannot stall their own session
+  loop indefinitely
 - separate accept, session bootstrap, interactive I/O, and persistence concerns more cleanly
 - make room/client capacity fully runtime-configurable with no hidden compile-time ceiling
 - document hard guarantees and soft limits
@@ -73,7 +80,7 @@ Goal: make public deployment manageable.
 
 - provide clear distinction between concurrent session limits and connection-rate limits
 - add admin-only controls for read-only mode, mute, and ban
-- expose a minimal health and stats surface suitable for monitoring
+- ✅ expose a minimal health and stats surface suitable for monitoring
 - support systemd-friendly readiness and watchdog behavior
 - document recommended production defaults for public, private, and localhost-only deployments
 - tighten CI around authentication, limits, and restart behavior
@@ -92,8 +99,12 @@ Goal: make regressions harder to introduce.
 
 These are the next changes that should happen before new feature work expands the surface area.
 
-1. Introduce `tntctl` and move stable command handling behind it.
-2. Define exit codes and JSON schemas for `health`, `stats`, `users`, `tail`, and `post`.
-3. Add per-client outbound queues and finish untangling client-state ownership.
-4. Remove the remaining hidden runtime limits and make them explicit configuration.
-5. Add a long-running soak test that exercises idle sessions, reconnects, and slow consumers.
+1. Decide the daemon naming path: keep `tnt` as the server binary for 1.x, or
+   introduce `tntd` later with a compatibility plan.
+2. Add per-client outbound queues and finish untangling client-state ownership.
+3. Remove the remaining hidden runtime limits and make them explicit
+   configuration.
+4. Add a long-running soak test that exercises idle sessions, reconnects, and
+   slow consumers.
+5. Replace remaining release placeholders with real maintainer metadata and
+   source-archive checksums when cutting a public package release.

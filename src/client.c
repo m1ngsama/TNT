@@ -9,6 +9,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static int client_send_fail(client_t *client) {
+    if (client) {
+        client->connected = false;
+    }
+    return -1;
+}
+
 /* Send data to client via SSH channel */
 int client_send(client_t *client, const char *data, size_t len) {
     size_t total = 0;
@@ -24,11 +31,21 @@ int client_send(client_t *client, const char *data, size_t len) {
 
     while (total < len) {
         size_t remaining = len - total;
+        uint32_t window = ssh_channel_window_size(client->channel);
+        if (window == 0) {
+            pthread_mutex_unlock(&client->io_lock);
+            return client_send_fail(client);
+        }
+
         uint32_t chunk = (remaining > 32768) ? 32768 : (uint32_t)remaining;
+        if (chunk > window) {
+            chunk = window;
+        }
+
         int sent = ssh_channel_write(client->channel, data + total, chunk);
         if (sent <= 0) {
             pthread_mutex_unlock(&client->io_lock);
-            return -1;
+            return client_send_fail(client);
         }
         total += (size_t)sent;
     }
@@ -39,6 +56,23 @@ int client_send(client_t *client, const char *data, size_t len) {
 
     pthread_mutex_unlock(&client->io_lock);
     return 0;
+}
+
+void client_queue_bell(client_t *client) {
+    if (!client) return;
+
+    atomic_store(&client->pending_bells, 1);
+    client->redraw_pending = true;
+}
+
+int client_flush_pending_bells(client_t *client) {
+    if (!client) return 0;
+
+    if (atomic_exchange(&client->pending_bells, 0) <= 0) {
+        return 0;
+    }
+
+    return client_send(client, "\a", 1);
 }
 
 void client_addref(client_t *client) {
@@ -75,6 +109,7 @@ void client_release(client_t *client) {
             free(client->channel_cb);
         }
         pthread_mutex_destroy(&client->io_lock);
+        pthread_mutex_destroy(&client->whisper_lock);
         pthread_mutex_destroy(&client->ref_lock);
         free(client);
     }

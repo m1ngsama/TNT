@@ -1,0 +1,119 @@
+.\" tntctl(1) - TNT control client
+.TH TNTCTL 1 "2026-05-24" "TNT 1.0.1" "User Commands"
+.SH NAME
+tntctl \- thin control client for a TNT server
+.SH SYNOPSIS
+.B tntctl
+.RB [ \-p | \-\-port
+.IR port ]
+.RB [ \-l | \-\-login
+.IR user ]
+.RB [ \-\-host\-key\-checking
+.IR mode ]
+.RB [ \-\-known\-hosts
+.IR file ]
+.I host
+.I command
+.RI [ args ...]
+.SH DESCRIPTION
+.B tntctl
+runs TNT's documented SSH exec commands through the local
+.BR ssh (1)
+client.
+It is intentionally a thin wrapper: it does not introduce a second control
+protocol and does not bypass SSH host-key checking or authentication.
+.PP
+The command names, exit statuses, and JSON fields are shared with the SSH exec
+interface documented in
+.IR docs/INTERFACE.md .
+.SH OPTIONS
+.TP
+.BR \-p ", " \-\-port " " \fIport\fR
+Connect to
+.I port
+instead of the default 2222.
+.TP
+.BR \-l ", " \-\-login " " \fIuser\fR
+Use
+.I user
+as the SSH login name.
+For
+.B post
+commands, TNT uses this login name as the exec message identity.
+.TP
+.BR \-\-host\-key\-checking " " \fIyes|accept-new|no\fR
+Set OpenSSH
+.B StrictHostKeyChecking
+to one of the listed modes.
+.TP
+.BR \-\-known\-hosts " " \fIfile\fR
+Set the OpenSSH
+.B UserKnownHostsFile
+path.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print a short usage summary and exit.
+.SH COMMANDS
+.TP
+.B health
+Print service health.
+.TP
+.B stats [--json]
+Print room statistics.
+.TP
+.B users [--json]
+List online users.
+.TP
+.B tail [N]
+Print recent messages.
+.TP
+.B tail -n N
+Print recent messages.
+.TP
+.B post MESSAGE
+Post a message non-interactively.
+.TP
+.B help
+Print the server exec help.
+.SH EXAMPLES
+.nf
+tntctl chat.example.com health
+tntctl -p 2222 chat.example.com stats --json
+tntctl -l operator chat.example.com post "service notice"
+tntctl --host-key-checking accept-new chat.example.com users
+.fi
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Runtime error in the local wrapper.
+.TP
+.B 64
+Usage error, either from
+.B tntctl
+or the remote TNT exec command.
+.TP
+.B 69
+The local
+.BR ssh (1)
+client could not be executed or exited with OpenSSH's transport-failure status.
+.TP
+.B 78
+Reserved for future local configuration errors.
+.SH SECURITY
+.B tntctl
+passes arguments directly to
+.BR ssh (1)
+without invoking a local shell.
+It does not accept arbitrary SSH options or a password option.
+Only the bounded host-key options above are exposed.  Use normal SSH
+configuration for jump hosts, identity files, and authentication.  If the server
+requires an access token, enter it through the normal SSH password prompt.
+.SH SEE ALSO
+.BR tnt (1),
+.BR ssh (1)

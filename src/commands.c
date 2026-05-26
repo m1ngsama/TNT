@@ -199,9 +199,9 @@ void commands_dispatch(client_t *client) {
             pthread_rwlock_unlock(&g_room->lock);
 
             if (target) {
-                /* Push into recipient's inbox.  io_lock serialises so two
-                 * senders to the same recipient don't tear the ring. */
-                pthread_mutex_lock(&target->io_lock);
+                /* Push into recipient's inbox.  whisper_lock serialises so
+                 * two senders to the same recipient don't tear the ring. */
+                pthread_mutex_lock(&target->whisper_lock);
                 int slot;
                 if (target->whisper_inbox_count < WHISPER_INBOX_SIZE) {
                     slot = target->whisper_inbox_count++;
@@ -219,13 +219,12 @@ void commands_dispatch(client_t *client) {
                 snprintf(target->whisper_inbox[slot].content,
                          sizeof(target->whisper_inbox[slot].content),
                          "%s", rest);
-                pthread_mutex_unlock(&target->io_lock);
+                pthread_mutex_unlock(&target->whisper_lock);
 
                 target->unread_whispers++;
-                target->redraw_pending = true;
                 /* Audible nudge — the title bar ✉ counter (UX-11 style)
                  * carries the persistent signal. */
-                client_send(target, "\a", 1);
+                client_queue_bell(target);
                 client_release(target);
             }
 
@@ -243,15 +242,15 @@ void commands_dispatch(client_t *client) {
         }
 
     } else if (command_id == TNT_COMMAND_INBOX) {
-        /* Snapshot the inbox under io_lock so a concurrent sender doesn't
+        /* Snapshot the inbox under whisper_lock so a concurrent sender doesn't
          * tear what we're rendering.  Counter reset happens after copy. */
         whisper_t snapshot[WHISPER_INBOX_SIZE];
         int snap_count;
-        pthread_mutex_lock(&client->io_lock);
+        pthread_mutex_lock(&client->whisper_lock);
         snap_count = client->whisper_inbox_count;
         memcpy(snapshot, client->whisper_inbox,
                snap_count * sizeof(whisper_t));
-        pthread_mutex_unlock(&client->io_lock);
+        pthread_mutex_unlock(&client->whisper_lock);
         client->unread_whispers = 0;
 
         buffer_appendf(output, sizeof(output), &pos,

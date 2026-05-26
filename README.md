@@ -21,8 +21,9 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 ```sh
 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
-The installer verifies the downloaded release binary against `checksums.txt`
-before installing it.
+The installer verifies downloaded release binaries against `checksums.txt`
+before installing them. Older releases may provide only `tnt`; newer releases
+also install `tntctl`.
 
 **From source:**
 ```sh
@@ -183,6 +184,18 @@ ssh -p 2222 chat.example.com post "/me deploys v2.0"
 
 **`post` identity**: the message is attributed to the SSH login name (the `user@` part of the URL, falling back to `anonymous`). In the default anonymous-access configuration there is no identity check, so any client can post as any name. Set `TNT_ACCESS_TOKEN` if you need authenticated posting.
 
+See [docs/INTERFACE.md](docs/INTERFACE.md) for the stable exec command
+contract, exit statuses, and JSON field definitions.
+
+Source and package-manager installs also include `tntctl`, a thin wrapper
+around the same SSH exec interface:
+
+```sh
+tntctl chat.example.com health
+tntctl -p 2222 chat.example.com stats --json
+tntctl -l operator chat.example.com post "service notice"
+```
+
 ## Development
 
 ### Building
@@ -254,6 +267,7 @@ TNT/
 │   ├── commands.c    # COMMAND-mode command dispatch
 │   ├── exec_catalog.c # SSH exec command matching, usage, and argument shape
 │   ├── exec.c        # SSH exec command dispatch
+│   ├── tntctl.c      # local wrapper around the SSH exec interface
 │   ├── ssh_server.c  # SSH server implementation
 │   ├── bootstrap.c   # SSH authentication and session bootstrap
 │   ├── chat_room.c   # chat room logic
@@ -358,6 +372,7 @@ Delete `motd.txt` to disable the MOTD.
 - [Development Guide](https://github.com/m1ngsama/TNT/wiki/Development-Guide) - Complete development manual
 - [Quick Setup](docs/EASY_SETUP.md) - 5-minute deployment guide
 - [Roadmap](docs/ROADMAP.md) - Long-term Unix/GNU direction and next stages
+- [Interface Contract](docs/INTERFACE.md) - Scriptable commands, exit statuses, and JSON fields
 - [Security Reference](docs/SECURITY_QUICKREF.md) - Security config quick reference
 - [Contributing](docs/CONTRIBUTING.md) - How to contribute
 - [Changelog](docs/CHANGELOG.md) - Version history

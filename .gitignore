@@ -1,6 +1,7 @@
 *.o
 obj/
 tnt
+tntctl
 messages.log
 host_key
 host_key.pub

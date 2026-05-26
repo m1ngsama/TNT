@@ -12,10 +12,13 @@ class TntChat < Formula
     system "make", "install", "DESTDIR=#{buildpath}/stage", "PREFIX=#{prefix}"
 
     bin.install "#{buildpath}/stage#{prefix}/bin/tnt"
+    bin.install "#{buildpath}/stage#{prefix}/bin/tntctl"
     man1.install "#{buildpath}/stage#{prefix}/share/man/man1/tnt.1"
+    man1.install "#{buildpath}/stage#{prefix}/share/man/man1/tntctl.1"
   end
 
   test do
     assert_match version.to_s, shell_output("#{bin}/tnt --version")
+    assert_match version.to_s, shell_output("#{bin}/tntctl --version")
   end
 end
