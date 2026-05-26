@@ -16,6 +16,9 @@ make release-check      # release preflight
 make test                 # unit + integration tests
 make ci-test              # local CI-equivalent checks
 make stress-test          # concurrent-client stress test
+make soak-test            # idle/reconnect/control-plane soak
+make slow-client-test     # slow interactive-client backpressure
+make user-lifecycle-test  # two-user TUI lifecycle
 ```
 
 ## Debug
@@ -78,7 +81,8 @@ utf8.c           → UTF-8 string handling
 ## Common Bugs to Avoid
 
 1. Don't use `strtok()` on client data - use `strtok_r()` or copy first
-2. Always increment ref_count before using client outside lock
+2. Always use `client_addref()` / `client_release()` before using a client
+   outside `g_room->lock`; never modify `ref_count` directly
 3. Check SSH API return values (can be SSH_ERROR, SSH_AGAIN, or negative)
 4. UTF-8 chars are multi-byte - use utf8_* functions
 

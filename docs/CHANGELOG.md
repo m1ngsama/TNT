@@ -83,6 +83,9 @@
 - Refreshed contributor and development guidance so new commands are added
   through `command_catalog`, `exec_catalog`, and `i18n_text` instead of stale
   `ssh_server.c` / inline-`strcmp` instructions.
+- Refreshed developer ownership guidance to match the current update-sequence
+  model: room broadcasts update shared state only, while each interactive
+  client renders and flushes its own SSH channel.
 - `exec_catalog` now owns SSH exec command matching as well as help metadata,
   reducing duplicate command knowledge in `src/exec.c`.
 - Replaced hard-coded `chat.m1ng.space` examples with `chat.example.com` so
