@@ -106,14 +106,15 @@ else
 fi
 
 IDLE_READY="$STATE_DIR/idle.ready"
+IDLE_HOLD=$((DURATION + 2))
 cat >"$STATE_DIR/idle.expect" <<EOF
-set timeout [expr {$DURATION + 20}]
+set timeout [expr {$IDLE_HOLD + 20}]
 spawn ssh $SSH_TTY_OPTS idle@127.0.0.1
 sleep 1
 send -- "soakidle\r"
 expect "›"
 exec touch "$IDLE_READY"
-sleep $DURATION
+sleep $IDLE_HOLD
 send -- "\003"
 sleep 0.2
 send -- "\003"
