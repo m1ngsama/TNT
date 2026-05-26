@@ -41,6 +41,9 @@ Release policy:
 2. Run the local preflight:
    make release-check
 
+   For a longer local runtime gate before publishing or production rollout:
+   RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
+
 3. Commit the release changes and create a local tag.  Do not push the tag
    until strict checks pass:
    git tag v1.0.1

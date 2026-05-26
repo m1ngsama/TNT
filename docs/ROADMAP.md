@@ -94,7 +94,7 @@ Goal: make regressions harder to introduce.
 - add sanitizer jobs and targeted fuzzing for UTF-8, log parsing, and command parsing
 - ✅ add a configurable soak test for idle sessions, reconnects, and control
   interface availability
-- add deeper slow-client soak coverage with a deliberately backpressured SSH
+- ✅ add deeper slow-client coverage with a deliberately backpressured SSH
   client
 - keep deployment and test docs aligned with actual runtime behavior
 - require every user-visible interface change to update docs and tests in the same change set
@@ -106,7 +106,5 @@ These are the next changes that should happen before new feature work expands th
 1. Decide the daemon naming path: keep `tnt` as the server binary for 1.x, or
    introduce `tntd` later with a compatibility plan.
 2. Finish untangling client-state ownership into a clearer release path.
-3. Add deeper slow-client soak coverage with a deliberately backpressured SSH
-   client.
-4. Replace remaining release placeholders with real maintainer metadata and
+3. Replace remaining release placeholders with real maintainer metadata and
    source-archive checksums when cutting a public package release.

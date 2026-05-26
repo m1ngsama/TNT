@@ -19,6 +19,9 @@
 - Added a VHS tape draft for recording the core TNT terminal-chat experience.
 - Added live `:inbox` refresh behavior: `r` refreshes the inbox manually, and
   an open inbox refreshes when a new private message arrives.
+- Added `make slow-client-test`, an opt-in regression for an unread
+  interactive SSH client under backpressure while health, stats, post, tail,
+  and server survival stay responsive.
 
 ### Changed
 - `make install-systemd` now rewrites the installed unit's `ExecStart` to match
@@ -51,6 +54,8 @@
   direct slow-reader blocking path.
 - `make release-check` can now run the soak test with `RUN_SOAK=1`, keeping
   longer runtime checks opt-in for local release validation.
+- `make release-check` can also run the slow-client backpressure test with
+  `RUN_SLOW_CLIENT=1`.
 - Room capacity and mention notification bookkeeping now follow
   `TNT_MAX_CONNECTIONS` instead of a hidden fixed 64-client array limit.
 - Updated the roadmap to reflect completed `tntctl`, stable exec contract, and

@@ -34,7 +34,7 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test user-lifecycle-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
 
 all: $(TARGETS)
 
@@ -147,6 +147,10 @@ stress-test: all
 soak-test: all
 	@echo "Running soak tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_soak.sh $${DURATION:-8} $${RECONNECTS:-5}
+
+slow-client-test: all
+	@echo "Running slow-client tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_slow_client.sh $${DURATION:-8} $${BURST_CHARS:-1600}
 
 user-lifecycle-test: all
 	@echo "Running user lifecycle tests..."

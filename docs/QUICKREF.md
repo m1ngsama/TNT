@@ -15,6 +15,9 @@ TEST
   make connection-limit-test per-IP concurrency/rate-limit checks
   make security-test        security feature checks
   make stress-test          concurrent-client stress test
+  make soak-test            idle/reconnect/control-plane soak test
+  make slow-client-test     slow interactive-client backpressure test
+  make user-lifecycle-test  two-user TUI lifecycle test
   make ci-test              same checks as GitHub Actions
 
 DEBUG

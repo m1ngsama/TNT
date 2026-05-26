@@ -21,6 +21,7 @@ Default checks:
 Environment:
   RUN_INTEGRATION=1  also run full make test
   RUN_SOAK=1         also run the configurable soak test
+  RUN_SLOW_CLIENT=1  also run the slow-client backpressure test
   PORT=12720         base port for integration tests
 
 Strict checks additionally require a clean tree, a vX.Y.Z tag at HEAD, a
@@ -121,6 +122,13 @@ if [ "${RUN_SOAK:-0}" = "1" ]; then
     step "running soak test"
     make soak-test PORT="$((${PORT:-12720} + 30))" \
         DURATION="${SOAK_DURATION:-8}" RECONNECTS="${SOAK_RECONNECTS:-5}"
+fi
+
+if [ "${RUN_SLOW_CLIENT:-0}" = "1" ]; then
+    step "running slow-client test"
+    make slow-client-test PORT="$((${PORT:-12720} + 40))" \
+        DURATION="${SLOW_CLIENT_DURATION:-8}" \
+        BURST_CHARS="${SLOW_CLIENT_BURST_CHARS:-1600}"
 fi
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/tnt-release-check.XXXXXX")

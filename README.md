@@ -238,6 +238,7 @@ make connection-limit-test # verify per-IP concurrency and rate limits
 make security-test # run security feature checks
 make stress-test   # run configurable concurrent-client stress test
 make soak-test     # run idle/reconnect/control-plane soak test
+make slow-client-test # run slow interactive-client backpressure test
 make user-lifecycle-test # run a two-user TUI lifecycle test
 make ci-test       # run the same checks as GitHub Actions
 
@@ -249,6 +250,7 @@ cd tests
 ./test_connection_limits.sh  # per-IP concurrency and rate limits
 ./test_stress.sh             # stress test
 ./test_soak.sh               # soak test
+./test_slow_client.sh        # slow-client backpressure
 ./test_user_lifecycle.sh     # two-user TUI lifecycle
 ```
 
@@ -257,6 +259,8 @@ cd tests
 - Anonymous access: 2 tests
 - Security features: 12 tests
 - Stress test: configurable concurrent clients (`CLIENTS=20 DURATION=60 make stress-test`)
+- Slow-client test: an unread interactive SSH client cannot block health,
+  stats, post, tail, or server survival checks
 
 ### Dependencies
 
@@ -359,6 +363,12 @@ Before preparing a release locally:
 
 ```sh
 make release-check
+```
+
+Longer local preflight can opt into runtime soak and slow-client coverage:
+
+```sh
+RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
 ```
 
 Before publishing package recipes, replace placeholder checksums and run:
