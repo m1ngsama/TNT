@@ -3,14 +3,21 @@
 This document defines the public surfaces that scripts, package tests, and
 operators may rely on.
 
-TNT is still evolving toward a split `tntd` / `tntctl` model.  The stable
-control surface is the SSH exec interface exposed by the `tnt` daemon.
-`tntctl` is a thin wrapper around that same interface.
+For 1.x, the public binary names are stable:
+
+- `tnt` is the server process and daemon entrypoint.
+- `tntctl` is a thin local wrapper around the SSH exec interface.
+
+TNT will not introduce a separate `tntd` binary during 1.x.  If the project
+ever splits the server into `tntd`, that change must ship with a major-version
+compatibility plan, package migration notes, and a transition period for the
+`tnt` command.
 
 ## Stability Scope
 
 Stable:
 
+- public binary names for 1.x: `tnt` and `tntctl`
 - documented command-line flags in `tnt(1)`
 - documented environment variables in `tnt(1)`
 - SSH exec command names and argument shapes listed below

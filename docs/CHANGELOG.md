@@ -35,6 +35,9 @@
 - The release guide now documents SemVer expectations, manual release review,
   smoke testing, and rollback steps.
 - Package installs now include `tntctl` and its man page alongside `tnt`.
+- The binary naming policy is now explicit: `tnt` remains the stable 1.x
+  server process name, and any future `tntd` split requires a major-version
+  compatibility plan.
 - SSH exec commands longer than the command buffer are now rejected with a
   usage error instead of being truncated and executed.
 - SSH exec `post` now persists the message before broadcasting or returning

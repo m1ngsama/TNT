@@ -28,8 +28,8 @@ Goal: make TNT predictable for operators, scripts, and package maintainers.
   - `post`
 - ✅ support text and JSON output modes where machine use is likely
 - ✅ normalize command parsing, help text, and error reporting
-- decide whether the server binary should remain `tnt` or split later into a
-  separate `tntd` daemon name
+- ✅ keep `tnt` as the 1.x server binary; reserve any future `tntd` split for a
+  major-version compatibility plan
 - ✅ add `--bind`, `--port`, `--state-dir`, `--public-host`,
   `--max-connections`, and related long options consistently
 - ✅ add man pages for `tnt` and `tntctl`
@@ -103,8 +103,6 @@ Goal: make regressions harder to introduce.
 
 These are the next changes that should happen before new feature work expands the surface area.
 
-1. Decide the daemon naming path: keep `tnt` as the server binary for 1.x, or
-   introduce `tntd` later with a compatibility plan.
-2. Finish untangling client-state ownership into a clearer release path.
-3. Replace remaining release placeholders with real maintainer metadata and
+1. Finish untangling client-state ownership into a clearer release path.
+2. Replace remaining release placeholders with real maintainer metadata and
    source-archive checksums when cutting a public package release.
