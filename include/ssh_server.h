@@ -52,6 +52,10 @@ typedef struct client {
     _Atomic int pending_bells;       /* Bell nudges for this client's loop */
     _Atomic int unread_mentions;     /* @-mentions received since last reset */
     _Atomic int unread_whispers;     /* whispers received since last :inbox view */
+    char *outbox;                    /* Bounded queued output for interactive writes */
+    size_t outbox_len;
+    size_t outbox_pos;
+    size_t outbox_capacity;
     /* Per-client whisper inbox.  Protected separately from SSH channel I/O
      * so slow writes do not block in-memory private-message delivery. */
     whisper_t whisper_inbox[WHISPER_INBOX_SIZE];

@@ -30,7 +30,8 @@ Goal: make TNT predictable for operators, scripts, and package maintainers.
 - ✅ normalize command parsing, help text, and error reporting
 - decide whether the server binary should remain `tnt` or split later into a
   separate `tntd` daemon name
-- add `--bind`, `--port`, `--state-dir`, `--public-host`, `--max-clients`, and related long options consistently
+- ✅ add `--bind`, `--port`, `--state-dir`, `--public-host`,
+  `--max-connections`, and related long options consistently
 - ✅ add man pages for `tnt` and `tntctl`
 
 ## Stage 2: Runtime Model
@@ -42,8 +43,8 @@ Goal: make long-running operation boring and reliable.
   notifications
 - continue replacing ad hoc cross-thread UI mutation with per-client event
   delivery
-- add bounded outbound queues so slow clients cannot stall their own session
-  loop indefinitely
+- ✅ add bounded outbound queues so closed SSH windows cannot immediately stall
+  interactive output writes
 - separate accept, session bootstrap, interactive I/O, and persistence concerns more cleanly
 - make room/client capacity fully runtime-configurable with no hidden compile-time ceiling
 - document hard guarantees and soft limits
@@ -91,7 +92,10 @@ Goal: make regressions harder to introduce.
 
 - expand CI coverage across Linux and macOS for build and smoke tests
 - add sanitizer jobs and targeted fuzzing for UTF-8, log parsing, and command parsing
-- add soak tests for long-lived sessions and slow-client behavior
+- ✅ add a configurable soak test for idle sessions, reconnects, and control
+  interface availability
+- add deeper slow-client soak coverage with a deliberately backpressured SSH
+  client
 - keep deployment and test docs aligned with actual runtime behavior
 - require every user-visible interface change to update docs and tests in the same change set
 
@@ -101,10 +105,8 @@ These are the next changes that should happen before new feature work expands th
 
 1. Decide the daemon naming path: keep `tnt` as the server binary for 1.x, or
    introduce `tntd` later with a compatibility plan.
-2. Add per-client outbound queues and finish untangling client-state ownership.
-3. Remove the remaining hidden runtime limits and make them explicit
-   configuration.
-4. Add a long-running soak test that exercises idle sessions, reconnects, and
-   slow consumers.
-5. Replace remaining release placeholders with real maintainer metadata and
+2. Finish untangling client-state ownership into a clearer release path.
+3. Add deeper slow-client soak coverage with a deliberately backpressured SSH
+   client.
+4. Replace remaining release placeholders with real maintainer metadata and
    source-archive checksums when cutting a public package release.

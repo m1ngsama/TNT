@@ -9,6 +9,14 @@
   templates for bug reports and feature requests.
 - Added `tntctl`, a thin local wrapper around the documented SSH exec
   interface for health, stats, users, tail, post, help, and exit commands.
+- Added explicit server configuration flags for bind address, public host,
+  connection limits, rate limiting, idle timeout, and SSH log verbosity.
+- Added a configurable soak test that keeps an interactive session open while
+  repeatedly checking health, stats, users, reconnects, and post/tail behavior.
+- Added a two-user TUI lifecycle regression test and user-lifecycle notes for
+  the main onboarding, chat, help, history, search, private-message, nickname,
+  action-message, and exit paths.
+- Added a VHS tape draft for recording the core TNT terminal-chat experience.
 
 ### Changed
 - `make install-systemd` now rewrites the installed unit's `ExecStart` to match
@@ -29,11 +37,16 @@
 - Mention and private-message bell notifications are now queued on the target
   client and flushed by that client's own session loop, so slow SSH writes do
   not block the sender's message path.
+- Interactive client writes now pass through a bounded per-client outbox and
+  flush against the remote SSH window from that client's session loop.  Exec
+  sessions still write synchronously to preserve script output ordering.
 - Private-message inbox access now uses its own mutex instead of sharing the
   SSH channel write lock, reducing unrelated contention on slow clients.
 - Client writes now check the SSH channel's remote window before writing and
   mark the client disconnected when the window is closed, avoiding the most
   direct slow-reader blocking path.
+- `make release-check` can now run the soak test with `RUN_SOAK=1`, keeping
+  longer runtime checks opt-in for local release validation.
 - Room capacity and mention notification bookkeeping now follow
   `TNT_MAX_CONNECTIONS` instead of a hidden fixed 64-client array limit.
 - Updated the roadmap to reflect completed `tntctl`, stable exec contract, and

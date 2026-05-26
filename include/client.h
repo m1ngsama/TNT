@@ -3,10 +3,19 @@
 
 #include "ssh_server.h"  /* for client_t */
 
-/* Send `len` bytes to the client over its SSH channel.  Serialised on
- * client->io_lock so concurrent senders don't interleave.  Returns 0 on
- * success, -1 if the channel is gone or a partial write fails. */
+/* Send `len` bytes to the client over its SSH channel.
+ *
+ * Exec sessions write synchronously so command output and exit status remain
+ * ordered.  Interactive sessions enqueue into a bounded per-client outbox and
+ * flush opportunistically from the same client's session loop, so a closed SSH
+ * window cannot block unrelated room activity.  Returns -1 if the channel is
+ * gone, a write fails, or the bounded outbox is full. */
 int client_send(client_t *client, const char *data, size_t len);
+
+/* Flush queued interactive output for this client.  Returns 0 when all
+ * possible progress was made; queued bytes may remain if the remote SSH window
+ * is currently closed. */
+int client_flush_output(client_t *client);
 
 /* Queue an audible bell for the client's own session loop to send.  This
  * avoids writing to another client's SSH channel from the sender's thread. */

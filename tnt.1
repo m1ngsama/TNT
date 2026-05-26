@@ -8,6 +8,22 @@ tnt \- anonymous SSH chat server with Vim\-style TUI
 .IR port ]
 .RB [ \-d | \-\-state\-dir
 .IR dir ]
+.RB [ \-\-bind
+.IR addr ]
+.RB [ \-\-public\-host
+.IR host ]
+.RB [ \-\-max\-connections
+.IR n ]
+.RB [ \-\-max\-conn\-per\-ip
+.IR n ]
+.RB [ \-\-max\-conn\-rate\-per\-ip
+.IR n ]
+.RB [ \-\-rate\-limit
+.IR 0|1 ]
+.RB [ \-\-idle\-timeout
+.IR seconds ]
+.RB [ \-\-ssh\-log\-level
+.IR level ]
 .RB [ \-V | \-\-version ]
 .RB [ \-h | \-\-help ]
 .SH DESCRIPTION
@@ -38,6 +54,61 @@ Overrides the
 .B TNT_STATE_DIR
 environment variable.
 Defaults to the current working directory.
+.TP
+.BR \-\-bind " " \fIaddr\fR
+Bind the SSH listener to
+.IR addr .
+Overrides the
+.B TNT_BIND_ADDR
+environment variable.
+The default is 0.0.0.0.
+.TP
+.BR \-\-public\-host " " \fIhost\fR
+Show
+.I host
+in the startup connection hint.
+Overrides the
+.B TNT_PUBLIC_HOST
+environment variable.
+.TP
+.BR \-\-max\-connections " " \fIn\fR
+Set the global connection limit.
+Overrides the
+.B TNT_MAX_CONNECTIONS
+environment variable.
+.TP
+.BR \-\-max\-conn\-per\-ip " " \fIn\fR
+Set the concurrent session limit per source IP.
+Overrides the
+.B TNT_MAX_CONN_PER_IP
+environment variable.
+.TP
+.BR \-\-max\-conn\-rate\-per\-ip " " \fIn\fR
+Set the connection-rate limit per source IP per 60-second window.
+Overrides the
+.B TNT_MAX_CONN_RATE_PER_IP
+environment variable.
+.TP
+.BR \-\-rate\-limit " " \fI0|1\fR
+Disable or enable rate-based blocking and auth-failure IP blocking.
+Explicit capacity limits still apply.
+Overrides the
+.B TNT_RATE_LIMIT
+environment variable.
+.TP
+.BR \-\-idle\-timeout " " \fIseconds\fR
+Disconnect inactive interactive sessions after
+.I seconds
+seconds.  Use 0 to disable.
+Overrides the
+.B TNT_IDLE_TIMEOUT
+environment variable.
+.TP
+.BR \-\-ssh\-log\-level " " \fIlevel\fR
+Set libssh log verbosity from 0 to 4.
+Overrides the
+.B TNT_SSH_LOG_LEVEL
+environment variable.
 .TP
 .BR \-V ", " \-\-version
 Print version and exit.
@@ -176,6 +247,12 @@ Default listening port (default: 2222).
 .B TNT_STATE_DIR
 Directory for host key and message log (default: current directory).
 .TP
+.B TNT_BIND_ADDR
+Address to bind (default: 0.0.0.0).
+.TP
+.B TNT_PUBLIC_HOST
+Host name shown in startup connection hints (default: localhost).
+.TP
 .B TNT_ACCESS_TOKEN
 If set, clients must supply this string as their SSH password.
 Compared in constant time.
@@ -204,6 +281,9 @@ Explicit capacity limits still apply (default: 1).
 .B TNT_IDLE_TIMEOUT
 Disconnect clients after this many seconds of inactivity.
 Set to 0 to disable (default: 1800, i.e. 30 minutes).
+.TP
+.B TNT_SSH_LOG_LEVEL
+libssh log verbosity from 0 to 4 (default: 1).
 .SH FILES
 .TP
 .I messages.log

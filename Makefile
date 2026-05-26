@@ -34,7 +34,7 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test stress-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test user-lifecycle-test info
 
 all: $(TARGETS)
 
@@ -125,6 +125,7 @@ integration-test: all
 	@cd tests && PORT=$${PORT:-2222} ./test_basic.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 3)) ./test_user_lifecycle.sh
 	@cd tests && ./test_tntctl_cli.sh
 
 anonymous-access-test: all
@@ -142,6 +143,14 @@ security-test: all
 stress-test: all
 	@echo "Running stress tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_stress.sh $${CLIENTS:-10} $${DURATION:-30}
+
+soak-test: all
+	@echo "Running soak tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_soak.sh $${DURATION:-8} $${RECONNECTS:-5}
+
+user-lifecycle-test: all
+	@echo "Running user lifecycle tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_user_lifecycle.sh
 
 ci-test:
 	@$(MAKE) test PORT=$(CI_TEST_PORT)

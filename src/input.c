@@ -805,6 +805,10 @@ main_loop:
 
     /* Main input loop */
     while (client->connected && ssh_channel_is_open(client->channel)) {
+        if (client_flush_output(client) != 0) {
+            break;
+        }
+
         int ready = ssh_channel_poll_timeout(client->channel, 1000, 0);
 
         if (ready == SSH_ERROR) {
@@ -816,6 +820,10 @@ main_loop:
             uint64_t current_update_seq = room_get_update_seq(g_room);
 
             if (!ssh_channel_is_open(client->channel)) {
+                break;
+            }
+
+            if (client_flush_output(client) != 0) {
                 break;
             }
 

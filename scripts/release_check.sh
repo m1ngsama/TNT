@@ -20,6 +20,7 @@ Default checks:
 
 Environment:
   RUN_INTEGRATION=1  also run full make test
+  RUN_SOAK=1         also run the configurable soak test
   PORT=12720         base port for integration tests
 
 Strict checks additionally require a clean tree, a vX.Y.Z tag at HEAD, a
@@ -114,6 +115,12 @@ fi
 if [ "${RUN_INTEGRATION:-0}" = "1" ]; then
     step "running full integration tests"
     make test PORT="${PORT:-12720}"
+fi
+
+if [ "${RUN_SOAK:-0}" = "1" ]; then
+    step "running soak test"
+    make soak-test PORT="$((${PORT:-12720} + 30))" \
+        DURATION="${SOAK_DURATION:-8}" RECONNECTS="${SOAK_RECONNECTS:-5}"
 fi
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/tnt-release-check.XXXXXX")

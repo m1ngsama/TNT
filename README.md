@@ -134,6 +134,21 @@ TNT_PUBLIC_HOST=chat.example.com tnt
 TNT_LANG=zh tnt
 ```
 
+The same operational settings can be passed explicitly, which is often
+clearer in package scripts and one-off test deployments:
+
+```sh
+tnt \
+  --bind 127.0.0.1 \
+  --public-host chat.example.com \
+  --max-connections 100 \
+  --max-conn-per-ip 10 \
+  --max-conn-rate-per-ip 30 \
+  --idle-timeout 3600 \
+  -p 2222 \
+  -d /var/lib/tnt
+```
+
 **Rate limiting:**
 ```sh
 # Max total connections (default 64)
@@ -218,6 +233,8 @@ make anonymous-access-test # verify default anonymous login behavior
 make connection-limit-test # verify per-IP concurrency and rate limits
 make security-test # run security feature checks
 make stress-test   # run configurable concurrent-client stress test
+make soak-test     # run idle/reconnect/control-plane soak test
+make user-lifecycle-test # run a two-user TUI lifecycle test
 make ci-test       # run the same checks as GitHub Actions
 
 # Individual tests
@@ -227,6 +244,8 @@ cd tests
 ./test_anonymous_access.sh   # anonymous access
 ./test_connection_limits.sh  # per-IP concurrency and rate limits
 ./test_stress.sh             # stress test
+./test_soak.sh               # soak test
+./test_user_lifecycle.sh     # two-user TUI lifecycle
 ```
 
 **Test coverage:**
