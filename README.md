@@ -217,6 +217,19 @@ tntctl -p 2222 chat.example.com dump -n 100
 tntctl -l operator chat.example.com post "service notice"
 ```
 
+### Log Maintenance
+
+Persisted public history is stored as `messages.log` in the TNT state
+directory.  For manual maintenance, archive and compact it with:
+
+```sh
+scripts/logrotate.sh /var/lib/tnt/messages.log 100 10000
+```
+
+The script archives the full log, keeps the last `KEEP_LINES` records in the
+active file, compresses the archive when `gzip` is available, and can be
+previewed with `--dry-run`.
+
 ## Development
 
 ### Building

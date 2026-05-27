@@ -34,7 +34,7 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test script-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
 
 all: $(TARGETS)
 
@@ -108,7 +108,7 @@ check:
 	@command -v clang-tidy >/dev/null 2>&1 && clang-tidy src/*.c -- -Iinclude $(INCLUDES) || echo "clang-tidy not installed"
 
 # Test
-test: all unit-test integration-test
+test: all unit-test script-test integration-test
 
 test-advisory: all unit-test
 	@echo "Running integration tests..."
@@ -119,6 +119,10 @@ test-advisory: all unit-test
 unit-test:
 	@echo "Running unit tests..."
 	@$(MAKE) -C tests/unit run
+
+script-test:
+	@echo "Running script tests..."
+	@cd tests && ./test_logrotate.sh
 
 integration-test: all
 	@echo "Running integration tests..."

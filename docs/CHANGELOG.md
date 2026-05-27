@@ -9,6 +9,8 @@
   including parser, sanitization, and partial-record recovery rules.
 - Added `dump [N]` / `dump -n N` to the SSH exec interface and `tntctl` for
   exporting valid persisted `messages.log` v1 records.
+- Added regression-tested manual log archive and compaction coverage for
+  `scripts/logrotate.sh`.
 - Added a public security policy, supported-version guidance, and GitHub issue
   templates for bug reports and feature requests.
 - Added `tntctl`, a thin local wrapper around the documented SSH exec
@@ -58,6 +60,9 @@
 - Message-log replay and search now share one strict record parser and skip
   malformed, invalid UTF-8, extra-separator, oversized, or unterminated
   records instead of accepting partial replay data.
+- `scripts/logrotate.sh` now has validated arguments, stable exit statuses,
+  dry-run support, archive retention, gzip-aware archives, and a regression
+  test in the normal test suite.
 - The two-user lifecycle test now covers opening `:inbox` before a private
   message arrives, matching the way users often leave an inbox page open.
 - Private-message inbox access now uses its own mutex instead of sharing the

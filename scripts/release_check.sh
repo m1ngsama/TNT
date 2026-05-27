@@ -13,6 +13,7 @@ Default checks:
   - version metadata alignment
   - clean build
   - unit tests
+  - script tests
   - staged install layout with PREFIX=/usr and DESTDIR
   - installer shell syntax
   - Debian packaging metadata
@@ -101,6 +102,9 @@ tntctl_version=$(./tntctl --version)
 step "running unit tests"
 make -C tests/unit clean
 make -C tests/unit run
+
+step "running script tests"
+make script-test
 
 step "checking client I/O ownership boundaries"
 ! grep -R "client_send(target" src include >/dev/null ||

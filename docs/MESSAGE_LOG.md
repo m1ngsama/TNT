@@ -60,6 +60,21 @@ interface and `tntctl`.  The output format is exactly the v1 record format
 above.  Without `N`, `dump` exports all valid records; with `N`, it exports the
 last `N` valid records.
 
+## Maintenance
+
+`scripts/logrotate.sh` is the manual archive and compaction tool for
+`messages.log`:
+
+```sh
+scripts/logrotate.sh [--dry-run] [--keep-archives N] LOG_FILE MAX_SIZE_MB KEEP_LINES
+```
+
+When the log exceeds `MAX_SIZE_MB`, the script archives the full file, compacts
+the active file to the last `KEEP_LINES` records, compresses the archive when
+`gzip` is available, and removes older archives beyond the retention limit.
+Run it while TNT is stopped or during a quiet maintenance window if strict log
+consistency matters.
+
 ## Compatibility
 
 The v1 record format is stable for TNT 1.x.  Future incompatible storage

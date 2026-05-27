@@ -107,6 +107,24 @@ sudo rm /var/lib/tnt/motd.txt
 
 No restart required — TNT reads the file on each new connection.
 
+## Manual Log Maintenance
+
+TNT stores public chat history in `messages.log` under the state directory.
+Use the maintenance script from a source checkout when the service is stopped
+or during a quiet maintenance window:
+
+```bash
+sudo systemctl stop tnt
+sudo scripts/logrotate.sh /var/lib/tnt/messages.log 100 10000
+sudo systemctl start tnt
+```
+
+The arguments are `LOG_FILE MAX_SIZE_MB KEEP_LINES`.  The script archives the
+full log, compacts the active log to the last `KEEP_LINES` records, compresses
+the archive when `gzip` is available, and keeps the newest five archives by
+default.  Use `--dry-run` to preview actions, or `--keep-archives N` to change
+archive retention.
+
 ## Firewall
 
 ```bash

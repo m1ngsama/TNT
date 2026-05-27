@@ -54,6 +54,12 @@ EXEC COMMANDS
   dump [N] / dump -n N   persisted messages.log v1 records
   post <message>         post as the SSH login name
 
+MAINTENANCE
+  scripts/logrotate.sh LOG_FILE MAX_SIZE_MB KEEP_LINES
+                           archive and compact messages.log
+  scripts/logrotate.sh --dry-run ...
+                           preview log maintenance actions
+
 STRUCTURE
   src/main.c          entry, signals
   src/cli_text.c      startup CLI text

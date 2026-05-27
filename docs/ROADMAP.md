@@ -58,7 +58,7 @@ Goal: make stored history durable, inspectable, and recoverable.
 - ✅ keep persisted timestamps in UTC throughout write and replay
 - ✅ validate persisted UTF-8 and record structure before replay/search
 - ✅ provide an inspection/export command for persisted records
-- add log rotation and compaction tooling
+- ✅ add log rotation and compaction tooling
 - define broader recovery tooling for truncated or partially corrupted logs
 
 ## Stage 4: Interactive UX
