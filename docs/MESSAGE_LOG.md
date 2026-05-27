@@ -75,6 +75,30 @@ the active file to the last `KEEP_LINES` records, compresses the archive when
 Run it while TNT is stopped or during a quiet maintenance window if strict log
 consistency matters.
 
+## Recovery
+
+Installed `tnt` binaries provide offline log checking and recovery:
+
+```sh
+tnt --log-check LOG_FILE
+tnt --log-recover LOG_FILE > recovered.messages.log
+```
+
+`--log-check` prints a summary:
+
+```text
+path /var/lib/tnt/messages.log
+records_seen 120
+valid_records 119
+invalid_records 1
+first_invalid_line 120
+```
+
+It exits `0` when every record is valid and `1` when invalid records are found
+or the log cannot be read.  `--log-recover` writes only valid v1 records to
+stdout, prints the same summary to stderr, and also exits `1` if records were
+skipped.  It never modifies the source log.
+
 ## Compatibility
 
 The v1 record format is stable for TNT 1.x.  Future incompatible storage

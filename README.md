@@ -230,6 +230,17 @@ The script archives the full log, keeps the last `KEEP_LINES` records in the
 active file, compresses the archive when `gzip` is available, and can be
 previewed with `--dry-run`.
 
+Installed binaries also include offline checks for the v1 log format:
+
+```sh
+tnt --log-check /var/lib/tnt/messages.log
+tnt --log-recover /var/lib/tnt/messages.log > messages.recovered.log
+```
+
+`--log-check` prints record counts and exits non-zero when invalid records are
+found.  `--log-recover` writes valid records to stdout and reports skipped
+records to stderr; it never edits the source log in place.
+
 ## Development
 
 ### Building

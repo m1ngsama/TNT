@@ -59,6 +59,9 @@ MAINTENANCE
                            archive and compact messages.log
   scripts/logrotate.sh --dry-run ...
                            preview log maintenance actions
+  tnt --log-check LOG_FILE  audit messages.log v1 records
+  tnt --log-recover LOG_FILE > OUT
+                           write valid records to stdout
 
 STRUCTURE
   src/main.c          entry, signals
@@ -72,6 +75,7 @@ STRUCTURE
   src/exec.c          SSH exec command dispatch
   src/message.c       persistence, search
   src/message_log.c   messages.log v1 parsing and formatting
+  src/message_log_tool.c offline messages.log check/recover CLI
   src/history_view.c  message viewport / scroll state
   src/help_text.c     full-screen key reference text
   src/manual.c        concise manual panel rendering

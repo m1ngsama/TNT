@@ -18,6 +18,8 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
         "      --rate-limit 0|1         Disable/enable rate-based blocking\n"
         "      --idle-timeout SECONDS   Idle disconnect timeout\n"
         "      --ssh-log-level LEVEL    libssh log level 0..4\n"
+        "      --log-check FILE         Check messages.log v1 records\n"
+        "      --log-recover FILE       Write valid records to stdout\n"
         "  -V, --version                Show version\n"
         "  -h, --help                   Show this help\n"
         "\n"
@@ -42,6 +44,8 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
         "      --rate-limit 0|1         禁用/启用速率封禁\n"
         "      --idle-timeout SECONDS   空闲断开时间\n"
         "      --ssh-log-level LEVEL    libssh 日志级别 0..4\n"
+        "      --log-check FILE         检查 messages.log v1 记录\n"
+        "      --log-recover FILE       将有效记录写入 stdout\n"
         "  -V, --version                显示版本\n"
         "  -h, --help                   显示此帮助\n"
         "\n"
@@ -71,6 +75,13 @@ const char *cli_text_invalid_port_format(ui_lang_t lang) {
 const char *cli_text_invalid_value_format(ui_lang_t lang) {
     static const i18n_string_t text =
         I18N_STRING("Invalid %s: %s\n", "%s 无效: %s\n");
+    return i18n_string(text, lang);
+}
+
+const char *cli_text_option_requires_arg_format(ui_lang_t lang) {
+    static const i18n_string_t text =
+        I18N_STRING("Option requires argument: %s\n",
+                    "选项需要参数: %s\n");
     return i18n_string(text, lang);
 }
 

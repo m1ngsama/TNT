@@ -26,6 +26,14 @@ tnt \- anonymous SSH chat server with Vim\-style TUI
 .IR level ]
 .RB [ \-V | \-\-version ]
 .RB [ \-h | \-\-help ]
+.br
+.B tnt
+.B \-\-log\-check
+.I file
+.br
+.B tnt
+.B \-\-log\-recover
+.I file
 .SH DESCRIPTION
 .B tnt
 is a multi\-user anonymous chat server accessed over SSH.
@@ -116,6 +124,18 @@ Set libssh log verbosity from 0 to 4.
 Overrides the
 .B TNT_SSH_LOG_LEVEL
 environment variable.
+.TP
+.BR \-\-log\-check " " \fIfile\fR
+Check a
+.I messages.log
+v1 file and print record counts.
+Exits non-zero when invalid records are found or the file cannot be read.
+.TP
+.BR \-\-log\-recover " " \fIfile\fR
+Write valid
+.I messages.log
+v1 records to standard output and print a recovery summary to standard error.
+The source file is not modified.
 .TP
 .BR \-V ", " \-\-version
 Print version and exit.

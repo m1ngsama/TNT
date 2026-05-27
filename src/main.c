@@ -3,6 +3,7 @@
 #include "common.h"
 #include "i18n.h"
 #include "message.h"
+#include "message_log_tool.h"
 #include "ssh_server.h"
 #include <signal.h>
 #include <unistd.h>
@@ -77,6 +78,8 @@ static int set_numeric_env_option(const char *env_name, const char *opt_name,
 int main(int argc, char **argv) {
     int port = DEFAULT_PORT;
     ui_lang_t lang = i18n_default_ui_lang();
+    const char *log_check_path = NULL;
+    const char *log_recover_path = NULL;
 
     /* Environment provides defaults; command-line flags override it. */
     const char *port_env = getenv("PORT");
@@ -179,6 +182,20 @@ int main(int argc, char **argv) {
                 return rc;
             }
             i++;
+        } else if (strcmp(argv[i], "--log-check") == 0) {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                fprintf(stderr, cli_text_option_requires_arg_format(lang),
+                        argv[i]);
+                return TNT_EXIT_USAGE;
+            }
+            log_check_path = argv[++i];
+        } else if (strcmp(argv[i], "--log-recover") == 0) {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                fprintf(stderr, cli_text_option_requires_arg_format(lang),
+                        argv[i]);
+                return TNT_EXIT_USAGE;
+            }
+            log_recover_path = argv[++i];
         } else if (strcmp(argv[i], "-V") == 0 || strcmp(argv[i], "--version") == 0) {
             printf("tnt %s\n", TNT_VERSION);
             return TNT_EXIT_OK;
@@ -194,6 +211,18 @@ int main(int argc, char **argv) {
             fprintf(stderr, cli_text_short_usage_format(lang), argv[0]);
             return TNT_EXIT_USAGE;
         }
+    }
+
+    if (log_check_path && log_recover_path) {
+        fprintf(stderr, cli_text_invalid_value_format(lang),
+                "--log-check", "--log-recover");
+        return TNT_EXIT_USAGE;
+    }
+    if (log_check_path) {
+        return message_log_tool_check(log_check_path);
+    }
+    if (log_recover_path) {
+        return message_log_tool_recover(log_recover_path);
     }
 
     /* Setup signal handlers */

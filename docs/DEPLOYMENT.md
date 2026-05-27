@@ -125,6 +125,16 @@ the archive when `gzip` is available, and keeps the newest five archives by
 default.  Use `--dry-run` to preview actions, or `--keep-archives N` to change
 archive retention.
 
+Before replacing a suspicious log, inspect and recover it offline:
+
+```bash
+tnt --log-check /var/lib/tnt/messages.log
+tnt --log-recover /var/lib/tnt/messages.log > /var/lib/tnt/messages.recovered.log
+```
+
+`--log-recover` writes valid records to stdout and reports skipped records to
+stderr.  Review the recovered file before replacing the active log.
+
 ## Firewall
 
 ```bash

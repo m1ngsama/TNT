@@ -120,9 +120,10 @@ unit-test:
 	@echo "Running unit tests..."
 	@$(MAKE) -C tests/unit run
 
-script-test:
+script-test: all
 	@echo "Running script tests..."
 	@cd tests && ./test_logrotate.sh
+	@cd tests && ./test_message_log_tool.sh
 
 integration-test: all
 	@echo "Running integration tests..."

@@ -59,7 +59,7 @@ Goal: make stored history durable, inspectable, and recoverable.
 - ✅ validate persisted UTF-8 and record structure before replay/search
 - ✅ provide an inspection/export command for persisted records
 - ✅ add log rotation and compaction tooling
-- define broader recovery tooling for truncated or partially corrupted logs
+- ✅ define broader recovery tooling for truncated or partially corrupted logs
 
 ## Stage 4: Interactive UX
 

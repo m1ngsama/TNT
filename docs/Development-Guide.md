@@ -82,6 +82,7 @@ src/
 ├── chat_room.c      - Chat room state, message ring, and update sequence
 ├── message.c        - Message persistence (RFC3339 format)
 ├── message_log.c    - messages.log v1 parsing and formatting
+├── message_log_tool.c - Offline messages.log check/recover CLI
 ├── history_view.c   - NORMAL-mode scroll window rules
 ├── tui.c            - Terminal UI rendering (ANSI escape codes)
 ├── tui_status.c     - Mode/status/input-line rendering
@@ -105,6 +106,7 @@ include/
 ├── chat_room.h      - Chat room interface
 ├── message.h        - Message structure and persistence
 ├── message_log.h    - messages.log v1 parser/formatter interface
+├── message_log_tool.h - Offline log check/recover interface
 ├── command_catalog.h - COMMAND-mode command metadata interface
 ├── history_view.h   - Scroll-state helpers
 ├── tui.h            - TUI rendering functions

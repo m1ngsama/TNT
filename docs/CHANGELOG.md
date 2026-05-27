@@ -11,6 +11,9 @@
   exporting valid persisted `messages.log` v1 records.
 - Added regression-tested manual log archive and compaction coverage for
   `scripts/logrotate.sh`.
+- Added offline `tnt --log-check` and `tnt --log-recover` modes for auditing
+  and recovering valid `messages.log` v1 records without editing the source
+  log in place.
 - Added a public security policy, supported-version guidance, and GitHub issue
   templates for bug reports and feature requests.
 - Added `tntctl`, a thin local wrapper around the documented SSH exec
@@ -65,6 +68,9 @@
   test in the normal test suite.
 - `messages.log` v1 record parsing and formatting now live in a dedicated
   `message_log` module instead of being embedded in `message.c`.
+- Offline message-log recovery shares the same `message_log` parser used by
+  replay, search, and `dump`, so recovery behavior follows the documented v1
+  contract.
 - The two-user lifecycle test now covers opening `:inbox` before a private
   message arrives, matching the way users often leave an inbox page open.
 - Private-message inbox access now uses its own mutex instead of sharing the
