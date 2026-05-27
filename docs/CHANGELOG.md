@@ -5,6 +5,8 @@
 ### Added
 - Documented the stable SSH exec interface contract, including exit statuses
   and JSON field shapes for package tests, scripts, and future `tntctl` work.
+- Documented `messages.log` v1 as the stable TNT 1.x persisted history format,
+  including parser, sanitization, and partial-record recovery rules.
 - Added a public security policy, supported-version guidance, and GitHub issue
   templates for bug reports and feature requests.
 - Added `tntctl`, a thin local wrapper around the documented SSH exec

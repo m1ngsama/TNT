@@ -291,6 +291,9 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
 
 ### 3. Message Persistence (message.c)
 
+See [MESSAGE_LOG.md](MESSAGE_LOG.md) for the stable TNT 1.x on-disk record
+contract.
+
 **Log format:**
 ```
 2024-01-13T10:30:45Z|username|message content

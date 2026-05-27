@@ -386,6 +386,9 @@ motd.txt        - Message of the Day (optional, shown to users on connect)
 tnt.service     - systemd service unit
 ```
 
+The persisted chat-history format is documented in
+[docs/MESSAGE_LOG.md](docs/MESSAGE_LOG.md).
+
 ### MOTD (Message of the Day)
 
 Place a `motd.txt` file in the state directory to show a welcome message to every user on connect. Users see the MOTD before entering the chat and press any key to continue.

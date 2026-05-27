@@ -23,12 +23,14 @@ Stable:
 - SSH exec command names and argument shapes listed below
 - SSH exec exit statuses
 - JSON field names and value types for documented `--json` commands
+- `messages.log` v1 record format documented in
+  [MESSAGE_LOG.md](MESSAGE_LOG.md)
 
 Not yet stable:
 
 - exact human-readable diagnostic wording
 - interactive TUI layout
-- on-disk message log format
+- future storage migration tooling
 - internal module names and helper functions
 
 ## Exit Status

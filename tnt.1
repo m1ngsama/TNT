@@ -302,9 +302,13 @@ libssh log verbosity from 0 to 4 (default: 1).
 .SH FILES
 .TP
 .I messages.log
-Chat history in RFC\ 3339 pipe\-delimited format
+Chat history in the TNT message log v1 format:
+RFC\ 3339 UTC pipe\-delimited records
 .RI ( timestamp | username | content ).
 Stored in the state directory.
+See
+.I docs/MESSAGE_LOG.md
+in the source distribution for parser and recovery rules.
 .TP
 .I host_key
 RSA 4096\-bit host key, auto\-generated on first run.
