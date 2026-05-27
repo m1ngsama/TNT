@@ -131,6 +131,7 @@ typedef struct client {
     int ref_count;                  // Reference counting
     pthread_mutex_t ref_lock;
     pthread_mutex_t io_lock;        // Own SSH channel writes only
+    bool channel_callback_ref;      // Ref held while callbacks are installed
 } client_t;
 ```
 
@@ -284,6 +285,9 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
 - Cross-client lookups, such as mentions and private messages, must call
   `client_addref()` before using a client pointer outside `g_room->lock`, then
   `client_release()` when done.  Do not increment `ref_count` directly.
+- Session callback lifetime is owned by `client.c`: `client_install_channel_callbacks()`
+  takes the callback ref, and `client_release_session()` removes callbacks and
+  releases both the callback ref and the session main ref.
 
 ### 3. Message Persistence (message.c)
 

@@ -244,6 +244,25 @@ void client_release(client_t *client) {
     }
 }
 
+void client_release_session(client_t *client) {
+    if (!client) return;
+
+    if (client->channel && client->channel_cb) {
+        ssh_remove_channel_callbacks(client->channel, client->channel_cb);
+    }
+    if (client->channel_cb) {
+        free(client->channel_cb);
+        client->channel_cb = NULL;
+    }
+
+    if (client->channel_callback_ref) {
+        client->channel_callback_ref = false;
+        client_release(client);
+    }
+
+    client_release(client);
+}
+
 /* Send formatted string to client */
 int client_printf(client_t *client, const char *fmt, ...) {
     char buffer[2048];
@@ -315,8 +334,13 @@ int client_install_channel_callbacks(client_t *client) {
         return -1;
     }
 
+    client_addref(client);
+    client->channel_callback_ref = true;
+
     client->channel_cb = calloc(1, sizeof(struct ssh_channel_callbacks_struct));
     if (!client->channel_cb) {
+        client->channel_callback_ref = false;
+        client_release(client);
         return -1;
     }
 
@@ -330,6 +354,8 @@ int client_install_channel_callbacks(client_t *client) {
     if (ssh_set_channel_callbacks(client->channel, client->channel_cb) != SSH_OK) {
         free(client->channel_cb);
         client->channel_cb = NULL;
+        client->channel_callback_ref = false;
+        client_release(client);
         return -1;
     }
 

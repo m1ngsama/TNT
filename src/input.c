@@ -995,17 +995,7 @@ cleanup:
 
     ratelimit_release_ip(client->client_ip);
 
-    /* Remove channel callbacks before releasing refs to prevent use-after-free
-     * if a callback fires between the two releases. */
-    if (client->channel && client->channel_cb) {
-        ssh_remove_channel_callbacks(client->channel, client->channel_cb);
-    }
-
-    /* Release the callback reference (paired with addref before client_install_channel_callbacks) */
-    client_release(client);
-
-    /* Release the main reference - client will be freed when all refs are gone */
-    client_release(client);
+    client_release_session(client);
 
     /* Decrement connection count */
     ratelimit_decrement_total();

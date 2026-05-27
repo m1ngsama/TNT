@@ -48,6 +48,9 @@
 - Interactive client writes now pass through a bounded per-client outbox and
   flush against the remote SSH window from that client's session loop.  Exec
   sessions still write synchronously to preserve script output ordering.
+- Session callback refs are now owned and released through `client.c`, so
+  bootstrap and interactive cleanup no longer need to manually mirror the
+  main-ref / callback-ref release sequence.
 - The two-user lifecycle test now covers opening `:inbox` before a private
   message arrives, matching the way users often leave an inbox page open.
 - Private-message inbox access now uses its own mutex instead of sharing the

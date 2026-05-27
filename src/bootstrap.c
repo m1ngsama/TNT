@@ -476,17 +476,12 @@ void *bootstrap_run(void *arg) {
     }
     client->exec_command_too_long = ctx->exec_command_too_long;
 
-    /* Add a ref for the channel callbacks (eof/close/window_change) so the
-     * client_t outlives any in-flight callback invocation. */
-    client_addref(client);
-
     if (client_install_channel_callbacks(client) < 0) {
         /* Nullify session/channel ownership so client_release won't
          * double-free what cleanup_failed_session is about to free. */
         client->session = NULL;
         client->channel = NULL;
-        client_release(client);  /* drop the callback ref (2 → 1) */
-        client_release(client);  /* drop the main ref (1 → 0, frees client) */
+        client_release(client);
         cleanup_failed_session(session, ctx);
         return NULL;
     }

@@ -109,6 +109,10 @@ step "checking client I/O ownership boundaries"
     fail "cross-client target-array writes must be queued through client_queue_bell"
 ! grep -n "pthread_mutex_lock(&.*->io_lock)" src/commands.c >/dev/null ||
     fail "commands.c must not use SSH io_lock for in-memory command state"
+! grep -n "client_addref(client)" src/bootstrap.c >/dev/null ||
+    fail "bootstrap.c must let client_install_channel_callbacks own callback refs"
+grep -q "client_release_session(client)" src/input.c ||
+    fail "input.c must release session ownership through client_release_session"
 if grep -R "ssh_channel_write" src include | grep -v "^src/client.c:" >/dev/null; then
     fail "raw SSH channel writes must stay inside src/client.c"
 fi

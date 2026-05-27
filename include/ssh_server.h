@@ -74,6 +74,7 @@ typedef struct client {
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */
     pthread_mutex_t whisper_lock;    /* Serialize whisper inbox access */
+    bool channel_callback_ref;       /* client.c owns one ref while callbacks are installed */
     struct ssh_channel_callbacks_struct *channel_cb;
 } client_t;
 

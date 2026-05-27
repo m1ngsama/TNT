@@ -38,7 +38,8 @@ Goal: make TNT predictable for operators, scripts, and package maintainers.
 
 Goal: make long-running operation boring and reliable.
 
-- move client state to a clearer ownership model with one release path
+- ✅ move session callback ownership into `client.c` and release sessions
+  through one `client_release_session()` path
 - ✅ remove cross-client SSH channel writes from mention and private-message
   notifications
 - continue replacing ad hoc cross-thread UI mutation with per-client event
@@ -103,6 +104,5 @@ Goal: make regressions harder to introduce.
 
 These are the next changes that should happen before new feature work expands the surface area.
 
-1. Finish untangling client-state ownership into a clearer release path.
-2. Replace remaining release placeholders with real maintainer metadata and
+1. Replace remaining release placeholders with real maintainer metadata and
    source-archive checksums when cutting a public package release.
