@@ -108,6 +108,17 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+run_ok "dump command is accepted" "$BIN" example.com dump -n 1
+grep -q '^dump -n 1$' "$SSH_LOG"
+if [ $? -eq 0 ]; then
+    echo "✓ dump argv is forwarded as one remote command"
+    PASS=$((PASS + 1))
+else
+    echo "✗ dump argv unexpected"
+    cat "$SSH_LOG"
+    FAIL=$((FAIL + 1))
+fi
+
 PATH="$FAKE_BIN:$PATH" TNTCTL_SSH_LOG="$SSH_LOG" "$BIN" example.com users --xml >/dev/null 2>&1
 REMOTE_STATUS=$?
 if [ "$REMOTE_STATUS" -eq 64 ]; then

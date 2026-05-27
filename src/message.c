@@ -6,6 +6,7 @@
 #endif
 #include "message.h"
 #include "utf8.h"
+#include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -24,6 +25,17 @@ static time_t parse_rfc3339_utc(const char *timestamp_str) {
     }
 
     return timegm(&tm);
+}
+
+static void format_rfc3339_utc(time_t ts, char *buffer, size_t buf_size) {
+    struct tm tm_info;
+
+    if (!buffer || buf_size == 0) {
+        return;
+    }
+
+    gmtime_r(&ts, &tm_info);
+    strftime(buffer, buf_size, "%Y-%m-%dT%H:%M:%SZ", &tm_info);
 }
 
 static void discard_line_remainder(FILE *fp) {
@@ -100,6 +112,47 @@ static bool parse_log_record(const char *line, message_t *out,
     strncpy(out->content, content, MAX_MESSAGE_LEN - 1);
     out->content[MAX_MESSAGE_LEN - 1] = '\0';
     return true;
+}
+
+static int append_dump_record(char **output, size_t *capacity,
+                              size_t *len, const message_t *msg) {
+    char timestamp[64];
+    int needed;
+    size_t available;
+
+    if (!output || !capacity || !len || !msg) {
+        return -1;
+    }
+
+    format_rfc3339_utc(msg->timestamp, timestamp, sizeof(timestamp));
+    needed = snprintf(NULL, 0, "%s|%s|%s\n", timestamp, msg->username,
+                      msg->content);
+    if (needed < 0) {
+        return -1;
+    }
+
+    available = *capacity > *len ? *capacity - *len : 0;
+    if ((size_t)needed + 1 > available) {
+        size_t new_capacity = *capacity ? *capacity : 1024;
+        while ((size_t)needed + 1 > new_capacity - *len) {
+            if (new_capacity > SIZE_MAX / 2) {
+                return -1;
+            }
+            new_capacity *= 2;
+        }
+
+        char *grown = realloc(*output, new_capacity);
+        if (!grown) {
+            return -1;
+        }
+        *output = grown;
+        *capacity = new_capacity;
+    }
+
+    snprintf(*output + *len, *capacity - *len, "%s|%s|%s\n", timestamp,
+             msg->username, msg->content);
+    *len += (size_t)needed;
+    return 0;
 }
 
 /* Initialize message subsystem */
@@ -337,6 +390,118 @@ int message_search(const char *query, message_t **results, int max_results) {
     pthread_mutex_unlock(&g_message_file_lock);
     *results = res;
     return (count < max_results) ? count : max_results;
+}
+
+int message_dump_text(char **output, size_t *output_len, int max_records) {
+    char log_path[PATH_MAX];
+    char *buf = NULL;
+    size_t capacity = 0;
+    size_t len = 0;
+    message_t *ring = NULL;
+    int seen = 0;
+    int rc = 0;
+
+    if (!output || !output_len || max_records < 0) {
+        return -1;
+    }
+
+    *output = calloc(1, 1);
+    if (!*output) {
+        return -1;
+    }
+    *output_len = 0;
+
+    if (tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+        free(*output);
+        *output = NULL;
+        return -1;
+    }
+
+    if (max_records > 0) {
+        ring = calloc((size_t)max_records, sizeof(*ring));
+        if (!ring) {
+            free(*output);
+            *output = NULL;
+            return -1;
+        }
+    }
+
+    pthread_mutex_lock(&g_message_file_lock);
+    FILE *fp = fopen(log_path, "r");
+    if (!fp) {
+        int saved_errno = errno;
+        pthread_mutex_unlock(&g_message_file_lock);
+        free(ring);
+        if (saved_errno != ENOENT) {
+            free(*output);
+            *output = NULL;
+            return -1;
+        }
+        return 0;
+    }
+
+    char line[2048];
+    time_t now = time(NULL);
+    while (fgets(line, sizeof(line), fp)) {
+        size_t line_len = strlen(line);
+        if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
+            discard_line_remainder(fp);
+            continue;
+        }
+
+        message_t parsed;
+        if (!parse_log_record(line, &parsed, now)) {
+            continue;
+        }
+
+        if (max_records > 0) {
+            ring[seen % max_records] = parsed;
+            seen++;
+        } else if (append_dump_record(output, &capacity, output_len,
+                                      &parsed) < 0) {
+            rc = -1;
+            break;
+        }
+    }
+
+    fclose(fp);
+    pthread_mutex_unlock(&g_message_file_lock);
+
+    if (rc == 0 && max_records > 0 && seen > 0) {
+        int count = seen < max_records ? seen : max_records;
+        int start = seen < max_records ? 0 : seen % max_records;
+
+        free(*output);
+        *output = NULL;
+        *output_len = 0;
+
+        for (int i = 0; i < count; i++) {
+            message_t *msg = &ring[(start + i) % max_records];
+            if (append_dump_record(&buf, &capacity, &len, msg) < 0) {
+                rc = -1;
+                break;
+            }
+        }
+
+        if (rc == 0) {
+            *output = buf ? buf : calloc(1, 1);
+            *output_len = len;
+            if (!*output) {
+                rc = -1;
+            }
+        } else {
+            free(buf);
+        }
+    }
+
+    free(ring);
+    if (rc < 0) {
+        free(*output);
+        *output = NULL;
+        *output_len = 0;
+        return -1;
+    }
+    return 0;
 }
 
 /* Format a message for display */

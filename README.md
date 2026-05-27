@@ -197,6 +197,7 @@ ssh -p 2222 chat.example.com health
 ssh -p 2222 chat.example.com stats --json
 ssh -p 2222 chat.example.com users
 ssh -p 2222 chat.example.com "tail -n 20"
+ssh -p 2222 chat.example.com "dump -n 100"
 ssh -p 2222 operator@chat.example.com post "service notice"
 ssh -p 2222 chat.example.com post "/me deploys v2.0"
 ```
@@ -212,6 +213,7 @@ around the same SSH exec interface:
 ```sh
 tntctl chat.example.com health
 tntctl -p 2222 chat.example.com stats --json
+tntctl -p 2222 chat.example.com dump -n 100
 tntctl -l operator chat.example.com post "service notice"
 ```
 

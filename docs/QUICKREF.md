@@ -46,6 +46,14 @@ INSERT MODE
   limit                  1023 bytes/message; over-limit input rings bell
   normal                 opens/follows latest; k/PgUp older, j/PgDn newer
 
+EXEC COMMANDS
+  health                 print service health
+  stats [--json]         print room statistics
+  users [--json]         list online users
+  tail [N] / tail -n N   recent in-memory room messages
+  dump [N] / dump -n N   persisted messages.log v1 records
+  post <message>         post as the SSH login name
+
 STRUCTURE
   src/main.c          entry, signals
   src/cli_text.c      startup CLI text

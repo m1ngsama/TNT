@@ -56,6 +56,7 @@ ssh -p 2222 chat.example.com health
 ssh -p 2222 chat.example.com stats --json
 ssh -p 2222 chat.example.com users --json
 ssh -p 2222 chat.example.com "tail -n 20"
+ssh -p 2222 chat.example.com "dump -n 100"
 ssh -p 2222 operator@chat.example.com post "service notice"
 ```
 
@@ -64,6 +65,7 @@ The same commands can be run through `tntctl`:
 ```sh
 tntctl chat.example.com health
 tntctl -p 2222 chat.example.com stats --json
+tntctl -p 2222 chat.example.com dump -n 100
 tntctl -l operator chat.example.com post "service notice"
 tntctl --host-key-checking accept-new chat.example.com users
 ```
@@ -127,6 +129,22 @@ Prints recent in-memory messages as tab-separated lines:
 
 The current upper bound is `MAX_MESSAGES`.  This command reads the live
 in-memory room buffer, not the full persisted log.
+
+### `dump [N]` / `dump -n N`
+
+Exports valid persisted `messages.log` v1 records in chronological order:
+
+```text
+2026-05-25T12:00:00Z|alice|hello
+```
+
+Without `N`, `dump` exports all valid persisted records.  With `N`, it exports
+the last `N` valid persisted records.  Malformed, invalid UTF-8, oversized, or
+truncated records are skipped by the same strict parser used for replay and
+search.
+
+This command reads the on-disk log, not the live in-memory room buffer.  A
+missing log produces empty output and exit status `0`.
 
 ### `post MESSAGE`
 

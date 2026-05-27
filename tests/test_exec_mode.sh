@@ -140,6 +140,19 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+DUMP_USAGE=$(ssh $SSH_OPTS localhost "dump -n nope" 2>/dev/null)
+DUMP_USAGE_STATUS=$?
+printf '%s\n' "$DUMP_USAGE" | grep -q '^dump: 用法: dump \[N\] | dump -n N$'
+if [ $? -eq 0 ] && [ "$DUMP_USAGE_STATUS" -eq 64 ]; then
+    echo "✓ dump usage follows TNT_LANG and exits 64"
+    PASS=$((PASS + 1))
+else
+    echo "✗ dump usage output unexpected"
+    printf '%s\n' "$DUMP_USAGE"
+    echo "exit status: $DUMP_USAGE_STATUS"
+    FAIL=$((FAIL + 1))
+fi
+
 POST_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "hello from exec" 2>/dev/null || true)
 if [ "$POST_OUTPUT" = "posted" ]; then
     echo "✓ post publishes a message"
@@ -158,6 +171,17 @@ if [ $? -eq 0 ]; then
 else
     echo "✗ tail output unexpected"
     printf '%s\n' "$TAIL_OUTPUT"
+    FAIL=$((FAIL + 1))
+fi
+
+DUMP_OUTPUT=$(ssh $SSH_OPTS localhost "dump -n 1" 2>/dev/null || true)
+printf '%s\n' "$DUMP_OUTPUT" | grep -q '|execposter|hello from exec$'
+if [ $? -eq 0 ]; then
+    echo "✓ dump returns persisted message log records"
+    PASS=$((PASS + 1))
+else
+    echo "✗ dump output unexpected"
+    printf '%s\n' "$DUMP_OUTPUT"
     FAIL=$((FAIL + 1))
 fi
 
@@ -258,6 +282,17 @@ if [ $? -eq 0 ]; then
 else
     echo "✗ tntctl tail output unexpected"
     printf '%s\n' "$TNTCTL_TAIL"
+    FAIL=$((FAIL + 1))
+fi
+
+TNTCTL_DUMP=$("../tntctl" -p "$PORT" $TNTCTL_OPTS localhost "dump" "-n" "1" 2>/dev/null || true)
+printf '%s\n' "$TNTCTL_DUMP" | grep -q '|ctlposter|hello from tntctl$'
+if [ $? -eq 0 ]; then
+    echo "✓ tntctl dump returns persisted message log records"
+    PASS=$((PASS + 1))
+else
+    echo "✗ tntctl dump output unexpected"
+    printf '%s\n' "$TNTCTL_DUMP"
     FAIL=$((FAIL + 1))
 fi
 

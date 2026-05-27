@@ -20,7 +20,7 @@ static void print_usage(FILE *stream) {
             "  -h, --help             Print this help and exit\n"
             "\n"
             "Commands mirror the TNT SSH exec interface: health, stats, users,\n"
-            "tail, post, help, and exit.\n");
+            "tail, dump, post, help, and exit.\n");
 }
 
 static bool is_valid_port(const char *value) {
@@ -78,6 +78,7 @@ static bool is_known_exec_command(const char *command) {
             strcmp(command, "stats") == 0 ||
             strcmp(command, "users") == 0 ||
             strcmp(command, "tail") == 0 ||
+            strcmp(command, "dump") == 0 ||
             strcmp(command, "post") == 0 ||
             strcmp(command, "help") == 0 ||
             strcmp(command, "exit") == 0);

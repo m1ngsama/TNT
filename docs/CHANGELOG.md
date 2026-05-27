@@ -7,6 +7,8 @@
   and JSON field shapes for package tests, scripts, and future `tntctl` work.
 - Documented `messages.log` v1 as the stable TNT 1.x persisted history format,
   including parser, sanitization, and partial-record recovery rules.
+- Added `dump [N]` / `dump -n N` to the SSH exec interface and `tntctl` for
+  exporting valid persisted `messages.log` v1 records.
 - Added a public security policy, supported-version guidance, and GitHub issue
   templates for bug reports and feature requests.
 - Added `tntctl`, a thin local wrapper around the documented SSH exec

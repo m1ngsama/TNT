@@ -208,6 +208,53 @@ TEST(message_search_skips_malformed_records) {
     cleanup_state_dir();
 }
 
+TEST(message_dump_exports_valid_records) {
+    char ts[64];
+    char log_path[PATH_MAX];
+    char expected_all[512];
+    char expected_last_two[512];
+    char *dump = NULL;
+    size_t dump_len = 0;
+
+    setup_state_dir();
+    format_rfc3339_now(ts, sizeof(ts));
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+
+    FILE *fp = fopen(log_path, "wb");
+    assert(fp != NULL);
+    fprintf(fp, "%s|alice|first valid\n", ts);
+    fprintf(fp, "%s|mallory|extra|pipe\n", ts);
+    fprintf(fp, "%s|bob|second valid\n", ts);
+    fprintf(fp, "%s|carol|third valid\n", ts);
+    fprintf(fp, "%s|partial|truncated record", ts);
+    fclose(fp);
+
+    snprintf(expected_all, sizeof(expected_all),
+             "%s|alice|first valid\n"
+             "%s|bob|second valid\n"
+             "%s|carol|third valid\n",
+             ts, ts, ts);
+    assert(message_dump_text(&dump, &dump_len, 0) == 0);
+    assert(dump != NULL);
+    assert(dump_len == strlen(expected_all));
+    assert(strcmp(dump, expected_all) == 0);
+    free(dump);
+
+    dump = NULL;
+    dump_len = 0;
+    snprintf(expected_last_two, sizeof(expected_last_two),
+             "%s|bob|second valid\n"
+             "%s|carol|third valid\n",
+             ts, ts);
+    assert(message_dump_text(&dump, &dump_len, 2) == 0);
+    assert(dump != NULL);
+    assert(dump_len == strlen(expected_last_two));
+    assert(strcmp(dump, expected_last_two) == 0);
+    free(dump);
+
+    cleanup_state_dir();
+}
+
 /* Test edge cases */
 TEST(message_edge_cases) {
     message_t msg;
@@ -303,6 +350,7 @@ int main(void) {
     RUN_TEST(message_save_basic);
     RUN_TEST(message_load_skips_malformed_records);
     RUN_TEST(message_search_skips_malformed_records);
+    RUN_TEST(message_dump_exports_valid_records);
     RUN_TEST(message_edge_cases);
     RUN_TEST(message_special_characters);
     RUN_TEST(message_buffer_safety);

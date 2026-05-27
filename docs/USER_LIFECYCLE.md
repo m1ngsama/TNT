@@ -14,7 +14,7 @@ The product path should stay short:
 7. User uses commands only when needed: `:users`, `:msg`, `:inbox`, `:last`,
    `:search`, `:nick`, `:mute-joins`, and `:q`.
 8. Scripts and operators use `tntctl` or SSH exec commands for `health`,
-   `stats`, `users`, `tail`, and `post`.
+   `stats`, `users`, `tail`, `dump`, and `post`.
 
 ## TUI Experience Notes
 

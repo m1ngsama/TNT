@@ -291,6 +291,45 @@ static int parse_tail_count(const char *args, int *count) {
     return 0;
 }
 
+static int parse_dump_count(const char *args, int *count) {
+    char *end = NULL;
+    long value;
+
+    if (!count) {
+        return -1;
+    }
+
+    *count = 0;
+    if (!args || args[0] == '\0') {
+        return 0;
+    }
+
+    if (strncmp(args, "-n", 2) == 0) {
+        args += 2;
+        while (*args && isspace((unsigned char)*args)) {
+            args++;
+        }
+    }
+
+    value = strtol(args, &end, 10);
+    if (end == args) {
+        return -1;
+    }
+    while (*end) {
+        if (!isspace((unsigned char)*end)) {
+            return -1;
+        }
+        end++;
+    }
+
+    if (value < 1 || value > 10000) {
+        return -1;
+    }
+
+    *count = (int)value;
+    return 0;
+}
+
 static int exec_command_tail(client_t *client, const char *args) {
     int requested = 20;
     int total_messages;
@@ -344,6 +383,27 @@ static int exec_command_tail(client_t *client, const char *args) {
     rc = client_send(client, output, pos) == 0 ? TNT_EXIT_OK : TNT_EXIT_ERROR;
     free(output);
     free(snapshot);
+    return rc;
+}
+
+static int exec_command_dump(client_t *client, const char *args) {
+    int requested = 0;
+    char *output = NULL;
+    size_t output_len = 0;
+    int rc;
+
+    if (parse_dump_count(args, &requested) < 0) {
+        return exec_command_usage(client, TNT_EXEC_COMMAND_DUMP);
+    }
+
+    if (message_dump_text(&output, &output_len, requested) < 0) {
+        client_printf(client, "dump: failed to read message log\n");
+        return TNT_EXIT_ERROR;
+    }
+
+    rc = client_send(client, output, output_len) == 0 ? TNT_EXIT_OK
+                                                     : TNT_EXIT_ERROR;
+    free(output);
     return rc;
 }
 
@@ -451,6 +511,8 @@ int exec_dispatch(client_t *client) {
                 return exec_command_stats(client, args != NULL);
             case TNT_EXEC_COMMAND_TAIL:
                 return exec_command_tail(client, args);
+            case TNT_EXEC_COMMAND_DUMP:
+                return exec_command_dump(client, args);
             case TNT_EXEC_COMMAND_POST:
                 return exec_command_post(client, args);
             case TNT_EXEC_COMMAND_EXIT:

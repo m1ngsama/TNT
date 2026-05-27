@@ -26,4 +26,9 @@ void message_format(const message_t *msg, char *buffer, size_t buf_size, int wid
  * Returns the last max_results matches in chronological order; caller must free *results. */
 int message_search(const char *query, message_t **results, int max_results);
 
+/* Export valid persisted log records in messages.log v1 format.  max_records
+ * 0 exports all valid records; positive values export the last max_records
+ * valid records.  Caller must free *output. */
+int message_dump_text(char **output, size_t *output_len, int max_records);
+
 #endif /* MESSAGE_H */

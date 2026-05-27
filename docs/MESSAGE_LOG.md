@@ -53,6 +53,13 @@ Replay and search use the same strict parser.  TNT skips records that are:
 Skipping a bad record is intentional recovery behavior.  A truncated final
 line is treated as a partial append and ignored rather than replayed.
 
+## Export
+
+`dump [N]` and `dump -n N` export valid persisted records through the SSH exec
+interface and `tntctl`.  The output format is exactly the v1 record format
+above.  Without `N`, `dump` exports all valid records; with `N`, it exports the
+last `N` valid records.
+
 ## Compatibility
 
 The v1 record format is stable for TNT 1.x.  Future incompatible storage

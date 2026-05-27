@@ -73,6 +73,12 @@ Print recent messages.
 .B tail -n N
 Print recent messages.
 .TP
+.B dump [N]
+Export persisted messages.
+.TP
+.B dump -n N
+Export persisted messages.
+.TP
 .B post MESSAGE
 Post a message non-interactively.
 .TP
@@ -82,6 +88,7 @@ Print the server exec help.
 .nf
 tntctl chat.example.com health
 tntctl -p 2222 chat.example.com stats --json
+tntctl -p 2222 chat.example.com dump -n 100
 tntctl -l operator chat.example.com post "service notice"
 tntctl --host-key-checking accept-new chat.example.com users
 .fi
