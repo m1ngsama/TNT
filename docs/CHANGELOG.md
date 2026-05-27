@@ -28,6 +28,8 @@
 - Added a VHS tape draft for recording the core TNT terminal-chat experience.
 - Added live `:inbox` refresh behavior: `r` refreshes the inbox manually, and
   an open inbox refreshes when a new private message arrives.
+- Added `/` in NORMAL mode as a fast history-search entrypoint backed by the
+  existing `:search` command.
 - Added `make slow-client-test`, an opt-in regression for an unread
   interactive SSH client under backpressure while health, stats, post, tail,
   and server survival stay responsive.
@@ -73,6 +75,12 @@
   contract.
 - The two-user lifecycle test now covers opening `:inbox` before a private
   message arrives, matching the way users often leave an inbox page open.
+- Help and command-output pagers now accept arrow keys, PgUp/PgDn, Home/End,
+  and Space/`b` in addition to the existing Vim-style keys.
+- Pre-login username entry now handles Ctrl+C/Ctrl+D cancel, Ctrl+U clear
+  line, and Ctrl+W delete-word before the user joins the room.
+- Long COMMAND-mode input is now left-truncated with a visible marker in the
+  status line instead of wrapping and damaging the TUI.
 - Private-message inbox access now uses its own mutex instead of sharing the
   SSH channel write lock, reducing unrelated contention on slow clients.
 - Client writes now check the SSH channel's remote window before writing and

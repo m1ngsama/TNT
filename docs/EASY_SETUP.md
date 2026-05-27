@@ -64,7 +64,10 @@ Esc         enter NORMAL mode
 i           return to INSERT mode
 :           enter COMMAND mode
 ?           open the full key reference
+/           search message history
 G or End    jump to latest messages
+Up/Down     recall sent messages in INSERT mode
+Tab         complete @mention in INSERT mode
 Ctrl+C      disconnect from NORMAL mode
 ```
 
@@ -209,7 +212,10 @@ Esc          进入 NORMAL 模式
 i            回到 INSERT 模式
 :            输入命令
 ?            查看完整按键参考
+/            搜索消息历史
 G 或 End      回到最新消息
+Up/Down      在 INSERT 模式调出已发送消息
+Tab          在 INSERT 模式补全 @mention
 :help        查看简明手册
 :lang en|zh  切换界面语言
 :q           断开连接

@@ -11,8 +11,9 @@ The product path should stay short:
 4. User lands in INSERT mode at the live tail and can type immediately.
 5. User presses Esc to browse history with Vim-style movement.
 6. User uses `:help` for the concise manual or `?` for the full key reference.
-7. User uses commands only when needed: `:users`, `:msg`, `:inbox`, `:last`,
-   `:search`, `:nick`, `:mute-joins`, and `:q`.
+7. User searches from NORMAL with `/term`, or uses commands when needed:
+   `:users`, `:msg`, `:inbox`, `:last`, `:search`, `:nick`, `:mute-joins`,
+   and `:q`.
 8. Scripts and operators use `tntctl` or SSH exec commands for `health`,
    `stats`, `users`, `tail`, `dump`, and `post`.
 
@@ -23,6 +24,10 @@ The product path should stay short:
 - INSERT mode is the default because most users arrive to send a message.
 - NORMAL mode opens at the latest messages, not the oldest history. Users can
   move upward for older context and use `G` or End to return to live chat.
+- NORMAL mode accepts `/` as the fast path for history search, matching a
+  common terminal-reader habit while reusing the existing `:search` command.
+- INSERT mode keeps a small per-session sent-message history on Up/Down and
+  completes trailing `@mention` prefixes with Tab.
 - `:help` is a compact manual, while `?` is a full key reference. Do not add
   parallel support commands for the same task.
 - Command syntax stays ASCII even in localized UI text. Translations explain;

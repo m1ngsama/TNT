@@ -58,6 +58,51 @@ else
     exit 1
 fi
 
+USERNAME_CANCEL_SCRIPT="$STATE_DIR/username-cancel.expect"
+cat >"$USERNAME_CANCEL_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "\003"
+expect eof
+EOF
+
+if expect "$USERNAME_CANCEL_SCRIPT" >"$STATE_DIR/username-cancel.log" 2>&1; then
+    echo "✓ Ctrl+C cancels before username join"
+    PASS=$((PASS + 1))
+else
+    echo "x Ctrl+C before username failed"
+    sed -n '1,120p' "$STATE_DIR/username-cancel.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+USERNAME_EDIT_SCRIPT="$STATE_DIR/username-edit.expect"
+cat >"$USERNAME_EDIT_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "wrong\025editeduser\r"
+expect ":help"
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$USERNAME_EDIT_SCRIPT" >"$STATE_DIR/username-edit.log" 2>&1 &&
+   grep -q 'editeduser' "$STATE_DIR/messages.log" &&
+   ! grep -q 'wrongediteduser' "$STATE_DIR/messages.log"; then
+    echo "✓ Ctrl+U edits username before join"
+    PASS=$((PASS + 1))
+else
+    echo "x username line editing failed"
+    sed -n '1,120p' "$STATE_DIR/username-edit.log" 2>/dev/null || true
+    cat "$STATE_DIR/messages.log" 2>/dev/null || true
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 EXPECT_SCRIPT="$STATE_DIR/bracketed-paste.expect"
 cat >"$EXPECT_SCRIPT" <<EOF
 set timeout 10
@@ -146,14 +191,17 @@ send -- ":"
 expect ":"
 send -- "help\r"
 expect "TNT\\(1\\) 帮助"
+expect "Tab 补全 @mention"
 expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- "?"
 expect "TNT 按键参考"
+expect "Tab        - 补全 @mention"
 expect "l:语言"
 send -- "l"
 expect "TNT KEY REFERENCE"
+expect "Complete @mention"
 expect "l:lang"
 send -- "q"
 expect "NORMAL"
@@ -176,6 +224,45 @@ if expect "$HELP_SCRIPT" >"$STATE_DIR/help.log" 2>&1; then
 else
     echo "x :help command failed"
     sed -n '1,160p' "$STATE_DIR/help.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+HELP_PAGER_KEYS_SCRIPT="$STATE_DIR/help-pager-keys.expect"
+cat >"$HELP_PAGER_KEYS_SCRIPT" <<EOF
+set timeout 10
+stty rows 8 columns 80
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "helppager\r"
+expect ":help"
+send -- "\033"
+expect "NORMAL"
+send -- "?"
+expect -re {\(1/[2-9][0-9]*\)}
+send -- "\033\[6~"
+expect -re {\([2-9][0-9]*/[2-9][0-9]*\)}
+send -- "\033\[5~"
+expect -re {\(1/[2-9][0-9]*\)}
+send -- "\033\[F"
+expect -re {\([2-9][0-9]*/[2-9][0-9]*\)}
+send -- "\033\[H"
+expect -re {\(1/[2-9][0-9]*\)}
+send -- "q"
+expect "NORMAL"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$HELP_PAGER_KEYS_SCRIPT" >"$STATE_DIR/help-pager-keys.log" 2>&1; then
+    echo "✓ help pager accepts terminal paging keys"
+    PASS=$((PASS + 1))
+else
+    echo "x help pager terminal keys failed"
+    sed -n '1,220p' "$STATE_DIR/help-pager-keys.log"
     sed -n '1,120p' "$STATE_DIR/server.log"
     FAIL=$((FAIL + 1))
 fi
@@ -371,6 +458,14 @@ expect "j/k:滚动"
 expect -re {\(1/[2-9][0-9]*\)}
 send -- "j"
 expect -re {\(2/[2-9][0-9]*\)}
+send -- "\033\[6~"
+expect -re {\([3-9][0-9]*/[2-9][0-9]*\)}
+send -- "\033\[5~"
+expect -re {\([1-9][0-9]*/[2-9][0-9]*\)}
+send -- "\033\[F"
+expect -re {\([2-9][0-9]*/[2-9][0-9]*\)}
+send -- "\033\[H"
+expect -re {\(1/[2-9][0-9]*\)}
 send -- "q"
 expect "NORMAL"
 sleep 0.2
@@ -386,6 +481,37 @@ if expect "$COMMAND_OUTPUT_SCROLL_SCRIPT" >"$STATE_DIR/command-output-scroll.log
 else
     echo "x command output scrolling failed"
     sed -n '1,220p' "$STATE_DIR/command-output-scroll.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+COMMAND_INPUT_WRAP_SCRIPT="$STATE_DIR/command-input-wrap.expect"
+cat >"$COMMAND_INPUT_WRAP_SCRIPT" <<EOF
+set timeout 10
+stty rows 10 columns 40
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "wrapcmd\r"
+expect ":help"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "search aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaatail"
+expect -re {<a+tail}
+send -- "\003"
+expect "NORMAL"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$COMMAND_INPUT_WRAP_SCRIPT" >"$STATE_DIR/command-input-wrap.log" 2>&1; then
+    echo "✓ long command input stays on one status line"
+    PASS=$((PASS + 1))
+else
+    echo "x long command input display failed"
+    sed -n '1,220p' "$STATE_DIR/command-input-wrap.log"
     sed -n '1,120p' "$STATE_DIR/server.log"
     FAIL=$((FAIL + 1))
 fi
