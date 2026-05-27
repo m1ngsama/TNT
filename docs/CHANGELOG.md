@@ -51,6 +51,9 @@
 - Session callback refs are now owned and released through `client.c`, so
   bootstrap and interactive cleanup no longer need to manually mirror the
   main-ref / callback-ref release sequence.
+- Message-log replay and search now share one strict record parser and skip
+  malformed, invalid UTF-8, extra-separator, oversized, or unterminated
+  records instead of accepting partial replay data.
 - The two-user lifecycle test now covers opening `:inbox` before a private
   message arrives, matching the way users often leave an inbox page open.
 - Private-message inbox access now uses its own mutex instead of sharing the

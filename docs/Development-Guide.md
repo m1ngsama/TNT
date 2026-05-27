@@ -296,6 +296,11 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
 2024-01-13T10:30:45Z|username|message content
 ```
 
+Log replay and search use the same strict parser.  A record is accepted only
+when it has exactly three fields, a strict UTC RFC3339 timestamp, valid UTF-8
+username/content, bounded field lengths, and a trailing newline.  Unterminated
+last lines are treated as partial writes and skipped.
+
 **Optimized loading** (backward scan):
 ```c
 /* Scan backwards from file end */

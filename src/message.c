@@ -26,6 +26,82 @@ static time_t parse_rfc3339_utc(const char *timestamp_str) {
     return timegm(&tm);
 }
 
+static void discard_line_remainder(FILE *fp) {
+    int c;
+
+    while ((c = fgetc(fp)) != '\n' && c != EOF) {
+    }
+}
+
+static bool parse_log_record(const char *line, message_t *out,
+                             time_t now) {
+    char line_copy[2048];
+    char *first_sep;
+    char *second_sep;
+    char *timestamp_str;
+    char *username;
+    char *content;
+    time_t msg_time;
+    size_t line_len;
+
+    if (!line || !out) {
+        return false;
+    }
+
+    line_len = strlen(line);
+    if (line_len == 0 || line[line_len - 1] != '\n') {
+        return false;
+    }
+    if (line_len >= sizeof(line_copy)) {
+        return false;
+    }
+
+    memcpy(line_copy, line, line_len + 1);
+    line_copy[line_len - 1] = '\0';
+
+    first_sep = strchr(line_copy, '|');
+    if (!first_sep) {
+        return false;
+    }
+    second_sep = strchr(first_sep + 1, '|');
+    if (!second_sep || strchr(second_sep + 1, '|')) {
+        return false;
+    }
+
+    *first_sep = '\0';
+    *second_sep = '\0';
+    timestamp_str = line_copy;
+    username = first_sep + 1;
+    content = second_sep + 1;
+
+    if (timestamp_str[0] == '\0' || username[0] == '\0' ||
+        content[0] == '\0') {
+        return false;
+    }
+    if (strlen(username) >= MAX_USERNAME_LEN ||
+        strlen(content) >= MAX_MESSAGE_LEN) {
+        return false;
+    }
+    if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) {
+        return false;
+    }
+
+    msg_time = parse_rfc3339_utc(timestamp_str);
+    if (msg_time == (time_t)-1) {
+        return false;
+    }
+    if (msg_time > now + 86400 || msg_time < now - 31536000 * 10) {
+        return false;
+    }
+
+    out->timestamp = msg_time;
+    strncpy(out->username, username, MAX_USERNAME_LEN - 1);
+    out->username[MAX_USERNAME_LEN - 1] = '\0';
+    strncpy(out->content, content, MAX_MESSAGE_LEN - 1);
+    out->content[MAX_MESSAGE_LEN - 1] = '\0';
+    return true;
+}
+
 /* Initialize message subsystem */
 void message_init(void) {
     /* Nothing to initialize for now */
@@ -120,65 +196,23 @@ int message_load(message_t **messages, int max_messages) {
 read_messages:;
     char line[2048];
     int count = 0;
+    time_t now = time(NULL);
 
     /* Now read forward */
     while (fgets(line, sizeof(line), fp) && count < max_messages) {
         /* Check for oversized lines */
         size_t line_len = strlen(line);
-        if (line_len >= sizeof(line) - 1) {
-            /* Skip remainder of line */
-            int c;
-            while ((c = fgetc(fp)) != '\n' && c != EOF);
+        if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
+            discard_line_remainder(fp);
             continue;
         }
 
-        /* Format: RFC3339_timestamp|username|content */
-        char line_copy[2048];
-        strncpy(line_copy, line, sizeof(line_copy) - 1);
-        line_copy[sizeof(line_copy) - 1] = '\0';
-
-        char *timestamp_str = strtok(line_copy, "|");
-        char *username = strtok(NULL, "|");
-        char *content = strtok(NULL, "\n");
-
-        /* Validate all fields exist and are non-empty */
-        if (!timestamp_str || !username || !content) {
-            continue;
-        }
-        if (username[0] == '\0') {
+        message_t parsed;
+        if (!parse_log_record(line, &parsed, now)) {
             continue;
         }
 
-        /* Validate field lengths */
-        if (strlen(username) >= MAX_USERNAME_LEN) {
-            continue;
-        }
-        if (strlen(content) >= MAX_MESSAGE_LEN) {
-            continue;
-        }
-
-        if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) {
-            continue;
-        }
-
-        /* Parse strict UTC RFC3339 timestamp */
-        time_t msg_time = parse_rfc3339_utc(timestamp_str);
-        if (msg_time == (time_t)-1) {
-            continue;
-        }
-
-        /* Validate timestamp is reasonable (not in far future or past) */
-        time_t now = time(NULL);
-        if (msg_time > now + 86400 || msg_time < now - 31536000 * 10) {
-            continue;
-        }
-
-        msg_array[count].timestamp = msg_time;
-        strncpy(msg_array[count].username, username, MAX_USERNAME_LEN - 1);
-        msg_array[count].username[MAX_USERNAME_LEN - 1] = '\0';
-        strncpy(msg_array[count].content, content, MAX_MESSAGE_LEN - 1);
-        msg_array[count].content[MAX_MESSAGE_LEN - 1] = '\0';
-        count++;
+        msg_array[count++] = parsed;
     }
 
     fclose(fp);
@@ -276,38 +310,19 @@ int message_search(const char *query, message_t **results, int max_results) {
 
     char line[2048];
     int count = 0;
+    time_t now = time(NULL);
 
     while (fgets(line, sizeof(line), fp)) {
         size_t line_len = strlen(line);
-        if (line_len >= sizeof(line) - 1) {
-            int c;
-            while ((c = fgetc(fp)) != '\n' && c != EOF);
+        if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
+            discard_line_remainder(fp);
             continue;
         }
 
-        char line_copy[2048];
-        strncpy(line_copy, line, sizeof(line_copy) - 1);
-        line_copy[sizeof(line_copy) - 1] = '\0';
-
-        char *timestamp_str = strtok(line_copy, "|");
-        char *username = strtok(NULL, "|");
-        char *content = strtok(NULL, "\n");
-
-        if (!timestamp_str || !username || !content || username[0] == '\0') continue;
-        if (strlen(username) >= MAX_USERNAME_LEN || strlen(content) >= MAX_MESSAGE_LEN) continue;
-        if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) continue;
-
-        if (strcasestr(username, query) == NULL && strcasestr(content, query) == NULL) continue;
-
-        time_t msg_time = parse_rfc3339_utc(timestamp_str);
-        if (msg_time == (time_t)-1) continue;
-
         message_t m;
-        m.timestamp = msg_time;
-        strncpy(m.username, username, MAX_USERNAME_LEN - 1);
-        m.username[MAX_USERNAME_LEN - 1] = '\0';
-        strncpy(m.content, content, MAX_MESSAGE_LEN - 1);
-        m.content[MAX_MESSAGE_LEN - 1] = '\0';
+        if (!parse_log_record(line, &m, now)) continue;
+        if (strcasestr(m.username, query) == NULL &&
+            strcasestr(m.content, query) == NULL) continue;
 
         if (count < max_results) {
             res[count++] = m;

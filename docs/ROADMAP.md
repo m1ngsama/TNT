@@ -56,10 +56,10 @@ Goal: make stored history durable, inspectable, and recoverable.
 
 - formalize the message log format and version it
 - keep timestamps in a timezone-safe format throughout write and replay
-- validate persisted UTF-8 and record structure before replay
+- ✅ validate persisted UTF-8 and record structure before replay/search
 - add log rotation and compaction tooling
 - provide an offline inspection/export command
-- define recovery behavior for truncated or partially corrupted logs
+- define broader recovery behavior for truncated or partially corrupted logs
 
 ## Stage 4: Interactive UX
 
