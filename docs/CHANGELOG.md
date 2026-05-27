@@ -63,6 +63,8 @@
 - `scripts/logrotate.sh` now has validated arguments, stable exit statuses,
   dry-run support, archive retention, gzip-aware archives, and a regression
   test in the normal test suite.
+- `messages.log` v1 record parsing and formatting now live in a dedicated
+  `message_log` module instead of being embedded in `message.c`.
 - The two-user lifecycle test now covers opening `:inbox` before a private
   message arrives, matching the way users often leave an inbox page open.
 - Private-message inbox access now uses its own mutex instead of sharing the

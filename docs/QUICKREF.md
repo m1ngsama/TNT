@@ -71,6 +71,7 @@ STRUCTURE
   src/exec_catalog.c  SSH exec command matching, usage, argument shape
   src/exec.c          SSH exec command dispatch
   src/message.c       persistence, search
+  src/message_log.c   messages.log v1 parsing and formatting
   src/history_view.c  message viewport / scroll state
   src/help_text.c     full-screen key reference text
   src/manual.c        concise manual panel rendering

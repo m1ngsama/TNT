@@ -12,6 +12,7 @@ endif
 # Source files
 UTF8_SRC = ../../src/utf8.c
 MESSAGE_SRC = ../../src/message.c
+MESSAGE_LOG_SRC = ../../src/message_log.c
 COMMON_SRC = ../../src/common.c
 COMMAND_CATALOG_SRC = ../../src/command_catalog.c
 CLI_TEXT_SRC = ../../src/cli_text.c
@@ -34,10 +35,10 @@ all: $(TESTS)
 test_utf8: test_utf8.c $(UTF8_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_message: test_message.c $(MESSAGE_SRC) $(UTF8_SRC) $(COMMON_SRC)
+test_message: test_message.c $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_chat_room: test_chat_room.c $(CHAT_ROOM_SRC) $(MESSAGE_SRC) $(UTF8_SRC) $(COMMON_SRC)
+test_chat_room: test_chat_room.c $(CHAT_ROOM_SRC) $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_history_view: test_history_view.c $(HISTORY_VIEW_SRC)

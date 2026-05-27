@@ -81,6 +81,7 @@ src/
 ├── exec.c           - SSH exec command dispatch
 ├── chat_room.c      - Chat room state, message ring, and update sequence
 ├── message.c        - Message persistence (RFC3339 format)
+├── message_log.c    - messages.log v1 parsing and formatting
 ├── history_view.c   - NORMAL-mode scroll window rules
 ├── tui.c            - Terminal UI rendering (ANSI escape codes)
 ├── tui_status.c     - Mode/status/input-line rendering
@@ -103,6 +104,7 @@ include/
 ├── bootstrap.h      - SSH session bootstrap interface
 ├── chat_room.h      - Chat room interface
 ├── message.h        - Message structure and persistence
+├── message_log.h    - messages.log v1 parser/formatter interface
 ├── command_catalog.h - COMMAND-mode command metadata interface
 ├── history_view.h   - Scroll-state helpers
 ├── tui.h            - TUI rendering functions
