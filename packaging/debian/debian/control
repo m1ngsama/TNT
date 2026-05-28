@@ -15,7 +15,8 @@ Package: tnt-chat
 Architecture: any
 Depends:
  ${misc:Depends},
- ${shlibs:Depends}
+ ${shlibs:Depends},
+ adduser
 Description: SSH-native terminal chat server
  TNT is a minimalist terminal chat server accessed over SSH. It provides a
  Vim-style terminal interface, anonymous access by default, persistent message

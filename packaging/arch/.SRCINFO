@@ -10,6 +10,8 @@ pkgbase = tnt-chat
 	makedepends = make
 	depends = libssh
 	source = tnt-chat-1.0.1.tar.gz::https://github.com/m1ngsama/TNT/archive/refs/tags/v1.0.1.tar.gz
+	source = tnt-chat.sysusers
 	sha256sums = SKIP
+	sha256sums = 8a1f7dfbdc9f1305c4ed50d80e89f91333ffdf937890c497f93e41abaf76e3ed
 
 pkgname = tnt-chat

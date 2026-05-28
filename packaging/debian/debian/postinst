@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ] && ! getent passwd tnt >/dev/null; then
+    adduser --system --group --home /var/lib/tnt --no-create-home --gecos "TNT chat server" tnt
+fi
+
+#DEBHELPER#
+
+exit 0

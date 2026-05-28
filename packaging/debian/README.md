@@ -47,3 +47,5 @@ debuild -S
 - Installed commands: `/usr/bin/tnt`, `/usr/bin/tntctl`
 - Runtime dependency: `libssh`
 - Optional systemd unit: `/usr/lib/systemd/system/tnt.service`
+- System user: package maintainer scripts create `tnt:tnt`; the systemd unit
+  owns `/var/lib/tnt` through `StateDirectory=tnt`

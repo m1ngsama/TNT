@@ -164,8 +164,20 @@ sh -n install.sh
 step "checking Debian packaging metadata"
 [ -x packaging/debian/debian/rules ] ||
     fail "packaging/debian/debian/rules must be executable"
+[ -x packaging/debian/debian/postinst ] ||
+    fail "packaging/debian/debian/postinst must be executable"
 grep -q "^3.0 (quilt)$" packaging/debian/debian/source/format ||
     fail "unsupported Debian source format"
+grep -q "adduser .* tnt" packaging/debian/debian/postinst ||
+    fail "Debian postinst must create the tnt system user"
+grep -q " adduser" packaging/debian/debian/control ||
+    fail "Debian package must depend on adduser for postinst user creation"
+
+step "checking packaged system user metadata"
+grep -q '^u tnt ' packaging/arch/tnt-chat.sysusers ||
+    fail "Arch sysusers file must create the tnt system user"
+grep -q 'usr/lib/sysusers.d' packaging/arch/PKGBUILD ||
+    fail "PKGBUILD must install the sysusers.d file"
 
 step "checking packaging syntax"
 if command -v bash >/dev/null 2>&1; then

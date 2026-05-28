@@ -109,6 +109,8 @@
   instead of being rejected locally.
 - `tntctl` local help and local validation errors now follow `TNT_LANG` and
   locale selection, matching the server CLI's i18n behavior.
+- Arch and Debian packaging drafts now create the `tnt` system user used by
+  the packaged systemd unit, and release preflight checks that metadata.
 - Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
   locale/code parsing, while `src/i18n_text.c` owns the table-driven text
   catalog with coverage checks for every message ID.
