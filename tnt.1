@@ -184,6 +184,8 @@ ESC	Switch to NORMAL
 Ctrl+W	Delete last word
 Ctrl+U	Clear input line
 Ctrl+C	Switch to NORMAL
+Up/Down	Browse sent message history
+Tab	Complete @mention
 Paste	Keep multi-line paste in the input buffer
 /me \fIaction\fR	Send action message (e.g. /me waves)
 @\fIusername\fR	Mention user (bell notification + highlight)
@@ -220,7 +222,7 @@ l l.
 :w \fIuser text\fR	Short alias for :msg
 :inbox	Show private messages
 :last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
-:search \fIkeyword\fR	Case\-insensitive search across full message history
+:search \fIkeyword\fR	Case\-insensitive search; shows the last 15 matches
 :mute\-joins	Toggle join/leave system notifications on/off
 :lang	Show current UI language
 :lang \fIen|zh\fR	Switch UI language for this session

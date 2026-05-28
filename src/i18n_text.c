@@ -26,12 +26,12 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "TNT %s - SSH 匿名聊天室\r\n\r\n"
     ),
     [I18N_INSERT_HINT_WIDE] = I18N_STRING(
-        "Enter send · Esc browse · :help",
-        "Enter 发送 · Esc 浏览 · :help"
+        "Enter send · Esc NORMAL",
+        "Enter 发送 · Esc NORMAL"
     ),
     [I18N_INSERT_HINT_NARROW] = I18N_STRING(
-        "Enter · Esc · :help",
-        "Enter · Esc · :help"
+        "Enter · Esc",
+        "Enter · Esc"
     ),
     [I18N_NORMAL_LATEST] = I18N_STRING(
         "G latest",
@@ -142,8 +142,8 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "--- 最近 %d 条消息 ---\n"
     ),
     [I18N_SEARCH_HEADER_FORMAT] = I18N_STRING(
-        "--- Search: \"%s\" (%d match(es)) ---\n",
-        "--- 搜索: \"%s\" (%d 条匹配) ---\n"
+        "--- Search: \"%s\" (showing last %d match(es)) ---\n",
+        "--- 搜索: \"%s\" (显示最近 %d 条匹配) ---\n"
     ),
     [I18N_MUTE_JOINS_FORMAT] = I18N_STRING(
         "Join/leave notifications: %s\n",

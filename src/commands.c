@@ -118,6 +118,10 @@ void commands_dispatch(client_t *client) {
             end--;
         }
     }
+    if (cmd[0] == ':') {
+        cmd++;
+        while (*cmd == ' ') cmd++;
+    }
 
     /* Save to command history */
     if (cmd[0] != '\0') {

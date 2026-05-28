@@ -83,7 +83,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "wrong\025editeduser\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\003"
 sleep 0.2
 send -- "\003"
@@ -109,7 +109,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "tester\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033\[200~"
 send -- "line1\nline2\nline3"
 send -- "\033\[201~"
@@ -184,12 +184,12 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "helper\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
 expect ":"
-send -- "help\r"
+send -- ":help\r"
 expect "TNT\\(1\\) 帮助"
 expect "Tab 补全 @mention"
 expect "q:关闭"
@@ -199,6 +199,10 @@ send -- "?"
 expect "TNT 按键参考"
 expect "Tab        - 补全 @mention"
 expect "l:语言"
+send -- "\003"
+expect "NORMAL"
+send -- "?"
+expect "TNT 按键参考"
 send -- "l"
 expect "TNT KEY REFERENCE"
 expect "Complete @mention"
@@ -235,7 +239,7 @@ stty rows 8 columns 80
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "helppager\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- "?"
@@ -273,7 +277,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "mistype\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -305,7 +309,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "localized\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -355,7 +359,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "usageuser\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -448,7 +452,7 @@ stty rows 8 columns 80
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "pageruser\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -492,7 +496,7 @@ stty rows 10 columns 40
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "wrapcmd\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -522,7 +526,7 @@ set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "systemuser\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -569,7 +573,7 @@ expect "公告"
 expect "维护窗口"
 expect "按任意键继续"
 send -- "x"
-expect "NORMAL"
+expect "INSERT"
 sleep 0.2
 send -- "\003"
 sleep 0.2

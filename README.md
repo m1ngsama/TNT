@@ -98,7 +98,7 @@ Ctrl+C     - Exit chat
 :w <user> <text>     - Short alias for :msg
 :inbox               - Show private messages
 :last [N]            - Show last N messages from history (max 50, default 10)
-:search <keyword>    - Search full message history (case-insensitive)
+:search <keyword>    - Search message history (shows last 15 matches)
 :mute-joins          - Toggle join/leave system notifications
 :lang <en|zh>        - Switch UI language for this session
 :help                - Show concise manual

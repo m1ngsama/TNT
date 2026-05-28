@@ -235,9 +235,13 @@ static void dismiss_command_output(client_t *client) {
     client->command_output_scroll = 0;
     client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
     client->show_motd = false;
-    client->mode = MODE_NORMAL;
     if (was_motd) {
+        client->mode = MODE_INSERT;
+        client->follow_tail = true;
+        client->unread_mentions = 0;
         normal_scroll_to_latest(client);
+    } else {
+        client->mode = MODE_NORMAL;
     }
     tui_render_screen(client);
 }
@@ -352,6 +356,11 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Handle Ctrl+C (Exit or switch to NORMAL) */
     if (key == 3) {
         client_mode_t previous_mode = client->mode;
+        if (client->show_help) {
+            client->show_help = false;
+            tui_render_screen(client);
+            return true;
+        }
         if (client->command_output[0] != '\0') {
             dismiss_command_output(client);
             return true;

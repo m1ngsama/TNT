@@ -79,7 +79,7 @@ set timeout 30
 spawn ssh $SSH_OPTS bob@127.0.0.1
 sleep 1
 send -- "bob\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- ":"
@@ -143,7 +143,7 @@ set timeout 30
 spawn ssh $SSH_OPTS alice@127.0.0.1
 sleep 1
 send -- "alice\r"
-expect ":help"
+expect "Esc NORMAL"
 send -- "\033"
 expect "NORMAL"
 send -- "?"
@@ -160,7 +160,7 @@ expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- "i"
-expect ":help"
+expect "Esc NORMAL"
 send -- "hello lifecycle alpha\r"
 sleep 1
 send -- "\033"
@@ -215,7 +215,7 @@ expect "q:关闭"
 send -- "q"
 expect "NORMAL"
 send -- "i"
-expect ":help"
+expect "Esc NORMAL"
 send -- "/me ships lifecycle\r"
 sleep 1
 send -- "\003"
