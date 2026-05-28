@@ -25,7 +25,7 @@ OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 DEPS = $(OBJECTS:.o=.d) $(CTL_OBJECTS:.o=.d)
 TARGET = tnt
 CTL_TARGET = tntctl
-CTL_OBJECTS = $(OBJ_DIR)/tntctl.o
+CTL_OBJECTS = $(OBJ_DIR)/tntctl.o $(OBJ_DIR)/exec_catalog.o $(OBJ_DIR)/common.o
 TARGETS = $(TARGET) $(CTL_TARGET)
 
 PREFIX ?= /usr/local
@@ -122,6 +122,7 @@ unit-test:
 
 script-test: all
 	@echo "Running script tests..."
+	@cd tests && ./test_cli_options.sh
 	@cd tests && ./test_logrotate.sh
 	@cd tests && ./test_message_log_tool.sh
 

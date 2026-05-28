@@ -37,8 +37,10 @@ tnt -p 2222 -d /var/lib/tnt
 ## Connect
 
 ```sh
-ssh -p 2222 chat.example.com
+ssh -p 2222 localhost
 ```
+
+For a deployed server, replace `localhost` with your public host.
 
 Default access rules:
 
@@ -199,8 +201,10 @@ tnt
 ### 连接
 
 ```sh
-ssh -p 2222 chat.example.com
+ssh -p 2222 localhost
 ```
+
+部署到公网后，将 `localhost` 替换为你的域名。
 
 默认情况下，任意 SSH 用户名和空密码都可以连接。进入后 TNT 会询问显示名称。
 

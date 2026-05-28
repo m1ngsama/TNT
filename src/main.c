@@ -75,6 +75,16 @@ static int set_numeric_env_option(const char *env_name, const char *opt_name,
     return TNT_EXIT_OK;
 }
 
+static bool require_option_arg(int argc, char **argv, int index,
+                               ui_lang_t lang) {
+    if (index + 1 >= argc || argv[index + 1][0] == '\0') {
+        fprintf(stderr, cli_text_option_requires_arg_format(lang),
+                argv[index]);
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char **argv) {
     int port = DEFAULT_PORT;
     ui_lang_t lang = i18n_default_ui_lang();
@@ -93,9 +103,11 @@ int main(int argc, char **argv) {
 
     /* Parse command line arguments */
     for (int i = 1; i < argc; i++) {
-        if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) &&
-            i + 1 < argc) {
+        if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) {
             int val;
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             if (!parse_int_arg(argv[i + 1], 1, 65535, &val)) {
                 fprintf(stderr, cli_text_invalid_port_format(lang),
                         argv[i + 1]);
@@ -103,18 +115,19 @@ int main(int argc, char **argv) {
             }
             port = val;
             i++;
-        } else if ((strcmp(argv[i], "-d") == 0 ||
-                    strcmp(argv[i], "--state-dir") == 0) && i + 1 < argc) {
-            if (argv[i + 1][0] == '\0') {
-                fprintf(stderr, cli_text_invalid_value_format(lang),
-                        argv[i], argv[i + 1]);
+        } else if (strcmp(argv[i], "-d") == 0 ||
+                   strcmp(argv[i], "--state-dir") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
             if (set_env_option("TNT_STATE_DIR", argv[i + 1]) != 0) {
                 return TNT_EXIT_ERROR;
             }
             i++;
-        } else if (strcmp(argv[i], "--bind") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--bind") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             if (!is_config_token(argv[i + 1])) {
                 fprintf(stderr, cli_text_invalid_value_format(lang),
                         argv[i], argv[i + 1]);
@@ -124,7 +137,10 @@ int main(int argc, char **argv) {
                 return TNT_EXIT_ERROR;
             }
             i++;
-        } else if (strcmp(argv[i], "--public-host") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--public-host") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             if (!is_config_token(argv[i + 1])) {
                 fprintf(stderr, cli_text_invalid_value_format(lang),
                         argv[i], argv[i + 1]);
@@ -134,8 +150,10 @@ int main(int argc, char **argv) {
                 return TNT_EXIT_ERROR;
             }
             i++;
-        } else if (strcmp(argv[i], "--max-connections") == 0 &&
-                   i + 1 < argc) {
+        } else if (strcmp(argv[i], "--max-connections") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             int rc = set_numeric_env_option("TNT_MAX_CONNECTIONS", argv[i],
                                             argv[i + 1], 1,
                                             MAX_CONFIGURED_CLIENTS, lang);
@@ -143,8 +161,10 @@ int main(int argc, char **argv) {
                 return rc;
             }
             i++;
-        } else if (strcmp(argv[i], "--max-conn-per-ip") == 0 &&
-                   i + 1 < argc) {
+        } else if (strcmp(argv[i], "--max-conn-per-ip") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             int rc = set_numeric_env_option("TNT_MAX_CONN_PER_IP", argv[i],
                                             argv[i + 1], 1,
                                             MAX_CONFIGURED_CLIENTS, lang);
@@ -152,8 +172,10 @@ int main(int argc, char **argv) {
                 return rc;
             }
             i++;
-        } else if (strcmp(argv[i], "--max-conn-rate-per-ip") == 0 &&
-                   i + 1 < argc) {
+        } else if (strcmp(argv[i], "--max-conn-rate-per-ip") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             int rc = set_numeric_env_option("TNT_MAX_CONN_RATE_PER_IP",
                                             argv[i], argv[i + 1], 1,
                                             MAX_CONFIGURED_CLIENTS, lang);
@@ -161,21 +183,30 @@ int main(int argc, char **argv) {
                 return rc;
             }
             i++;
-        } else if (strcmp(argv[i], "--rate-limit") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--rate-limit") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             int rc = set_numeric_env_option("TNT_RATE_LIMIT", argv[i],
                                             argv[i + 1], 0, 1, lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }
             i++;
-        } else if (strcmp(argv[i], "--idle-timeout") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--idle-timeout") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             int rc = set_numeric_env_option("TNT_IDLE_TIMEOUT", argv[i],
                                             argv[i + 1], 0, 86400, lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }
             i++;
-        } else if (strcmp(argv[i], "--ssh-log-level") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--ssh-log-level") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
             int rc = set_numeric_env_option("TNT_SSH_LOG_LEVEL", argv[i],
                                             argv[i + 1], 0, 4, lang);
             if (rc != TNT_EXIT_OK) {

@@ -119,6 +119,17 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+run_ok "remote help alias is accepted" "$BIN" example.com --help
+grep -q '^--help$' "$SSH_LOG"
+if [ $? -eq 0 ]; then
+    echo "✓ --help after host is forwarded as exec help"
+    PASS=$((PASS + 1))
+else
+    echo "✗ remote --help command unexpected"
+    cat "$SSH_LOG"
+    FAIL=$((FAIL + 1))
+fi
+
 PATH="$FAKE_BIN:$PATH" TNTCTL_SSH_LOG="$SSH_LOG" "$BIN" example.com users --xml >/dev/null 2>&1
 REMOTE_STATUS=$?
 if [ "$REMOTE_STATUS" -eq 64 ]; then

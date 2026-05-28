@@ -100,6 +100,13 @@
   source release.
 - Release documentation now creates the local tag before strict release checks,
   matching the strict gate's tag-at-HEAD requirement.
+- Startup option parsing now reports missing values for `--bind`, `-p`,
+  `--idle-timeout`, and related flags with the localized
+  "option requires argument" diagnostic instead of treating the option as
+  unknown.
+- `tntctl` now reuses the SSH exec command matcher for local command
+  validation, so `tntctl host --help` reaches the server-side exec help alias
+  instead of being rejected locally.
 - Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
   locale/code parsing, while `src/i18n_text.c` owns the table-driven text
   catalog with coverage checks for every message ID.
@@ -121,6 +128,8 @@
   reducing duplicate command knowledge in `src/exec.c`.
 - Replaced hard-coded `chat.m1ng.space` examples with `chat.example.com` so
   public documentation does not imply a specific production host.
+- First-run connection examples now use `localhost`, keeping
+  `chat.example.com` for deployed public-host examples.
 - Moved SSH exec usage text and argument-shape checks into `exec_catalog`, so
   `src/exec.c` no longer duplicates `--json` and required-message validation.
 - Moved interactive command usage text and first-pass argument-shape checks

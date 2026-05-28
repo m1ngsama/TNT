@@ -1,4 +1,5 @@
 #include "common.h"
+#include "exec_catalog.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -73,15 +74,7 @@ static bool is_host_key_checking_mode(const char *value) {
 }
 
 static bool is_known_exec_command(const char *command) {
-    return command &&
-           (strcmp(command, "health") == 0 ||
-            strcmp(command, "stats") == 0 ||
-            strcmp(command, "users") == 0 ||
-            strcmp(command, "tail") == 0 ||
-            strcmp(command, "dump") == 0 ||
-            strcmp(command, "post") == 0 ||
-            strcmp(command, "help") == 0 ||
-            strcmp(command, "exit") == 0);
+    return exec_catalog_match(command, NULL, NULL);
 }
 
 static int build_remote_command(char *buffer, size_t buf_size, int argc,

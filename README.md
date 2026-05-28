@@ -48,8 +48,11 @@ PORT=3333 tnt    # via env var
 ### Connecting
 
 ```sh
-ssh -p 2222 chat.example.com
+ssh -p 2222 localhost
 ```
+
+For a deployed server, replace `localhost` with your public host, for example
+`chat.example.com`.
 
 **Anonymous access by default**: Users can connect with ANY username/password (or empty password). No SSH keys required. Perfect for public chat servers.
 
