@@ -4,6 +4,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c11 -D_XOPEN_SOURCE=700
 LDFLAGS = -pthread -lssh
+CTL_LDFLAGS =
 INCLUDES = -Iinclude
 DEPFLAGS = -MMD -MP
 
@@ -43,7 +44,7 @@ $(TARGET): $(OBJECTS)
 	@echo "Build complete: $(TARGET)"
 
 $(CTL_TARGET): $(CTL_OBJECTS)
-	$(CC) $(CTL_OBJECTS) -o $@
+	$(CC) $(CTL_OBJECTS) -o $@ $(CTL_LDFLAGS)
 	@echo "Build complete: $(CTL_TARGET)"
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
@@ -99,6 +100,7 @@ debian-source-package:
 
 asan: CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
 asan: LDFLAGS += -fsanitize=address
+asan: CTL_LDFLAGS += -fsanitize=address
 asan: clean $(TARGETS)
 	@echo "AddressSanitizer build complete. Run with: ASAN_OPTIONS=detect_leaks=1 ./tnt"
 
