@@ -34,7 +34,7 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict asan valgrind check test test-advisory ci-test unit-test script-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
 
 all: $(TARGETS)
 
@@ -93,6 +93,9 @@ release-check:
 
 release-check-strict:
 	./scripts/release_check.sh --strict
+
+debian-source-package:
+	./scripts/package_debian_source.sh $${OUT_DIR:-dist/debian-source}
 
 asan: CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
 asan: LDFLAGS += -fsanitize=address

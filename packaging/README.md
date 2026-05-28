@@ -26,13 +26,22 @@ Package installs include both `tnt` and `tntctl`.  `tnt` is the server process;
    make release-check
    ```
 
-6. Before submitting package recipes, replace checksum placeholders and run:
+6. Assemble a Debian/PPA source tree when preparing Ubuntu packaging:
+
+   ```sh
+   make debian-source-package
+   ```
+
+   Use `scripts/package_debian_source.sh --build` on a Debian/Ubuntu system
+   with `dpkg-buildpackage` installed to build the unsigned source package.
+
+7. Before submitting package recipes, replace checksum placeholders and run:
 
    ```sh
    make release-check-strict
    ```
 
-7. Submit packages manually:
+8. Submit packages manually:
    - Arch: upload `PKGBUILD` and generated `.SRCINFO` to AUR.
    - Homebrew: open a PR to the project tap, or later Homebrew core if eligible.
    - Ubuntu: build Debian source packages and upload to a Launchpad PPA.

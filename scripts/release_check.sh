@@ -173,6 +173,16 @@ grep -q "adduser .* tnt" packaging/debian/debian/postinst ||
 grep -q " adduser" packaging/debian/debian/control ||
     fail "Debian package must depend on adduser for postinst user creation"
 
+step "checking Debian source assembly"
+sh -n scripts/package_debian_source.sh
+scripts/package_debian_source.sh "$tmpdir/debian-source"
+[ -f "$tmpdir/debian-source/tnt-chat-$version/debian/control" ] ||
+    fail "assembled Debian source tree is missing debian/control"
+[ -x "$tmpdir/debian-source/tnt-chat-$version/debian/rules" ] ||
+    fail "assembled Debian source tree is missing executable debian/rules"
+[ -x "$tmpdir/debian-source/tnt-chat-$version/debian/postinst" ] ||
+    fail "assembled Debian source tree is missing executable debian/postinst"
+
 step "checking packaged system user metadata"
 grep -q '^u tnt ' packaging/arch/tnt-chat.sysusers ||
     fail "Arch sysusers file must create the tnt system user"

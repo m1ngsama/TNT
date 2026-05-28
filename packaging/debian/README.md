@@ -6,18 +6,17 @@ the project has a stable release cadence.
 
 ## Draft metadata
 
-The `debian/` directory in this folder is a packaging draft. To test it against
-an upstream release tree, copy it to the root of a clean source checkout:
+The `debian/` directory in this folder is a packaging draft. To assemble it
+against a clean source tree:
 
 ```sh
-cp -a packaging/debian/debian ./debian
-dpkg-buildpackage -us -uc
+make debian-source-package
 ```
 
-For PPA uploads, build a signed source package instead:
+For PPA uploads, build a source package on Debian/Ubuntu:
 
 ```sh
-debuild -S
+scripts/package_debian_source.sh --build
 ```
 
 ## Recommended path

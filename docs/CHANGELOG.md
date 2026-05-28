@@ -113,6 +113,9 @@
   the packaged systemd unit, and release preflight checks that metadata.
 - The Homebrew formula draft now defines a `brew services` entry that runs the
   installed `tnt` binary with state under `var/tnt`.
+- Added `scripts/package_debian_source.sh` and `make debian-source-package`
+  to assemble Debian/Ubuntu source-package trees from the current project
+  without publishing or uploading anything.
 - The i18n helper now supports language-keyed string initializers through
   `I18N_STRING_MAP`, so future languages can be added incrementally without
   changing every existing two-language string initializer.
