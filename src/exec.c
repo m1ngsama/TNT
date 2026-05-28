@@ -123,7 +123,8 @@ static int exec_command_help(client_t *client) {
     help_text[0] = '\0';
     exec_catalog_append_help(help_text, sizeof(help_text), &pos,
                              client->ui_lang);
-    return client_send(client, help_text, pos) == 0 ? 0 : 1;
+    return client_send(client, help_text, pos) == 0 ? TNT_EXIT_OK
+                                                   : TNT_EXIT_ERROR;
 }
 
 static int exec_command_usage(client_t *client, tnt_exec_command_id_t id) {
@@ -134,12 +135,13 @@ static int exec_command_usage(client_t *client, tnt_exec_command_id_t id) {
     exec_catalog_append_usage(usage, sizeof(usage), &pos, id,
                               client->ui_lang);
     client_printf(client, "%s", usage);
-    return 64;
+    return TNT_EXIT_USAGE;
 }
 
 static int exec_command_health(client_t *client) {
     static const char ok[] = "ok\n";
-    return client_send(client, ok, sizeof(ok) - 1) == 0 ? 0 : 1;
+    return client_send(client, ok, sizeof(ok) - 1) == 0 ? TNT_EXIT_OK
+                                                       : TNT_EXIT_ERROR;
 }
 
 static int exec_command_users(client_t *client, bool json) {
@@ -157,7 +159,7 @@ static int exec_command_users(client_t *client, bool json) {
         if (!usernames) {
             pthread_rwlock_unlock(&g_room->lock);
             client_printf(client, "users: out of memory\n");
-            return 1;
+            return TNT_EXIT_ERROR;
         }
 
         for (int i = 0; i < count; i++) {
@@ -177,7 +179,7 @@ static int exec_command_users(client_t *client, bool json) {
     if (!output) {
         free(usernames);
         client_printf(client, "users: out of memory\n");
-        return 1;
+        return TNT_EXIT_ERROR;
     }
 
     if (json) {
@@ -195,7 +197,7 @@ static int exec_command_users(client_t *client, bool json) {
         }
     }
 
-    rc = client_send(client, output, pos) == 0 ? 0 : 1;
+    rc = client_send(client, output, pos) == 0 ? TNT_EXIT_OK : TNT_EXIT_ERROR;
     free(output);
     free(usernames);
     return rc;
@@ -243,10 +245,11 @@ static int exec_command_stats(client_t *client, bool json) {
 
     if (len < 0 || len >= (int)sizeof(buffer)) {
         client_printf(client, "stats: output overflow\n");
-        return 1;
+        return TNT_EXIT_ERROR;
     }
 
-    return client_send(client, buffer, (size_t)len) == 0 ? 0 : 1;
+    return client_send(client, buffer, (size_t)len) == 0 ? TNT_EXIT_OK
+                                                        : TNT_EXIT_ERROR;
 }
 
 static int parse_tail_count(const char *args, int *count) {
@@ -288,6 +291,45 @@ static int parse_tail_count(const char *args, int *count) {
     return 0;
 }
 
+static int parse_dump_count(const char *args, int *count) {
+    char *end = NULL;
+    long value;
+
+    if (!count) {
+        return -1;
+    }
+
+    *count = 0;
+    if (!args || args[0] == '\0') {
+        return 0;
+    }
+
+    if (strncmp(args, "-n", 2) == 0) {
+        args += 2;
+        while (*args && isspace((unsigned char)*args)) {
+            args++;
+        }
+    }
+
+    value = strtol(args, &end, 10);
+    if (end == args) {
+        return -1;
+    }
+    while (*end) {
+        if (!isspace((unsigned char)*end)) {
+            return -1;
+        }
+        end++;
+    }
+
+    if (value < 1 || value > 10000) {
+        return -1;
+    }
+
+    *count = (int)value;
+    return 0;
+}
+
 static int exec_command_tail(client_t *client, const char *args) {
     int requested = 20;
     int total_messages;
@@ -316,7 +358,7 @@ static int exec_command_tail(client_t *client, const char *args) {
         if (!snapshot) {
             pthread_rwlock_unlock(&g_room->lock);
             client_printf(client, "tail: out of memory\n");
-            return 1;
+            return TNT_EXIT_ERROR;
         }
         memcpy(snapshot, &g_room->messages[start], (size_t)count * sizeof(message_t));
     }
@@ -328,7 +370,7 @@ static int exec_command_tail(client_t *client, const char *args) {
     if (!output) {
         free(snapshot);
         client_printf(client, "tail: out of memory\n");
-        return 1;
+        return TNT_EXIT_ERROR;
     }
 
     for (int i = 0; i < count; i++) {
@@ -338,9 +380,30 @@ static int exec_command_tail(client_t *client, const char *args) {
                        timestamp, snapshot[i].username, snapshot[i].content);
     }
 
-    rc = client_send(client, output, pos) == 0 ? 0 : 1;
+    rc = client_send(client, output, pos) == 0 ? TNT_EXIT_OK : TNT_EXIT_ERROR;
     free(output);
     free(snapshot);
+    return rc;
+}
+
+static int exec_command_dump(client_t *client, const char *args) {
+    int requested = 0;
+    char *output = NULL;
+    size_t output_len = 0;
+    int rc;
+
+    if (parse_dump_count(args, &requested) < 0) {
+        return exec_command_usage(client, TNT_EXEC_COMMAND_DUMP);
+    }
+
+    if (message_dump_text(&output, &output_len, requested) < 0) {
+        client_printf(client, "dump: failed to read message log\n");
+        return TNT_EXIT_ERROR;
+    }
+
+    rc = client_send(client, output, output_len) == 0 ? TNT_EXIT_OK
+                                                     : TNT_EXIT_ERROR;
+    free(output);
     return rc;
 }
 
@@ -355,6 +418,12 @@ static int exec_command_post(client_t *client, const char *args) {
         return exec_command_usage(client, TNT_EXEC_COMMAND_POST);
     }
 
+    if (strlen(args) >= sizeof(content)) {
+        client_printf(client, "%s",
+                      i18n_text(client->ui_lang, I18N_EXEC_POST_TOO_LONG));
+        return TNT_EXIT_USAGE;
+    }
+
     strncpy(content, args, sizeof(content) - 1);
     content[sizeof(content) - 1] = '\0';
     trim_ascii_whitespace(content);
@@ -362,14 +431,14 @@ static int exec_command_post(client_t *client, const char *args) {
     if (content[0] == '\0') {
         client_printf(client, "%s",
                       i18n_text(client->ui_lang, I18N_EXEC_POST_EMPTY));
-        return 64;
+        return TNT_EXIT_USAGE;
     }
 
     if (!utf8_is_valid_string(content)) {
         client_printf(client, "%s",
                       i18n_text(client->ui_lang,
                                 I18N_EXEC_POST_INVALID_UTF8));
-        return 1;
+        return TNT_EXIT_ERROR;
     }
 
     resolve_exec_username(client, username, sizeof(username));
@@ -388,24 +457,35 @@ static int exec_command_post(client_t *client, const char *args) {
         msg.content[sizeof(msg.content) - 1] = '\0';
     }
 
-    room_broadcast(g_room, &msg);
-    if (client_send(client, "posted\n", 7) != 0) {
-        return 1;
-    }
-
-    notify_mentions(msg.content, client);
     if (message_save(&msg) < 0) {
         fprintf(stderr, "post: failed to persist message\n");
-        return 1;
+        client_printf(client, "%s",
+                      i18n_text(client->ui_lang,
+                                I18N_EXEC_POST_PERSIST_FAILED));
+        return TNT_EXIT_ERROR;
     }
 
-    return 0;
+    room_broadcast(g_room, &msg);
+    notify_mentions(msg.content, client);
+
+    if (client_send(client, "posted\n", 7) != 0) {
+        return TNT_EXIT_ERROR;
+    }
+
+    return TNT_EXIT_OK;
 }
 
 int exec_dispatch(client_t *client) {
     char command_copy[MAX_EXEC_COMMAND_LEN];
     tnt_exec_command_id_t command_id;
     const char *args = NULL;
+
+    if (client->exec_command_too_long) {
+        client_printf(client, "%s",
+                      i18n_text(client->ui_lang,
+                                I18N_EXEC_COMMAND_TOO_LONG));
+        return TNT_EXIT_USAGE;
+    }
 
     strncpy(command_copy, client->exec_command, sizeof(command_copy) - 1);
     command_copy[sizeof(command_copy) - 1] = '\0';
@@ -431,10 +511,14 @@ int exec_dispatch(client_t *client) {
                 return exec_command_stats(client, args != NULL);
             case TNT_EXEC_COMMAND_TAIL:
                 return exec_command_tail(client, args);
+            case TNT_EXEC_COMMAND_DUMP:
+                return exec_command_dump(client, args);
             case TNT_EXEC_COMMAND_POST:
                 return exec_command_post(client, args);
             case TNT_EXEC_COMMAND_EXIT:
-                return 0;
+                return TNT_EXIT_OK;
+            case TNT_EXEC_COMMAND_COUNT:
+                break;
         }
     }
 
@@ -448,5 +532,5 @@ int exec_dispatch(client_t *client) {
                   i18n_text(client->ui_lang,
                             I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
                   command_copy);
-    return 64;
+    return TNT_EXIT_USAGE;
 }

@@ -22,6 +22,10 @@ TEST(help_matches_language) {
     cli_text_append_help(output, sizeof(output), &pos, "tnt", UI_LANG_EN);
     assert(strstr(output, "anonymous SSH chat server") != NULL);
     assert(strstr(output, "Usage: tnt [options]") != NULL);
+    assert(strstr(output, "--bind ADDR") != NULL);
+    assert(strstr(output, "--max-connections N") != NULL);
+    assert(strstr(output, "--log-check FILE") != NULL);
+    assert(strstr(output, "--log-recover FILE") != NULL);
     assert(strstr(output, "TNT_LANG") != NULL);
 
     memset(output, 0, sizeof(output));
@@ -35,6 +39,9 @@ TEST(help_matches_language) {
     assert(strstr(output, "匿名 SSH 聊天服务器") != NULL);
     assert(strstr(output, "用法: tnt [options]") != NULL);
     assert(strstr(output, "[选项]") == NULL);
+    assert(strstr(output, "--public-host HOST") != NULL);
+    assert(strstr(output, "--idle-timeout SECONDS") != NULL);
+    assert(strstr(output, "--log-check FILE") != NULL);
     assert(strstr(output, "TNT_LANG") != NULL);
 }
 
@@ -43,14 +50,22 @@ TEST(error_formats_match_language) {
                   "Invalid port: %s\n") == 0);
     assert(strcmp(cli_text_invalid_port_format(UI_LANG_ZH),
                   "端口无效: %s\n") == 0);
+    assert(strcmp(cli_text_invalid_value_format(UI_LANG_EN),
+                  "Invalid %s: %s\n") == 0);
+    assert(strcmp(cli_text_invalid_value_format(UI_LANG_ZH),
+                  "%s 无效: %s\n") == 0);
+    assert(strcmp(cli_text_option_requires_arg_format(UI_LANG_EN),
+                  "Option requires argument: %s\n") == 0);
+    assert(strcmp(cli_text_option_requires_arg_format(UI_LANG_ZH),
+                  "选项需要参数: %s\n") == 0);
     assert(strcmp(cli_text_unknown_option_format(UI_LANG_EN),
                   "Unknown option: %s\n") == 0);
     assert(strcmp(cli_text_unknown_option_format(UI_LANG_ZH),
                   "未知选项: %s\n") == 0);
     assert(strcmp(cli_text_short_usage_format(UI_LANG_EN),
-                  "Usage: %s [-p PORT] [-d DIR] [-h]\n") == 0);
+                  "Usage: %s [options]\n") == 0);
     assert(strcmp(cli_text_short_usage_format(UI_LANG_ZH),
-                  "用法: %s [-p PORT] [-d DIR] [-h]\n") == 0);
+                  "用法: %s [options]\n") == 0);
     assert(strcmp(cli_text_invalid_port_format((ui_lang_t)99),
                   "Invalid port: %s\n") == 0);
 }

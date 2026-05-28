@@ -38,6 +38,14 @@ static const exec_catalog_entry_t entries[] = {
      "tail -n N", "tail [N] | tail -n N",
      I18N_STRING("Print recent messages", "输出最近消息"),
      false, false, false},
+    {TNT_EXEC_COMMAND_DUMP, "dump", NULL,
+     "dump [N]", "dump [N] | dump -n N",
+     I18N_STRING("Export persisted messages", "导出持久化消息"),
+     false, false, false},
+    {TNT_EXEC_COMMAND_DUMP, "dump", NULL,
+     "dump -n N", "dump [N] | dump -n N",
+     I18N_STRING("Export persisted messages", "导出持久化消息"),
+     false, false, false},
     {TNT_EXEC_COMMAND_POST, "post", NULL,
      "post MESSAGE", "post MESSAGE",
      I18N_STRING("Post a message non-interactively", "非交互发送消息"),
@@ -144,6 +152,26 @@ void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
         const char *summary = i18n_string(entries[i].summary, lang);
         buffer_appendf(buffer, buf_size, pos, "  %-15s %s\n",
                        entries[i].usage, summary);
+    }
+}
+
+void exec_catalog_append_command_list(char *buffer, size_t buf_size,
+                                      size_t *pos) {
+    bool seen[TNT_EXEC_COMMAND_COUNT] = {0};
+    size_t count = 0;
+
+    for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
+        tnt_exec_command_id_t id = entries[i].id;
+
+        if (id < 0 || id >= TNT_EXEC_COMMAND_COUNT || seen[id]) {
+            continue;
+        }
+        if (count > 0) {
+            buffer_appendf(buffer, buf_size, pos, ", ");
+        }
+        buffer_appendf(buffer, buf_size, pos, "%s", entries[i].name);
+        seen[id] = true;
+        count++;
     }
 }
 

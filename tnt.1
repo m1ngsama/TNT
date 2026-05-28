@@ -8,8 +8,32 @@ tnt \- anonymous SSH chat server with Vim\-style TUI
 .IR port ]
 .RB [ \-d | \-\-state\-dir
 .IR dir ]
+.RB [ \-\-bind
+.IR addr ]
+.RB [ \-\-public\-host
+.IR host ]
+.RB [ \-\-max\-connections
+.IR n ]
+.RB [ \-\-max\-conn\-per\-ip
+.IR n ]
+.RB [ \-\-max\-conn\-rate\-per\-ip
+.IR n ]
+.RB [ \-\-rate\-limit
+.IR 0|1 ]
+.RB [ \-\-idle\-timeout
+.IR seconds ]
+.RB [ \-\-ssh\-log\-level
+.IR level ]
 .RB [ \-V | \-\-version ]
 .RB [ \-h | \-\-help ]
+.br
+.B tnt
+.B \-\-log\-check
+.I file
+.br
+.B tnt
+.B \-\-log\-recover
+.I file
 .SH DESCRIPTION
 .B tnt
 is a multi\-user anonymous chat server accessed over SSH.
@@ -17,6 +41,13 @@ It provides a Vim\-style terminal user interface with INSERT, NORMAL, and
 COMMAND modes.
 Users connect with any standard SSH client; no account or registration is
 needed.
+.PP
+In the 1.x series,
+.B tnt
+is the stable server process name.
+Use
+.BR tntctl (1)
+for local control commands against a running server.
 .PP
 Messages are persisted to a log file and restored on server restart.
 The server supports CJK and emoji input, rate limiting, access tokens, and
@@ -38,6 +69,73 @@ Overrides the
 .B TNT_STATE_DIR
 environment variable.
 Defaults to the current working directory.
+.TP
+.BR \-\-bind " " \fIaddr\fR
+Bind the SSH listener to
+.IR addr .
+Overrides the
+.B TNT_BIND_ADDR
+environment variable.
+The default is 0.0.0.0.
+.TP
+.BR \-\-public\-host " " \fIhost\fR
+Show
+.I host
+in the startup connection hint.
+Overrides the
+.B TNT_PUBLIC_HOST
+environment variable.
+.TP
+.BR \-\-max\-connections " " \fIn\fR
+Set the global connection limit.
+Overrides the
+.B TNT_MAX_CONNECTIONS
+environment variable.
+.TP
+.BR \-\-max\-conn\-per\-ip " " \fIn\fR
+Set the concurrent session limit per source IP.
+Overrides the
+.B TNT_MAX_CONN_PER_IP
+environment variable.
+.TP
+.BR \-\-max\-conn\-rate\-per\-ip " " \fIn\fR
+Set the connection-rate limit per source IP per 60-second window.
+Overrides the
+.B TNT_MAX_CONN_RATE_PER_IP
+environment variable.
+.TP
+.BR \-\-rate\-limit " " \fI0|1\fR
+Disable or enable rate-based blocking and auth-failure IP blocking.
+Explicit capacity limits still apply.
+Overrides the
+.B TNT_RATE_LIMIT
+environment variable.
+.TP
+.BR \-\-idle\-timeout " " \fIseconds\fR
+Disconnect inactive interactive sessions after
+.I seconds
+seconds.  Use 0 to disable.
+Overrides the
+.B TNT_IDLE_TIMEOUT
+environment variable.
+.TP
+.BR \-\-ssh\-log\-level " " \fIlevel\fR
+Set libssh log verbosity from 0 to 4.
+Overrides the
+.B TNT_SSH_LOG_LEVEL
+environment variable.
+.TP
+.BR \-\-log\-check " " \fIfile\fR
+Check a
+.I messages.log
+v1 file and print record counts.
+Exits non-zero when invalid records are found or the file cannot be read.
+.TP
+.BR \-\-log\-recover " " \fIfile\fR
+Write valid
+.I messages.log
+v1 records to standard output and print a recovery summary to standard error.
+The source file is not modified.
 .TP
 .BR \-V ", " \-\-version
 Print version and exit.
@@ -69,6 +167,8 @@ Press
 to return to INSERT,
 .B :
 to enter COMMAND mode,
+.B /
+to search message history,
 .B ?
 to open the full key reference.
 .TP
@@ -84,6 +184,8 @@ ESC	Switch to NORMAL
 Ctrl+W	Delete last word
 Ctrl+U	Clear input line
 Ctrl+C	Switch to NORMAL
+Up/Down	Browse sent message history
+Tab	Complete @mention
 Paste	Keep multi-line paste in the input buffer
 /me \fIaction\fR	Send action message (e.g. /me waves)
 @\fIusername\fR	Mention user (bell notification + highlight)
@@ -100,6 +202,7 @@ Ctrl+F/Ctrl+B	Scroll full page down/up
 PageDown/PageUp	Scroll full page down/up
 End/Home	Jump to bottom/top
 g/G	Jump to top/bottom
+/	Search message history
 i	Switch to INSERT
 :	Enter COMMAND mode
 ?	Open full key reference
@@ -119,8 +222,9 @@ l l.
 :w \fIuser text\fR	Short alias for :msg
 :inbox	Show private messages
 :last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
-:search \fIkeyword\fR	Case\-insensitive search across full message history
+:search \fIkeyword\fR	Case\-insensitive search; shows the last 15 matches
 :mute\-joins	Toggle join/leave system notifications on/off
+:lang	Show current UI language
 :lang \fIen|zh\fR	Switch UI language for this session
 :help	Show concise manual
 :clear	Clear command output
@@ -128,6 +232,25 @@ l l.
 Up/Down	Browse command history
 ESC	Cancel and return to NORMAL
 .TE
+.PP
+Command output pages use the same paging keys as the help screen.
+.TS
+l l.
+q, ESC	Close output
+j/k, arrows	Scroll down/up
+Ctrl+D/Ctrl+U	Scroll half page down/up
+Ctrl+F/Ctrl+B	Scroll full page down/up
+Space/b	Scroll full page down/up
+PageDown/PageUp	Scroll full page down/up
+End/Home	Jump to bottom/top
+g/G	Jump to top/bottom
+r	Refresh live output (:inbox)
+.TE
+.PP
+The
+.B :inbox
+page refreshes automatically when a new private message arrives while it is
+open.
 .SH EXEC INTERFACE
 Commands can be run non\-interactively for scripting:
 .PP
@@ -136,6 +259,7 @@ ssh host \-p 2222 help
 ssh host \-p 2222 users \-\-json
 ssh host \-p 2222 stats \-\-json
 ssh host \-p 2222 tail 20
+ssh host \-p 2222 dump \-n 100
 ssh host \-p 2222 post "Hello from a script"
 ssh host \-p 2222 post "/me deploys v2.0"
 ssh host \-p 2222 health
@@ -144,6 +268,30 @@ ssh host \-p 2222 health
 Exit codes follow
 .BR sysexits (3)
 conventions.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Runtime error, such as I/O failure, allocation failure, or persistence failure.
+.TP
+.B 64
+Usage error, such as an unknown command, invalid option, or invalid argument
+shape.
+.TP
+.B 69
+Reserved for the local
+.BR tntctl (1)
+wrapper when SSH transport is unavailable.
+.TP
+.B 78
+Reserved for future local
+.BR tntctl (1)
+configuration errors.
+.PP
+The SSH exec JSON field contract is documented in
+.IR docs/INTERFACE.md .
 .SH ENVIRONMENT
 .TP
 .B PORT
@@ -151,6 +299,12 @@ Default listening port (default: 2222).
 .TP
 .B TNT_STATE_DIR
 Directory for host key and message log (default: current directory).
+.TP
+.B TNT_BIND_ADDR
+Address to bind (default: 0.0.0.0).
+.TP
+.B TNT_PUBLIC_HOST
+Host name shown in startup connection hints (default: localhost).
 .TP
 .B TNT_ACCESS_TOKEN
 If set, clients must supply this string as their SSH password.
@@ -180,12 +334,19 @@ Explicit capacity limits still apply (default: 1).
 .B TNT_IDLE_TIMEOUT
 Disconnect clients after this many seconds of inactivity.
 Set to 0 to disable (default: 1800, i.e. 30 minutes).
+.TP
+.B TNT_SSH_LOG_LEVEL
+libssh log verbosity from 0 to 4 (default: 1).
 .SH FILES
 .TP
 .I messages.log
-Chat history in RFC\ 3339 pipe\-delimited format
+Chat history in the TNT message log v1 format:
+RFC\ 3339 UTC pipe\-delimited records
 .RI ( timestamp | username | content ).
 Stored in the state directory.
+See
+.I docs/MESSAGE_LOG.md
+in the source distribution for parser and recovery rules.
 .TP
 .I host_key
 RSA 4096\-bit host key, auto\-generated on first run.

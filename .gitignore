@@ -1,6 +1,7 @@
 *.o
 obj/
 tnt
+tntctl
 messages.log
 host_key
 host_key.pub
@@ -8,6 +9,9 @@ host_key.pub
 .DS_Store
 test.log
 *.dSYM/
+demos/*.gif
+demos/*.mp4
+demos/*.webm
 tests/unit/test_utf8
 tests/unit/test_message
 tests/unit/test_chat_room
@@ -20,4 +24,5 @@ tests/unit/test_help_text
 tests/unit/test_manual_text
 tests/unit/test_support_text
 tests/unit/test_cli_text
+tests/unit/test_tntctl_text
 tests/unit/test_ratelimit

@@ -1,29 +1,63 @@
 #ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE  /* for timegm() on glibc */
+#define _DEFAULT_SOURCE  /* for strcasestr() on glibc */
 #endif
 #if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
-#define _DARWIN_C_SOURCE /* for timegm() on macOS */
+#define _DARWIN_C_SOURCE /* for strcasestr() on macOS */
 #endif
+
 #include "message.h"
+#include "message_log.h"
 #include "utf8.h"
+#include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
 
 static pthread_mutex_t g_message_file_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static time_t parse_rfc3339_utc(const char *timestamp_str) {
-    struct tm tm = {0};
+static void discard_line_remainder(FILE *fp) {
+    int c;
 
-    if (!timestamp_str) {
-        return (time_t)-1;
+    while ((c = fgetc(fp)) != '\n' && c != EOF) {
+    }
+}
+
+static int append_dump_record(char **output, size_t *capacity,
+                              size_t *len, const message_t *msg) {
+    size_t needed;
+    size_t available;
+
+    if (!output || !capacity || !len || !msg) {
+        return -1;
     }
 
-    char *result = strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ", &tm);
-    if (!result || *result != '\0') {
-        return (time_t)-1;
+    if (message_log_format_record(msg, NULL, 0, &needed) < 0) {
+        return -1;
     }
 
-    return timegm(&tm);
+    available = *capacity > *len ? *capacity - *len : 0;
+    if (needed + 1 > available) {
+        size_t new_capacity = *capacity ? *capacity : 1024;
+        while (needed + 1 > new_capacity - *len) {
+            if (new_capacity > SIZE_MAX / 2) {
+                return -1;
+            }
+            new_capacity *= 2;
+        }
+
+        char *grown = realloc(*output, new_capacity);
+        if (!grown) {
+            return -1;
+        }
+        *output = grown;
+        *capacity = new_capacity;
+    }
+
+    if (message_log_format_record(msg, *output + *len, *capacity - *len,
+                                  NULL) < 0) {
+        return -1;
+    }
+    *len += needed;
+    return 0;
 }
 
 /* Initialize message subsystem */
@@ -118,67 +152,25 @@ int message_load(message_t **messages, int max_messages) {
     fseek(fp, 0, SEEK_SET);
 
 read_messages:;
-    char line[2048];
+    char line[MESSAGE_LOG_MAX_LINE];
     int count = 0;
+    time_t now = time(NULL);
 
     /* Now read forward */
     while (fgets(line, sizeof(line), fp) && count < max_messages) {
         /* Check for oversized lines */
         size_t line_len = strlen(line);
-        if (line_len >= sizeof(line) - 1) {
-            /* Skip remainder of line */
-            int c;
-            while ((c = fgetc(fp)) != '\n' && c != EOF);
+        if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
+            discard_line_remainder(fp);
             continue;
         }
 
-        /* Format: RFC3339_timestamp|username|content */
-        char line_copy[2048];
-        strncpy(line_copy, line, sizeof(line_copy) - 1);
-        line_copy[sizeof(line_copy) - 1] = '\0';
-
-        char *timestamp_str = strtok(line_copy, "|");
-        char *username = strtok(NULL, "|");
-        char *content = strtok(NULL, "\n");
-
-        /* Validate all fields exist and are non-empty */
-        if (!timestamp_str || !username || !content) {
-            continue;
-        }
-        if (username[0] == '\0') {
+        message_t parsed;
+        if (!message_log_parse_record(line, &parsed, now)) {
             continue;
         }
 
-        /* Validate field lengths */
-        if (strlen(username) >= MAX_USERNAME_LEN) {
-            continue;
-        }
-        if (strlen(content) >= MAX_MESSAGE_LEN) {
-            continue;
-        }
-
-        if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) {
-            continue;
-        }
-
-        /* Parse strict UTC RFC3339 timestamp */
-        time_t msg_time = parse_rfc3339_utc(timestamp_str);
-        if (msg_time == (time_t)-1) {
-            continue;
-        }
-
-        /* Validate timestamp is reasonable (not in far future or past) */
-        time_t now = time(NULL);
-        if (msg_time > now + 86400 || msg_time < now - 31536000 * 10) {
-            continue;
-        }
-
-        msg_array[count].timestamp = msg_time;
-        strncpy(msg_array[count].username, username, MAX_USERNAME_LEN - 1);
-        msg_array[count].username[MAX_USERNAME_LEN - 1] = '\0';
-        strncpy(msg_array[count].content, content, MAX_MESSAGE_LEN - 1);
-        msg_array[count].content[MAX_MESSAGE_LEN - 1] = '\0';
-        count++;
+        msg_array[count++] = parsed;
     }
 
     fclose(fp);
@@ -190,6 +182,9 @@ read_messages:;
 /* Save a message to log file */
 int message_save(const message_t *msg) {
     char log_path[PATH_MAX];
+    message_t safe_msg;
+    char record[MAX_USERNAME_LEN + MAX_MESSAGE_LEN + 48];
+    size_t record_len = 0;
     int rc = 0;
 
     if (tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
@@ -204,36 +199,29 @@ int message_save(const message_t *msg) {
         return -1;
     }
 
-    /* Format timestamp as RFC3339 */
-    char timestamp[64];
-    struct tm tm_info;
-    gmtime_r(&msg->timestamp, &tm_info);
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &tm_info);
-
     /* Sanitize username and content to prevent log injection */
-    char safe_username[MAX_USERNAME_LEN];
-    char safe_content[MAX_MESSAGE_LEN];
+    safe_msg.timestamp = msg->timestamp;
+    strncpy(safe_msg.username, msg->username, sizeof(safe_msg.username) - 1);
+    safe_msg.username[sizeof(safe_msg.username) - 1] = '\0';
 
-    strncpy(safe_username, msg->username, sizeof(safe_username) - 1);
-    safe_username[sizeof(safe_username) - 1] = '\0';
-
-    strncpy(safe_content, msg->content, sizeof(safe_content) - 1);
-    safe_content[sizeof(safe_content) - 1] = '\0';
+    strncpy(safe_msg.content, msg->content, sizeof(safe_msg.content) - 1);
+    safe_msg.content[sizeof(safe_msg.content) - 1] = '\0';
 
     /* Replace pipe characters and newlines to prevent log format corruption */
-    for (char *p = safe_username; *p; p++) {
+    for (char *p = safe_msg.username; *p; p++) {
         if (*p == '|' || *p == '\n' || *p == '\r') {
             *p = '_';
         }
     }
-    for (char *p = safe_content; *p; p++) {
+    for (char *p = safe_msg.content; *p; p++) {
         if (*p == '|' || *p == '\n' || *p == '\r') {
             *p = ' ';
         }
     }
 
-    /* Write to file: timestamp|username|content */
-    if (fprintf(fp, "%s|%s|%s\n", timestamp, safe_username, safe_content) < 0 ||
+    if (message_log_format_record(&safe_msg, record, sizeof(record),
+                                  &record_len) < 0 ||
+        fwrite(record, 1, record_len, fp) != record_len ||
         fflush(fp) != 0) {
         rc = -1;
     }
@@ -274,40 +262,21 @@ int message_search(const char *query, message_t **results, int max_results) {
         return 0;
     }
 
-    char line[2048];
+    char line[MESSAGE_LOG_MAX_LINE];
     int count = 0;
+    time_t now = time(NULL);
 
     while (fgets(line, sizeof(line), fp)) {
         size_t line_len = strlen(line);
-        if (line_len >= sizeof(line) - 1) {
-            int c;
-            while ((c = fgetc(fp)) != '\n' && c != EOF);
+        if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
+            discard_line_remainder(fp);
             continue;
         }
 
-        char line_copy[2048];
-        strncpy(line_copy, line, sizeof(line_copy) - 1);
-        line_copy[sizeof(line_copy) - 1] = '\0';
-
-        char *timestamp_str = strtok(line_copy, "|");
-        char *username = strtok(NULL, "|");
-        char *content = strtok(NULL, "\n");
-
-        if (!timestamp_str || !username || !content || username[0] == '\0') continue;
-        if (strlen(username) >= MAX_USERNAME_LEN || strlen(content) >= MAX_MESSAGE_LEN) continue;
-        if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) continue;
-
-        if (strcasestr(username, query) == NULL && strcasestr(content, query) == NULL) continue;
-
-        time_t msg_time = parse_rfc3339_utc(timestamp_str);
-        if (msg_time == (time_t)-1) continue;
-
         message_t m;
-        m.timestamp = msg_time;
-        strncpy(m.username, username, MAX_USERNAME_LEN - 1);
-        m.username[MAX_USERNAME_LEN - 1] = '\0';
-        strncpy(m.content, content, MAX_MESSAGE_LEN - 1);
-        m.content[MAX_MESSAGE_LEN - 1] = '\0';
+        if (!message_log_parse_record(line, &m, now)) continue;
+        if (strcasestr(m.username, query) == NULL &&
+            strcasestr(m.content, query) == NULL) continue;
 
         if (count < max_results) {
             res[count++] = m;
@@ -322,6 +291,118 @@ int message_search(const char *query, message_t **results, int max_results) {
     pthread_mutex_unlock(&g_message_file_lock);
     *results = res;
     return (count < max_results) ? count : max_results;
+}
+
+int message_dump_text(char **output, size_t *output_len, int max_records) {
+    char log_path[PATH_MAX];
+    char *buf = NULL;
+    size_t capacity = 0;
+    size_t len = 0;
+    message_t *ring = NULL;
+    int seen = 0;
+    int rc = 0;
+
+    if (!output || !output_len || max_records < 0) {
+        return -1;
+    }
+
+    *output = calloc(1, 1);
+    if (!*output) {
+        return -1;
+    }
+    *output_len = 0;
+
+    if (tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+        free(*output);
+        *output = NULL;
+        return -1;
+    }
+
+    if (max_records > 0) {
+        ring = calloc((size_t)max_records, sizeof(*ring));
+        if (!ring) {
+            free(*output);
+            *output = NULL;
+            return -1;
+        }
+    }
+
+    pthread_mutex_lock(&g_message_file_lock);
+    FILE *fp = fopen(log_path, "r");
+    if (!fp) {
+        int saved_errno = errno;
+        pthread_mutex_unlock(&g_message_file_lock);
+        free(ring);
+        if (saved_errno != ENOENT) {
+            free(*output);
+            *output = NULL;
+            return -1;
+        }
+        return 0;
+    }
+
+    char line[MESSAGE_LOG_MAX_LINE];
+    time_t now = time(NULL);
+    while (fgets(line, sizeof(line), fp)) {
+        size_t line_len = strlen(line);
+        if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
+            discard_line_remainder(fp);
+            continue;
+        }
+
+        message_t parsed;
+        if (!message_log_parse_record(line, &parsed, now)) {
+            continue;
+        }
+
+        if (max_records > 0) {
+            ring[seen % max_records] = parsed;
+            seen++;
+        } else if (append_dump_record(output, &capacity, output_len,
+                                      &parsed) < 0) {
+            rc = -1;
+            break;
+        }
+    }
+
+    fclose(fp);
+    pthread_mutex_unlock(&g_message_file_lock);
+
+    if (rc == 0 && max_records > 0 && seen > 0) {
+        int count = seen < max_records ? seen : max_records;
+        int start = seen < max_records ? 0 : seen % max_records;
+
+        free(*output);
+        *output = NULL;
+        *output_len = 0;
+
+        for (int i = 0; i < count; i++) {
+            message_t *msg = &ring[(start + i) % max_records];
+            if (append_dump_record(&buf, &capacity, &len, msg) < 0) {
+                rc = -1;
+                break;
+            }
+        }
+
+        if (rc == 0) {
+            *output = buf ? buf : calloc(1, 1);
+            *output_len = len;
+            if (!*output) {
+                rc = -1;
+            }
+        } else {
+            free(buf);
+        }
+    }
+
+    free(ring);
+    if (rc < 0) {
+        free(*output);
+        *output = NULL;
+        *output_len = 0;
+        return -1;
+    }
+    return 0;
 }
 
 /* Format a message for display */

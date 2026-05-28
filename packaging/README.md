@@ -10,11 +10,14 @@ any public registry.
 - `homebrew/` - Homebrew tap formula draft and maintainer notes.
 - `debian/` - Ubuntu PPA / Debian packaging notes and draft metadata.
 
+Package installs include both `tnt` and `tntctl`.  `tnt` is the server process;
+`tntctl` is a thin wrapper around the documented SSH exec interface.
+
 ## Release checklist
 
 1. Confirm `TNT_VERSION` in `include/common.h` and the manpage version match.
    Also update package versions in Arch, Homebrew, and Debian drafts.
-2. Create a GitHub release tag such as `v1.0.1`.
+2. Create a GitHub release tag such as `vX.Y.Z`.
 3. Build and upload release tarballs or rely on GitHub source archives.
 4. Replace placeholder checksums in package drafts.
 5. Verify package contents in an isolated directory:
@@ -23,13 +26,23 @@ any public registry.
    make release-check
    ```
 
-6. Before submitting package recipes, replace checksum placeholders and run:
+6. Assemble a Debian/PPA source tree when preparing Ubuntu packaging:
 
    ```sh
-   make release-check-strict
+   make debian-source-package
    ```
 
-7. Submit packages manually:
+   Use `scripts/package_debian_source.sh --build` on a Debian/Ubuntu system
+   with `dpkg-buildpackage` installed to build the unsigned source package.
+
+7. Before submitting package recipes, download the final GitHub source archive,
+   replace checksum placeholders, and run:
+
+   ```sh
+   SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
+   ```
+
+8. Submit packages manually:
    - Arch: upload `PKGBUILD` and generated `.SRCINFO` to AUR.
    - Homebrew: open a PR to the project tap, or later Homebrew core if eligible.
    - Ubuntu: build Debian source packages and upload to a Launchpad PPA.

@@ -26,12 +26,12 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "TNT %s - SSH 匿名聊天室\r\n\r\n"
     ),
     [I18N_INSERT_HINT_WIDE] = I18N_STRING(
-        "Enter send · Esc browse · :help",
-        "Enter 发送 · Esc 浏览 · :help"
+        "Enter send · Esc NORMAL",
+        "Enter 发送 · Esc NORMAL"
     ),
     [I18N_INSERT_HINT_NARROW] = I18N_STRING(
-        "Enter · Esc · :help",
-        "Enter · Esc · :help"
+        "Enter · Esc",
+        "Enter · Esc"
     ),
     [I18N_NORMAL_LATEST] = I18N_STRING(
         "G latest",
@@ -56,6 +56,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
     [I18N_COMMAND_OUTPUT_STATUS_FORMAT] = I18N_STRING(
         "-- COMMAND OUTPUT -- (%d/%d) j/k:scroll Ctrl-D/U:half g/G:top/bottom q:close",
         "-- 命令输出 -- (%d/%d) j/k:滚动 Ctrl-D/U:半页 g/G:首尾 q:关闭"
+    ),
+    [I18N_COMMAND_OUTPUT_REFRESH_STATUS_FORMAT] = I18N_STRING(
+        "-- COMMAND OUTPUT -- (%d/%d) j/k:scroll Ctrl-D/U:half g/G:top/bottom r:refresh q:close",
+        "-- 命令输出 -- (%d/%d) j/k:滚动 Ctrl-D/U:半页 g/G:首尾 r:刷新 q:关闭"
     ),
     [I18N_MOTD_TITLE] = I18N_STRING(
         " NOTICE ",
@@ -138,8 +142,8 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "--- 最近 %d 条消息 ---\n"
     ),
     [I18N_SEARCH_HEADER_FORMAT] = I18N_STRING(
-        "--- Search: \"%s\" (%d match(es)) ---\n",
-        "--- 搜索: \"%s\" (%d 条匹配) ---\n"
+        "--- Search: \"%s\" (showing last %d match(es)) ---\n",
+        "--- 搜索: \"%s\" (显示最近 %d 条匹配) ---\n"
     ),
     [I18N_MUTE_JOINS_FORMAT] = I18N_STRING(
         "Join/leave notifications: %s\n",
@@ -192,6 +196,18 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
     [I18N_EXEC_POST_INVALID_UTF8] = I18N_STRING(
         "post: invalid UTF-8 input\n",
         "post: 输入不是有效 UTF-8\n"
+    ),
+    [I18N_EXEC_POST_TOO_LONG] = I18N_STRING(
+        "post: message too long\n",
+        "post: 消息过长\n"
+    ),
+    [I18N_EXEC_POST_PERSIST_FAILED] = I18N_STRING(
+        "post: failed to persist message\n",
+        "post: 消息持久化失败\n"
+    ),
+    [I18N_EXEC_COMMAND_TOO_LONG] = I18N_STRING(
+        "exec: command too long\n",
+        "exec: 命令过长\n"
     ),
     [I18N_EXEC_UNKNOWN_COMMAND_FORMAT] = I18N_STRING(
         "Unknown command: %s\n",

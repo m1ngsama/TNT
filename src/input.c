@@ -2,6 +2,7 @@
 #include "chat_room.h"
 #include "client.h"
 #include "commands.h"
+#include "config_defaults.h"
 #include "common.h"
 #include "exec.h"
 #include "history_view.h"
@@ -20,11 +21,11 @@
 #include <string.h>
 #include <time.h>
 
-static int g_idle_timeout = DEFAULT_IDLE_TIMEOUT;
+static int g_idle_timeout = TNT_DEFAULT_IDLE_TIMEOUT;
 static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 
 void input_init(void) {
-    g_idle_timeout = env_int("TNT_IDLE_TIMEOUT", DEFAULT_IDLE_TIMEOUT, 0, 86400);
+    g_idle_timeout = tnt_config_env_int(&TNT_CONFIG_IDLE_TIMEOUT);
     g_default_ui_lang = i18n_default_ui_lang();
 }
 
@@ -32,10 +33,10 @@ static int read_username(client_t *client) {
     char username[MAX_USERNAME_LEN] = {0};
     int pos = 0;
     char buf[4];
+    const char *prompt = i18n_text(client->ui_lang, I18N_USERNAME_PROMPT);
 
     tui_render_welcome(client);
-    client_printf(client, "%s", i18n_text(client->ui_lang,
-                                          I18N_USERNAME_PROMPT));
+    client_printf(client, "%s", prompt);
 
     while (1) {
         int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 60000); /* 60 sec timeout */
@@ -54,6 +55,18 @@ static int read_username(client_t *client) {
 
         if (b == '\r' || b == '\n') {
             break;
+        } else if (b == 3 || b == 4) {  /* Ctrl+C / Ctrl+D */
+            return -1;
+        } else if (b == 21) {  /* Ctrl+U: clear line */
+            username[0] = '\0';
+            pos = 0;
+            client_printf(client, "\r\033[K%s", prompt);
+        } else if (b == 23) {  /* Ctrl+W: delete word */
+            if (username[0] != '\0') {
+                utf8_remove_last_word(username);
+                pos = (int)strlen(username);
+                client_printf(client, "\r\033[K%s%s", prompt, username);
+            }
         } else if (b == 127 || b == 8) {  /* Backspace */
             if (pos > 0) {
                 /* Compute width of the last character before removing it */
@@ -134,8 +147,16 @@ static int read_username(client_t *client) {
 void notify_mentions(const char *content, const client_t *sender) {
     pthread_rwlock_rdlock(&g_room->lock);
     int count = g_room->client_count;
-    client_t *targets[MAX_CLIENTS];
+    client_t **targets = NULL;
     int target_count = 0;
+
+    if (count > 0) {
+        targets = calloc((size_t)count, sizeof(*targets));
+        if (!targets) {
+            pthread_rwlock_unlock(&g_room->lock);
+            return;
+        }
+    }
 
     for (int i = 0; i < count; i++) {
         client_t *c = g_room->clients[i];
@@ -150,11 +171,11 @@ void notify_mentions(const char *content, const client_t *sender) {
     pthread_rwlock_unlock(&g_room->lock);
 
     for (int i = 0; i < target_count; i++) {
-        client_send(targets[i], "\a", 1);
         targets[i]->unread_mentions++;
-        targets[i]->redraw_pending = true;
+        client_queue_bell(targets[i]);
         client_release(targets[i]);
     }
+    free(targets);
 }
 
 static int read_channel_exact(client_t *client, char *buf, size_t len,
@@ -213,12 +234,121 @@ static void dismiss_command_output(client_t *client) {
     was_motd = client->show_motd;
     client->command_output[0] = '\0';
     client->command_output_scroll = 0;
+    client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
     client->show_motd = false;
-    client->mode = MODE_NORMAL;
     if (was_motd) {
+        client->mode = MODE_INSERT;
+        client->follow_tail = true;
+        client->unread_mentions = 0;
         normal_scroll_to_latest(client);
+    } else {
+        client->mode = MODE_NORMAL;
     }
     tui_render_screen(client);
+}
+
+typedef enum {
+    PAGER_ACTION_NONE,
+    PAGER_ACTION_SCROLL,
+    PAGER_ACTION_CLOSE,
+    PAGER_ACTION_REFRESH
+} pager_action_t;
+
+static int pager_page_height(client_t *client) {
+    int page = client->height - 2;
+    if (page < 1) page = 1;
+    return page;
+}
+
+static void pager_scroll_by(int *scroll_pos, int delta) {
+    *scroll_pos += delta;
+    if (*scroll_pos < 0) {
+        *scroll_pos = 0;
+    }
+}
+
+static pager_action_t pager_apply_key(client_t *client, unsigned char key,
+                                      int *scroll_pos, bool allow_refresh) {
+    int page = pager_page_height(client);
+    int half = page / 2;
+    if (half < 1) half = 1;
+
+    if (key == 'q') {
+        return PAGER_ACTION_CLOSE;
+    } else if (key == 'j') {
+        pager_scroll_by(scroll_pos, 1);
+        return PAGER_ACTION_SCROLL;
+    } else if (key == 'k') {
+        pager_scroll_by(scroll_pos, -1);
+        return PAGER_ACTION_SCROLL;
+    } else if (key == 4) {  /* Ctrl+D: half page down */
+        pager_scroll_by(scroll_pos, half);
+        return PAGER_ACTION_SCROLL;
+    } else if (key == 21) {  /* Ctrl+U: half page up */
+        pager_scroll_by(scroll_pos, -half);
+        return PAGER_ACTION_SCROLL;
+    } else if (key == 6 || key == ' ') {  /* Ctrl+F / Space: page down */
+        pager_scroll_by(scroll_pos, page);
+        return PAGER_ACTION_SCROLL;
+    } else if (key == 2 || key == 'b') {  /* Ctrl+B / b: page up */
+        pager_scroll_by(scroll_pos, -page);
+        return PAGER_ACTION_SCROLL;
+    } else if (key == 'g') {
+        *scroll_pos = 0;
+        return PAGER_ACTION_SCROLL;
+    } else if (key == 'G') {
+        *scroll_pos = 999;
+        return PAGER_ACTION_SCROLL;
+    } else if ((key == 'r' || key == 'R') && allow_refresh) {
+        return PAGER_ACTION_REFRESH;
+    } else if (key == 27) {
+        char seq[3];
+        int n = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+        if (n != 1) {
+            return PAGER_ACTION_CLOSE;
+        }
+        if (seq[0] != '[') {
+            return PAGER_ACTION_NONE;
+        }
+
+        n = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
+        if (n != 1) {
+            return PAGER_ACTION_NONE;
+        }
+
+        if (seq[1] == 'A') {          /* Up arrow */
+            pager_scroll_by(scroll_pos, -1);
+            return PAGER_ACTION_SCROLL;
+        } else if (seq[1] == 'B') {   /* Down arrow */
+            pager_scroll_by(scroll_pos, 1);
+            return PAGER_ACTION_SCROLL;
+        } else if (seq[1] == 'H') {   /* Home */
+            *scroll_pos = 0;
+            return PAGER_ACTION_SCROLL;
+        } else if (seq[1] == 'F') {   /* End */
+            *scroll_pos = 999;
+            return PAGER_ACTION_SCROLL;
+        } else if (seq[1] >= '1' && seq[1] <= '6') {
+            n = ssh_channel_read_timeout(client->channel, &seq[2], 1, 0, 50);
+            if (n == 1 && seq[2] == '~') {
+                if (seq[1] == '5') {        /* PageUp */
+                    pager_scroll_by(scroll_pos, -page);
+                    return PAGER_ACTION_SCROLL;
+                } else if (seq[1] == '6') { /* PageDown */
+                    pager_scroll_by(scroll_pos, page);
+                    return PAGER_ACTION_SCROLL;
+                } else if (seq[1] == '1') { /* Home */
+                    *scroll_pos = 0;
+                    return PAGER_ACTION_SCROLL;
+                } else if (seq[1] == '4') { /* End */
+                    *scroll_pos = 999;
+                    return PAGER_ACTION_SCROLL;
+                }
+            }
+        }
+    }
+
+    return PAGER_ACTION_NONE;
 }
 
 /* Handle a single key press.  Returns true if the key was fully consumed
@@ -227,6 +357,11 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Handle Ctrl+C (Exit or switch to NORMAL) */
     if (key == 3) {
         client_mode_t previous_mode = client->mode;
+        if (client->show_help) {
+            client->show_help = false;
+            tui_render_screen(client);
+            return true;
+        }
         if (client->command_output[0] != '\0') {
             dismiss_command_output(client);
             return true;
@@ -248,44 +383,20 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
 
     /* Handle help screen */
     if (client->show_help) {
-        /* Page size: roughly the visible help body region. */
-        int page = client->height - 2;
-        if (page < 1) page = 1;
-        int half = page / 2;
-        if (half < 1) half = 1;
+        pager_action_t action;
 
-        if (key == 'q' || key == 27) {
-            client->show_help = false;
-            tui_render_screen(client);
-        } else if (key == 'l' || key == 'L') {
+        if (key == 'l' || key == 'L') {
             client->ui_lang = i18n_next_ui_lang(client->ui_lang);
             client->help_scroll_pos = 0;
             tui_render_help(client);
-        } else if (key == 'j') {
-            client->help_scroll_pos++;
-            tui_render_help(client);
-        } else if (key == 'k' && client->help_scroll_pos > 0) {
-            client->help_scroll_pos--;
-            tui_render_help(client);
-        } else if (key == 4) {  /* Ctrl+D: half page down */
-            client->help_scroll_pos += half;
-            tui_render_help(client);
-        } else if (key == 21) {  /* Ctrl+U: half page up */
-            client->help_scroll_pos -= half;
-            if (client->help_scroll_pos < 0) client->help_scroll_pos = 0;
-            tui_render_help(client);
-        } else if (key == 6) {  /* Ctrl+F: full page down */
-            client->help_scroll_pos += page;
-            tui_render_help(client);
-        } else if (key == 2) {  /* Ctrl+B: full page up */
-            client->help_scroll_pos -= page;
-            if (client->help_scroll_pos < 0) client->help_scroll_pos = 0;
-            tui_render_help(client);
-        } else if (key == 'g') {
-            client->help_scroll_pos = 0;
-            tui_render_help(client);
-        } else if (key == 'G') {
-            client->help_scroll_pos = 999;  /* Large number */
+            return true;
+        }
+
+        action = pager_apply_key(client, key, &client->help_scroll_pos, false);
+        if (action == PAGER_ACTION_CLOSE) {
+            client->show_help = false;
+            tui_render_screen(client);
+        } else if (action == PAGER_ACTION_SCROLL) {
             tui_render_help(client);
         }
         return true;  /* Key consumed */
@@ -294,53 +405,23 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
     /* Handle command output / MOTD display.  MOTD remains a simple notice;
      * command output behaves like a small pager so long results can be read. */
     if (client->command_output[0] != '\0') {
-        int page = client->height - 2;
-        int half;
+        pager_action_t action;
 
         if (client->show_motd) {
             dismiss_command_output(client);
             return true;
         }
 
-        if (page < 1) page = 1;
-        half = page / 2;
-        if (half < 1) half = 1;
-
-        if (key == 'q' || key == 27) {
+        action = pager_apply_key(client, key, &client->command_output_scroll,
+                                 true);
+        if (action == PAGER_ACTION_CLOSE) {
             dismiss_command_output(client);
-        } else if (key == 'j') {
-            client->command_output_scroll++;
+        } else if (action == PAGER_ACTION_SCROLL) {
             tui_render_command_output(client);
-        } else if (key == 'k') {
-            client->command_output_scroll--;
-            if (client->command_output_scroll < 0) {
-                client->command_output_scroll = 0;
+        } else if (action == PAGER_ACTION_REFRESH) {
+            if (commands_refresh_active_output(client)) {
+                tui_render_command_output(client);
             }
-            tui_render_command_output(client);
-        } else if (key == 4) {  /* Ctrl+D: half page down */
-            client->command_output_scroll += half;
-            tui_render_command_output(client);
-        } else if (key == 21) {  /* Ctrl+U: half page up */
-            client->command_output_scroll -= half;
-            if (client->command_output_scroll < 0) {
-                client->command_output_scroll = 0;
-            }
-            tui_render_command_output(client);
-        } else if (key == 6) {  /* Ctrl+F: full page down */
-            client->command_output_scroll += page;
-            tui_render_command_output(client);
-        } else if (key == 2) {  /* Ctrl+B: full page up */
-            client->command_output_scroll -= page;
-            if (client->command_output_scroll < 0) {
-                client->command_output_scroll = 0;
-            }
-            tui_render_command_output(client);
-        } else if (key == 'g') {
-            client->command_output_scroll = 0;
-            tui_render_command_output(client);
-        } else if (key == 'G') {
-            client->command_output_scroll = 999;
-            tui_render_command_output(client);
         }
         return true;  /* Key consumed */
     }
@@ -559,6 +640,12 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 client->command_input[0] = '\0';
                 tui_render_screen(client);
                 return true;
+            } else if (key == '/') {
+                client->mode = MODE_COMMAND;
+                snprintf(client->command_input, sizeof(client->command_input),
+                         "search ");
+                tui_render_screen(client);
+                return true;
             } else if (key == 'j') {
                 normal_scroll_by(client, 1);
                 tui_render_screen(client);
@@ -727,11 +814,12 @@ void input_run_session(client_t *client) {
     client->command_history_count = 0;
     client->command_history_pos = 0;
     client->command_output_scroll = 0;
+    client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
     client->connect_time = time(NULL);
     client->last_active = time(NULL);
 
     /* Check for exec command */
-    if (client->exec_command[0] != '\0') {
+    if (client->exec_command[0] != '\0' || client->exec_command_too_long) {
         int exit_status = exec_dispatch(client);
         ssh_channel_request_send_exit_status(client->channel, exit_status);
         ssh_channel_send_eof(client->channel);
@@ -780,6 +868,7 @@ void input_run_session(client_t *client) {
                              sizeof(client->command_output),
                              "%s", motd_buf);
                     client->command_output_scroll = 0;
+                    client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
                     client->show_motd = true;
                     tui_render_motd(client);
                     seen_update_seq = room_get_update_seq(g_room);
@@ -797,6 +886,10 @@ main_loop:
 
     /* Main input loop */
     while (client->connected && ssh_channel_is_open(client->channel)) {
+        if (client_flush_output(client) != 0) {
+            break;
+        }
+
         int ready = ssh_channel_poll_timeout(client->channel, 1000, 0);
 
         if (ready == SSH_ERROR) {
@@ -811,9 +904,24 @@ main_loop:
                 break;
             }
 
+            if (client_flush_output(client) != 0) {
+                break;
+            }
+
+            if (client_flush_pending_bells(client) != 0) {
+                break;
+            }
+
             if (current_update_seq != seen_update_seq) {
                 seen_update_seq = current_update_seq;
                 room_updated = true;
+            }
+
+            if (client->command_output_kind == TNT_COMMAND_OUTPUT_INBOX &&
+                client->command_output[0] != '\0' &&
+                client->unread_whispers > 0) {
+                commands_refresh_active_output(client);
+                client->redraw_pending = true;
             }
 
             if (client->redraw_pending ||
@@ -920,6 +1028,8 @@ main_loop:
                         client->command_input[len] = b;
                         client->command_input[len + 1] = '\0';
                         tui_render_screen(client);
+                    } else {
+                        client_send(client, "\a", 1);
                     }
                 } else if (b >= 128) {  /* UTF-8 multi-byte */
                     int char_len = utf8_byte_length(b);
@@ -932,10 +1042,12 @@ main_loop:
                     }
                     if (!utf8_is_valid_sequence(buf, char_len)) continue;
                     size_t len = strlen(client->command_input);
-                    if (len + (size_t)char_len < sizeof(client->command_input) - 1) {
+                    if (len + (size_t)char_len <= sizeof(client->command_input) - 1) {
                         memcpy(client->command_input + len, buf, char_len);
                         client->command_input[len + char_len] = '\0';
                         tui_render_screen(client);
+                    } else {
+                        client_send(client, "\a", 1);
                     }
                 }
             }
@@ -962,17 +1074,7 @@ cleanup:
 
     ratelimit_release_ip(client->client_ip);
 
-    /* Remove channel callbacks before releasing refs to prevent use-after-free
-     * if a callback fires between the two releases. */
-    if (client->channel && client->channel_cb) {
-        ssh_remove_channel_callbacks(client->channel, client->channel_cb);
-    }
-
-    /* Release the callback reference (paired with addref before client_install_channel_callbacks) */
-    client_release(client);
-
-    /* Release the main reference - client will be freed when all refs are gone */
-    client_release(client);
+    client_release_session(client);
 
     /* Decrement connection count */
     ratelimit_decrement_total();

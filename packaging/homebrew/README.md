@@ -6,6 +6,7 @@ project tap first, not Homebrew core:
 ```sh
 brew tap m1ngsama/tnt
 brew install tnt-chat
+brew services start tnt-chat
 ```
 
 Homebrew core should wait until TNT has stable releases and broader usage.
@@ -18,6 +19,7 @@ From a tap repository:
 brew audit --strict --online tnt-chat
 brew install --build-from-source ./Formula/tnt-chat.rb
 brew test tnt-chat
+brew services run tnt-chat
 ```
 
 For local syntax-only validation from this repository:
@@ -28,20 +30,20 @@ ruby -c packaging/homebrew/tnt-chat.rb
 
 ## Updating the formula
 
-1. Publish a GitHub release tag such as `v1.0.1`.
+1. Publish a GitHub release tag such as `vX.Y.Z`.
 2. Download or hash the release source archive:
 
    ```sh
-   curl -L -o tnt-chat-1.0.1.tar.gz \
-     https://github.com/m1ngsama/TNT/archive/refs/tags/v1.0.1.tar.gz
-   shasum -a 256 tnt-chat-1.0.1.tar.gz
+   curl -L -o dist/tnt-chat-vX.Y.Z.tar.gz \
+     https://github.com/m1ngsama/TNT/archive/refs/tags/vX.Y.Z.tar.gz
+   shasum -a 256 dist/tnt-chat-vX.Y.Z.tar.gz
    ```
 
 3. Replace `REPLACE_WITH_RELEASE_TARBALL_SHA256` in `tnt-chat.rb`.
 4. Run:
 
    ```sh
-   make release-check-strict
+   SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
    ```
 
 5. Copy the formula into the tap repository and open a normal review PR.

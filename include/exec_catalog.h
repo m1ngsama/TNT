@@ -9,8 +9,10 @@ typedef enum {
     TNT_EXEC_COMMAND_USERS,
     TNT_EXEC_COMMAND_STATS,
     TNT_EXEC_COMMAND_TAIL,
+    TNT_EXEC_COMMAND_DUMP,
     TNT_EXEC_COMMAND_POST,
-    TNT_EXEC_COMMAND_EXIT
+    TNT_EXEC_COMMAND_EXIT,
+    TNT_EXEC_COMMAND_COUNT
 } tnt_exec_command_id_t;
 
 bool exec_catalog_match(const char *line, tnt_exec_command_id_t *id,
@@ -18,6 +20,8 @@ bool exec_catalog_match(const char *line, tnt_exec_command_id_t *id,
 bool exec_catalog_args_valid(tnt_exec_command_id_t id, const char *args);
 void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
                               ui_lang_t lang);
+void exec_catalog_append_command_list(char *buffer, size_t buf_size,
+                                      size_t *pos);
 void exec_catalog_append_usage(char *buffer, size_t buf_size, size_t *pos,
                                tnt_exec_command_id_t id, ui_lang_t lang);
 

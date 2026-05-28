@@ -9,7 +9,7 @@ curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 
 Specific version:
 ```bash
-VERSION=v1.0.1 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+VERSION=vX.Y.Z curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
 
 ## Manual Install
@@ -18,12 +18,12 @@ Download binary for your platform from [releases](https://github.com/m1ngsama/TN
 
 ```bash
 # Linux AMD64
-wget https://github.com/m1ngsama/TNT/releases/latest/download/tnt-linux-amd64
+curl -LO https://github.com/m1ngsama/TNT/releases/latest/download/tnt-linux-amd64
 chmod +x tnt-linux-amd64
 sudo mv tnt-linux-amd64 /usr/local/bin/tnt
 
 # macOS ARM64 (Apple Silicon)
-wget https://github.com/m1ngsama/TNT/releases/latest/download/tnt-darwin-arm64
+curl -LO https://github.com/m1ngsama/TNT/releases/latest/download/tnt-darwin-arm64
 chmod +x tnt-darwin-arm64
 sudo mv tnt-darwin-arm64 /usr/local/bin/tnt
 ```
@@ -106,6 +106,34 @@ sudo rm /var/lib/tnt/motd.txt
 ```
 
 No restart required — TNT reads the file on each new connection.
+
+## Manual Log Maintenance
+
+TNT stores public chat history in `messages.log` under the state directory.
+Use the maintenance script from a source checkout when the service is stopped
+or during a quiet maintenance window:
+
+```bash
+sudo systemctl stop tnt
+sudo scripts/logrotate.sh /var/lib/tnt/messages.log 100 10000
+sudo systemctl start tnt
+```
+
+The arguments are `LOG_FILE MAX_SIZE_MB KEEP_LINES`.  The script archives the
+full log, compacts the active log to the last `KEEP_LINES` records, compresses
+the archive when `gzip` is available, and keeps the newest five archives by
+default.  Use `--dry-run` to preview actions, or `--keep-archives N` to change
+archive retention.
+
+Before replacing a suspicious log, inspect and recover it offline:
+
+```bash
+tnt --log-check /var/lib/tnt/messages.log
+tnt --log-recover /var/lib/tnt/messages.log > /var/lib/tnt/messages.recovered.log
+```
+
+`--log-recover` writes valid records to stdout and reports skipped records to
+stderr.  Review the recovered file before replacing the active log.
 
 ## Firewall
 

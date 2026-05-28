@@ -55,10 +55,13 @@ TNT uses a multi-threaded architecture with a main accept loop and per-client th
 
 ### Key Design Principles
 
-1. **Fixed-size buffers** - No dynamic allocation in hot paths
-2. **Reader-writer locks** - Multiple readers, single writer
-3. **Reference counting** - Prevent use-after-free
-4. **Ring buffer** - Fixed-size message history (last 100 messages)
+1. **Fixed-size buffers** - Keep message, command, and UI buffers bounded
+2. **Reader-writer locks** - Multiple readers, single writer for room state
+3. **Per-client output ownership** - Each interactive session writes only to
+   its own SSH channel
+4. **Reference counting** - Keep client objects alive across callbacks and
+   cross-thread lookups
+5. **Ring buffer** - Fixed-size in-memory message history (last 100 messages)
 
 ---
 
@@ -69,6 +72,7 @@ TNT uses a multi-threaded architecture with a main accept loop and per-client th
 ```
 src/
 ├── main.c           - CLI entry point and startup option parsing
+├── cli_text.c       - Server CLI help and option diagnostics
 ├── ssh_server.c     - SSH listener setup and connection accept loop
 ├── bootstrap.c      - SSH authentication/session bootstrap
 ├── input.c          - Interactive session loop and key handling
@@ -76,8 +80,12 @@ src/
 ├── command_catalog.c - COMMAND-mode names, aliases, and help summaries
 ├── exec_catalog.c   - SSH exec command matching and help metadata
 ├── exec.c           - SSH exec command dispatch
-├── chat_room.c      - Chat room logic and message broadcasting
+├── tntctl.c         - Local wrapper around the SSH exec interface
+├── tntctl_text.c    - tntctl local help and diagnostics
+├── chat_room.c      - Chat room state, message ring, and update sequence
 ├── message.c        - Message persistence (RFC3339 format)
+├── message_log.c    - messages.log v1 parsing and formatting
+├── message_log_tool.c - Offline messages.log check/recover CLI
 ├── history_view.c   - NORMAL-mode scroll window rules
 ├── tui.c            - Terminal UI rendering (ANSI escape codes)
 ├── tui_status.c     - Mode/status/input-line rendering
@@ -100,13 +108,20 @@ include/
 ├── bootstrap.h      - SSH session bootstrap interface
 ├── chat_room.h      - Chat room interface
 ├── message.h        - Message structure and persistence
+├── message_log.h    - messages.log v1 parser/formatter interface
+├── message_log_tool.h - Offline log check/recover interface
 ├── command_catalog.h - COMMAND-mode command metadata interface
+├── exec_catalog.h   - SSH exec command metadata interface
+├── cli_text.h       - Server CLI text interface
+├── tntctl_text.h    - tntctl text interface
 ├── history_view.h   - Scroll-state helpers
 ├── tui.h            - TUI rendering functions
+├── tui_status.h     - TUI status/input-line rendering interface
 ├── i18n.h           - Language and shared text IDs
 ├── help_text.h      - Key reference text interface
 ├── manual.h         - Concise manual panel interface
 ├── manual_text.h    - Concise manual text interface
+├── system_message.h - Localized system message builders
 ├── ratelimit.h      - Connection limit interface
 └── utf8.h           - UTF-8 utilities
 ```
@@ -119,12 +134,16 @@ typedef struct client {
     ssh_session session;
     ssh_channel channel;
     char username[MAX_USERNAME_LEN];
-    int width, height;              // Terminal dimensions
+    _Atomic int width, height;      // Terminal dimensions
     client_mode_t mode;             // INSERT/NORMAL/COMMAND
     int scroll_pos;
-    bool connected;
+    atomic_bool connected;
+    char *outbox;                   // Bounded queued interactive output
+    size_t outbox_len, outbox_pos;
     int ref_count;                  // Reference counting
     pthread_mutex_t ref_lock;
+    pthread_mutex_t io_lock;        // Own SSH channel writes only
+    bool channel_callback_ref;      // Ref held while callbacks are installed
 } client_t;
 ```
 
@@ -134,6 +153,7 @@ typedef struct {
     pthread_rwlock_t lock;          // Reader-writer lock
     struct client **clients;         // Dynamic array
     int client_count;
+    uint64_t update_seq;             // Bumped when message history changes
     message_t *messages;            // Ring buffer
     int message_count;
 } chat_room_t;
@@ -189,6 +209,9 @@ make anonymous-access-test # Verify default anonymous login behavior
 make connection-limit-test # Verify per-IP concurrency and rate limits
 make security-test # Run security feature checks
 make stress-test   # Run configurable concurrent-client stress test
+make soak-test     # Run idle/reconnect/control-plane soak test
+make slow-client-test # Run slow interactive-client backpressure test
+make user-lifecycle-test # Run a two-user TUI lifecycle test
 make ci-test       # Run the same checks as GitHub Actions
 
 # Individual tests
@@ -197,6 +220,9 @@ cd tests
 ./test_security_features.sh  # Security checks
 ./test_anonymous_access.sh   # Anonymous access
 ./test_stress.sh             # Concurrent connections
+./test_soak.sh               # Idle/reconnect soak
+./test_slow_client.sh        # Slow-client backpressure
+./test_user_lifecycle.sh     # Two-user TUI lifecycle
 ```
 
 ### Test Coverage
@@ -205,6 +231,10 @@ cd tests
 - **Security**: RSA keys, env vars, UTF-8 validation, buffer overflow protection
 - **Anonymous**: Passwordless access, any username
 - **Stress**: 10 concurrent clients for 30 seconds
+- **Soak**: idle session, reconnect churn, health/stats/users/post/tail
+- **Slow client**: unread interactive SSH client cannot block control paths
+- **Lifecycle**: two-user TUI story covering help, history, search, private
+  messages, nickname, action messages, and persistence boundaries
 
 ---
 
@@ -244,40 +274,47 @@ while ((!ctx->auth_success || ctx->channel == NULL || !ctx->channel_ready) && !t
 
 ### 2. Chat Room (chat_room.c)
 
-**Thread-safe broadcasting:**
+**Thread-safe message publication:**
 ```c
 void room_broadcast(chat_room_t *room, const message_t *msg) {
     pthread_rwlock_wrlock(&room->lock);
 
-    /* Copy client list with ref counting */
-    client_t **clients_copy = calloc(...);
-    for (int i = 0; i < count; i++) {
-        clients_copy[i]->ref_count++;
-    }
+    room_add_message(room, msg);
+    room->update_seq++;
 
-    pthread_rwlock_unlock(&room->lock);  // Release lock early
-
-    /* Render outside lock (avoid deadlock) */
-    for (int i = 0; i < count; i++) {
-        tui_render_screen(clients_copy[i]);
-        client_release(clients_copy[i]);
-    }
+    pthread_rwlock_unlock(&room->lock);
 }
 ```
 
 **Why this works:**
-- Copy client list while holding write lock
-- Increment reference counts
-- Release lock BEFORE rendering
-- Render to all clients outside lock
-- Decrement reference counts (may free clients)
+- Broadcast updates shared room state only; it does not render or write to
+  any SSH channel.
+- Each interactive session tracks `room_get_update_seq()` in its own
+  `input_run_session()` loop.
+- When the sequence changes, the client renders and flushes its own output.
+- This keeps slow SSH windows local to that client and prevents one recipient
+  from blocking a sender or the whole room.
+- Cross-client lookups, such as mentions and private messages, must call
+  `client_addref()` before using a client pointer outside `g_room->lock`, then
+  `client_release()` when done.  Do not increment `ref_count` directly.
+- Session callback lifetime is owned by `client.c`: `client_install_channel_callbacks()`
+  takes the callback ref, and `client_release_session()` removes callbacks and
+  releases both the callback ref and the session main ref.
 
 ### 3. Message Persistence (message.c)
+
+See [MESSAGE_LOG.md](MESSAGE_LOG.md) for the stable TNT 1.x on-disk record
+contract.
 
 **Log format:**
 ```
 2024-01-13T10:30:45Z|username|message content
 ```
+
+Log replay and search use the same strict parser.  A record is accepted only
+when it has exactly three fields, a strict UTC RFC3339 timestamp, valid UTF-8
+username/content, bounded field lengths, and a trailing newline.  Unterminated
+last lines are treated as partial writes and skipped.
 
 **Optimized loading** (backward scan):
 ```c
@@ -380,9 +417,13 @@ void utf8_remove_last_word(char *str) {
 ```sh
 tests/test_exec_mode.sh          # exec command behavior
 tests/test_interactive_input.sh  # COMMAND-mode/TUI behavior
+tests/test_user_lifecycle.sh     # end-to-end two-user TUI behavior
+tests/test_slow_client.sh        # slow SSH reader/backpressure behavior
 tests/unit/test_i18n.c           # localized shared text
 tests/unit/test_command_catalog.c # interactive command metadata
 tests/unit/test_exec_catalog.c   # exec command help metadata
+tests/unit/test_tntctl_text.c    # tntctl local help/diagnostic text
+tests/test_docs_help_surface.sh  # active help/manual drift checks
 ```
 
 ### Adding a New Keybinding
@@ -449,6 +490,10 @@ keys.
      fragments.
    - Keep placeholders visible and stable, for example `%s`, `%d`,
      `<user>`, and `<message>`.
+   - Use `I18N_STRING(en, zh)` for ordinary two-language entries.  Use
+     `I18N_STRING_MAP(I18N_EN(...), I18N_ZH(...))` when an entry needs
+     language-keyed initialization so future languages can be added without
+     changing every existing initializer.
    - Every new user-facing string needs tests for at least English fallback
      and Chinese output while this project has two UI languages.
 
@@ -457,7 +502,8 @@ keys.
 The current `src/i18n_text.c` implementation is a small-project translation
 table implemented in C, not a full gettext catalog.  It is acceptable for two
 languages because message lookup is already split from language parsing in
-`src/i18n.c`, but adding more languages should move toward catalog-like
+`src/i18n.c`, and localized strings can now be initialized by language key.
+Adding many more languages should still move toward external catalog-like
 storage instead of adding ad hoc branches for every locale.
 
 Relevant conventions:

@@ -159,8 +159,9 @@ TEST(room_remove_nonexistent_client) {
 
 TEST(room_add_client_full) {
     chat_room_t *room = room_create();
-    client_t clients[MAX_CLIENTS + 1];
-    memset(clients, 0, sizeof(clients));
+    client_t *clients = calloc((size_t)room->client_capacity + 1,
+                               sizeof(*clients));
+    assert(clients != NULL);
 
     for (int i = 0; i < room->client_capacity; i++) {
         assert(room_add_client(room, &clients[i]) == 0);
@@ -168,6 +169,23 @@ TEST(room_add_client_full) {
 
     assert(room_add_client(room, &clients[room->client_capacity]) == -1);
     assert(room_get_client_count(room) == room->client_capacity);
+
+    free(clients);
+    room_destroy(room);
+}
+
+TEST(room_capacity_follows_tnt_max_connections) {
+    setenv("TNT_MAX_CONNECTIONS", "3", 1);
+    chat_room_t *room = room_create();
+    unsetenv("TNT_MAX_CONNECTIONS");
+    client_t clients[4];
+    memset(clients, 0, sizeof(clients));
+
+    assert(room->client_capacity == 3);
+    assert(room_add_client(room, &clients[0]) == 0);
+    assert(room_add_client(room, &clients[1]) == 0);
+    assert(room_add_client(room, &clients[2]) == 0);
+    assert(room_add_client(room, &clients[3]) == -1);
 
     room_destroy(room);
 }
@@ -201,6 +219,7 @@ int main(void) {
     RUN_TEST(room_client_count);
     RUN_TEST(room_remove_nonexistent_client);
     RUN_TEST(room_add_client_full);
+    RUN_TEST(room_capacity_follows_tnt_max_connections);
     RUN_TEST(room_message_count_threadsafe);
 
     printf("\nAll %d tests passed!\n", tests_passed);

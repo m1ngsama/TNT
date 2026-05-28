@@ -29,6 +29,7 @@ TEST(full_help_matches_language) {
     assert(strstr(en, "AVAILABLE COMMANDS") != NULL);
     assert(strstr(en, "COMMAND OUTPUT KEYS") != NULL);
     assert(strstr(en, ":inbox") != NULL);
+    assert(strstr(en, "Refresh live output") != NULL);
     assert(strstr(en, ":support") == NULL);
     assert(strstr(en, ":commands") == NULL);
     assert(strstr(en, "Cycle UI language") != NULL);
@@ -38,6 +39,7 @@ TEST(full_help_matches_language) {
     assert(strstr(zh, "可用命令") != NULL);
     assert(strstr(zh, "命令输出按键") != NULL);
     assert(strstr(zh, ":inbox") != NULL);
+    assert(strstr(zh, "刷新动态输出") != NULL);
     assert(strstr(zh, "/me <action>") != NULL);
     assert(strstr(zh, "@username") != NULL);
     assert(strstr(zh, "<动作>") == NULL);

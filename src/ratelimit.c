@@ -1,4 +1,5 @@
 #include "ratelimit.h"
+#include "config_defaults.h"
 #include "common.h"
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -27,16 +28,20 @@ static pthread_mutex_t g_rate_limit_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_total_connections = 0;
 static pthread_mutex_t g_conn_count_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static int g_max_connections = 64;
-static int g_max_conn_per_ip = 5;
-static int g_max_conn_rate_per_ip = 10;
-static int g_rate_limit_enabled = 1;
+static int g_max_connections = TNT_DEFAULT_MAX_CONNECTIONS;
+static int g_max_conn_per_ip = TNT_DEFAULT_MAX_CONN_PER_IP;
+static int g_max_conn_rate_per_ip = TNT_DEFAULT_MAX_CONN_RATE_PER_IP;
+static int g_rate_limit_enabled = TNT_DEFAULT_RATE_LIMIT_ENABLED;
 
 void ratelimit_init(void) {
-    g_max_connections        = env_int("TNT_MAX_CONNECTIONS",       64, 1, 1024);
-    g_max_conn_per_ip        = env_int("TNT_MAX_CONN_PER_IP",        5, 1, 1024);
-    g_max_conn_rate_per_ip   = env_int("TNT_MAX_CONN_RATE_PER_IP",  10, 1, 1024);
-    g_rate_limit_enabled     = env_int("TNT_RATE_LIMIT",             1, 0,    1);
+    g_max_connections =
+        tnt_config_env_int(&TNT_CONFIG_MAX_CONNECTIONS);
+    g_max_conn_per_ip =
+        tnt_config_env_int(&TNT_CONFIG_MAX_CONN_PER_IP);
+    g_max_conn_rate_per_ip =
+        tnt_config_env_int(&TNT_CONFIG_MAX_CONN_RATE_PER_IP);
+    g_rate_limit_enabled =
+        tnt_config_env_int(&TNT_CONFIG_RATE_LIMIT);
 }
 
 /* Caller MUST hold g_rate_limit_lock. */

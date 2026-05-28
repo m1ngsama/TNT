@@ -1,6 +1,7 @@
 #include "ssh_server.h"
 #include "bootstrap.h"
 #include "commands.h"
+#include "config_defaults.h"
 #include "exec.h"
 #include "input.h"
 #include "ratelimit.h"
@@ -23,7 +24,7 @@
 
 /* Global SSH bind instance */
 static ssh_bind g_sshbind = NULL;
-static int g_listen_port = DEFAULT_PORT;
+static int g_listen_port = TNT_DEFAULT_PORT;
 
 static time_t g_server_start_time = 0;
 

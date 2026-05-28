@@ -26,11 +26,12 @@ After editing `PKGBUILD`, regenerate `.SRCINFO`:
 makepkg --printsrcinfo > .SRCINFO
 ```
 
-Before AUR submission, replace `sha256sums=('SKIP')` with the real release
-archive checksum, then run the project-level strict check:
+Before AUR submission, replace `sha256sums=('SKIP')` with the real GitHub
+source archive checksum, regenerate `.SRCINFO`, then run the package publish
+check:
 
 ```sh
-make release-check-strict
+SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
 ```
 
 ## Manual AUR submission
@@ -40,7 +41,7 @@ git clone ssh://aur@aur.archlinux.org/tnt-chat.git aur-tnt-chat
 cp PKGBUILD .SRCINFO aur-tnt-chat/
 cd aur-tnt-chat
 git add PKGBUILD .SRCINFO
-git commit -m "Update to 1.0.1"
+git commit -m "Update to X.Y.Z"
 git push
 ```
 

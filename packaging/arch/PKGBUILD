@@ -1,4 +1,4 @@
-# Maintainer: M1ng <REPLACE_WITH_EMAIL>
+# Maintainer: M1ng <contact@m1ng.space>
 
 pkgname=tnt-chat
 pkgver=1.0.1
@@ -9,8 +9,10 @@ url='https://github.com/m1ngsama/TNT'
 license=('MIT')
 depends=('libssh')
 makedepends=('gcc' 'make')
-source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('SKIP')
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz"
+        "${pkgname}.sysusers")
+sha256sums=('SKIP'
+            '8a1f7dfbdc9f1305c4ed50d80e89f91333ffdf937890c497f93e41abaf76e3ed')
 
 build() {
   cd "TNT-${pkgver}"
@@ -21,5 +23,7 @@ package() {
   cd "TNT-${pkgver}"
   make DESTDIR="${pkgdir}" PREFIX=/usr install
   make DESTDIR="${pkgdir}" PREFIX=/usr install-systemd
+  install -Dm644 "${srcdir}/${pkgname}.sysusers" \
+    "${pkgdir}/usr/lib/sysusers.d/${pkgname}.conf"
   install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

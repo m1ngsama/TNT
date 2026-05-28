@@ -17,65 +17,80 @@ This roadmap is intentionally strict. Each stage should leave the project easier
 
 Goal: make TNT predictable for operators, scripts, and package maintainers.
 
-- split the current surface into `tntd` (daemon) and `tntctl` (control client)
-- keep SSH exec support, but treat it as a transport for stable commands rather than the primary API shape
-- define stable subcommands and exit codes for:
+- ✅ introduce `tntctl` as a thin control client over the stable SSH exec surface
+- keep SSH exec support, but treat it as a transport for stable commands rather
+  than an ad hoc command surface
+- ✅ define stable subcommands and exit codes for:
   - `health`
   - `stats`
   - `users`
   - `tail`
+  - `dump`
   - `post`
-- support text and JSON output modes where machine use is likely
-- normalize command parsing, help text, and error reporting
-- add `--bind`, `--port`, `--state-dir`, `--public-host`, `--max-clients`, and related long options consistently
-- add a man page for `tntd` and `tntctl`
+- ✅ support text and JSON output modes where machine use is likely
+- ✅ normalize command parsing, help text, and error reporting
+- ✅ keep `tnt` as the 1.x server binary; reserve any future `tntd` split for a
+  major-version compatibility plan
+- ✅ add `--bind`, `--port`, `--state-dir`, `--public-host`,
+  `--max-connections`, and related long options consistently
+- ✅ add man pages for `tnt` and `tntctl`
 
 ## Stage 2: Runtime Model
 
 Goal: make long-running operation boring and reliable.
 
-- move client state to a clearer ownership model with one release path
-- finish replacing ad hoc cross-thread UI mutation with per-client event delivery
-- add bounded outbound queues so slow clients cannot stall other users
+- ✅ move session callback ownership into `client.c` and release sessions
+  through one `client_release_session()` path
+- ✅ remove cross-client SSH channel writes from mention and private-message
+  notifications
+- continue replacing ad hoc cross-thread UI mutation with per-client event
+  delivery where new features need cross-client notifications
+- ✅ add bounded outbound queues so closed SSH windows cannot immediately stall
+  interactive output writes
 - separate accept, session bootstrap, interactive I/O, and persistence concerns more cleanly
-- make room/client capacity fully runtime-configurable with no hidden compile-time ceiling
-- document hard guarantees and soft limits
+- ✅ make room/client capacity fully runtime-configurable with no hidden
+  compile-time ceiling
+- ✅ document hard guarantees and soft limits
 
 ## Stage 3: Data and Persistence
 
 Goal: make stored history durable, inspectable, and recoverable.
 
-- formalize the message log format and version it
-- keep timestamps in a timezone-safe format throughout write and replay
-- validate persisted UTF-8 and record structure before replay
-- add log rotation and compaction tooling
-- provide an offline inspection/export command
-- define recovery behavior for truncated or partially corrupted logs
+- ✅ formalize the message log v1 format
+- ✅ keep persisted timestamps in UTC throughout write and replay
+- ✅ validate persisted UTF-8 and record structure before replay/search
+- ✅ provide an inspection/export command for persisted records
+- ✅ add log rotation and compaction tooling
+- ✅ define broader recovery tooling for truncated or partially corrupted logs
 
 ## Stage 4: Interactive UX
 
 Goal: keep the interface efficient for terminal users without sacrificing simplicity.
 
-- keep the current modal editing model, but make its behavior precise and documented
-- support resize, cursor movement, command history, and predictable paste behavior
+- ✅ keep the current modal editing model precise and documented
+- ✅ support resize, command history, pager navigation, and predictable paste
+  behavior
+- add in-line cursor movement/editing only if it can stay simple and testable
 - add useful chat commands with clear semantics:
   - ✅ `:nick` / `:name` — nickname change with broadcast
   - ✅ `/me` — action messages
   - ✅ `:last N` — show last N messages from disk history
   - ✅ `:search <keyword>` — case-insensitive full-text search
   - ✅ `:mute-joins` — per-client join/leave notification toggle
-- improve discoverability of NORMAL and COMMAND mode actions
-- make status lines and help output concise enough for small terminals
+- ✅ improve discoverability of NORMAL and COMMAND mode actions
+- ✅ make status lines and help output concise enough for small terminals
 
 ## Stage 5: Operations and Security
 
 Goal: make public deployment manageable.
 
-- provide clear distinction between concurrent session limits and connection-rate limits
+- ✅ provide clear distinction between concurrent session limits and
+  connection-rate limits
 - add admin-only controls for read-only mode, mute, and ban
-- expose a minimal health and stats surface suitable for monitoring
+- ✅ expose a minimal health and stats surface suitable for monitoring
 - support systemd-friendly readiness and watchdog behavior
-- document recommended production defaults for public, private, and localhost-only deployments
+- ✅ document recommended production defaults for public, private, and
+  localhost-only deployments
 - tighten CI around authentication, limits, and restart behavior
 
 ## Stage 6: Release Quality
@@ -84,7 +99,13 @@ Goal: make regressions harder to introduce.
 
 - expand CI coverage across Linux and macOS for build and smoke tests
 - add sanitizer jobs and targeted fuzzing for UTF-8, log parsing, and command parsing
-- add soak tests for long-lived sessions and slow-client behavior
+- ✅ add a configurable soak test for idle sessions, reconnects, and control
+  interface availability
+- ✅ add deeper slow-client coverage with a deliberately backpressured SSH
+  client
+- ✅ verify staged package installs, systemd unit paths, packaging metadata,
+  Debian source assembly, Homebrew service metadata, and installed log
+  maintenance modes in release preflight
 - keep deployment and test docs aligned with actual runtime behavior
 - require every user-visible interface change to update docs and tests in the same change set
 
@@ -92,8 +113,9 @@ Goal: make regressions harder to introduce.
 
 These are the next changes that should happen before new feature work expands the surface area.
 
-1. Introduce `tntctl` and move stable command handling behind it.
-2. Define exit codes and JSON schemas for `health`, `stats`, `users`, `tail`, and `post`.
-3. Add per-client outbound queues and finish untangling client-state ownership.
-4. Remove the remaining hidden runtime limits and make them explicit configuration.
-5. Add a long-running soak test that exercises idle sessions, reconnects, and slow consumers.
+1. Replace remaining source-archive checksum placeholders only after the final
+   GitHub source archive exists, then run `make package-publish-check`.
+2. Create or move the `vX.Y.Z` tag only when the release commit is final, then
+   run `make release-check-strict` before pushing it.
+3. Decide whether admin-only moderation controls belong in 1.0.x or should
+   wait for a later minor release.

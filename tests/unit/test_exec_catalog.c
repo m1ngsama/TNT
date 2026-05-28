@@ -28,12 +28,14 @@ TEST(generates_localized_exec_help) {
     assert(strstr(en, "TNT exec interface") != NULL);
     assert(strstr(en, "Commands:") != NULL);
     assert(strstr(en, "users [--json]") != NULL);
+    assert(strstr(en, "dump [N]") != NULL);
     assert(strstr(en, "post MESSAGE") != NULL);
     assert(strstr(en, "support") == NULL);
 
     assert(strstr(zh, "TNT exec 接口") != NULL);
     assert(strstr(zh, "命令:") != NULL);
     assert(strstr(zh, "users [--json]") != NULL);
+    assert(strstr(zh, "dump [N]") != NULL);
     assert(strstr(zh, "post MESSAGE") != NULL);
     assert(strstr(zh, "support") == NULL);
     assert_ascii_angle_placeholders(zh);
@@ -65,6 +67,10 @@ TEST(matches_exec_commands_and_args) {
     assert(id == TNT_EXEC_COMMAND_TAIL);
     assert(strcmp(args, "-n 20") == 0);
 
+    assert(exec_catalog_match("dump -n 20", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_DUMP);
+    assert(strcmp(args, "-n 20") == 0);
+
     assert(exec_catalog_match("post hello world", &id, &args));
     assert(id == TNT_EXEC_COMMAND_POST);
     assert(strcmp(args, "hello world") == 0);
@@ -90,6 +96,9 @@ TEST(validates_argument_shapes) {
     assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_TAIL, NULL));
     assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_TAIL, "-n 20"));
 
+    assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_DUMP, NULL));
+    assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_DUMP, "-n 20"));
+
     assert(!exec_catalog_args_valid(TNT_EXEC_COMMAND_POST, NULL));
     assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_POST, "hello"));
 }
@@ -111,8 +120,18 @@ TEST(generates_localized_usage) {
     memset(en, 0, sizeof(en));
     en_pos = 0;
     exec_catalog_append_usage(en, sizeof(en), &en_pos,
-                              TNT_EXEC_COMMAND_TAIL, (ui_lang_t)99);
-    assert(strcmp(en, "tail: usage: tail [N] | tail -n N\n") == 0);
+                              TNT_EXEC_COMMAND_DUMP, (ui_lang_t)99);
+    assert(strcmp(en, "dump: usage: dump [N] | dump -n N\n") == 0);
+}
+
+TEST(generates_unique_command_list) {
+    char output[256] = {0};
+    size_t pos = 0;
+
+    exec_catalog_append_command_list(output, sizeof(output), &pos);
+
+    assert(strcmp(output,
+                  "help, health, users, stats, tail, dump, post, exit") == 0);
 }
 
 int main(void) {
@@ -122,6 +141,7 @@ int main(void) {
     RUN_TEST(matches_exec_commands_and_args);
     RUN_TEST(validates_argument_shapes);
     RUN_TEST(generates_localized_usage);
+    RUN_TEST(generates_unique_command_list);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;

@@ -6,9 +6,9 @@
 /* Dispatch the non-interactive SSH exec command stored in
  * client->exec_command.  Returns the exit status to send back to the
  * SSH client:
- *   0  = success
- *   1  = runtime error (I/O, OOM, persistence failure)
- *  64  = usage error (unknown command, bad args)
+ *   TNT_EXIT_OK     = success
+ *   TNT_EXIT_ERROR  = runtime error (I/O, OOM, persistence failure)
+ *   TNT_EXIT_USAGE  = usage error (unknown command, bad args)
  *
  * Reads g_room and shared client state.  Safe to call once per
  * exec-mode session before the channel is closed. */

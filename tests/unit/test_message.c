@@ -3,8 +3,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <limits.h>
 
 #define TEST(name) static void test_##name()
 #define RUN_TEST(name) do { \
@@ -16,10 +18,43 @@
 
 static int tests_passed = 0;
 static const char *test_log = "test_messages.log";
+static char test_state_dir[PATH_MAX];
 
 /* Helper: Clean up test log file */
 static void cleanup_test_log(void) {
     unlink(test_log);
+}
+
+static void cleanup_state_dir(void) {
+    if (test_state_dir[0] != '\0') {
+        char log_path[PATH_MAX];
+        snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+        unlink(log_path);
+        rmdir(test_state_dir);
+        test_state_dir[0] = '\0';
+    }
+    unsetenv("TNT_STATE_DIR");
+}
+
+static void setup_state_dir(void) {
+    const char *tmp = getenv("TMPDIR");
+
+    cleanup_state_dir();
+    if (!tmp || tmp[0] == '\0') {
+        tmp = "/tmp";
+    }
+    snprintf(test_state_dir, sizeof(test_state_dir),
+             "%s/tnt-message-test.XXXXXX", tmp);
+    assert(mkdtemp(test_state_dir) != NULL);
+    assert(setenv("TNT_STATE_DIR", test_state_dir, 1) == 0);
+}
+
+static void format_rfc3339_now(char *buffer, size_t buf_size) {
+    time_t now = time(NULL);
+    struct tm tm_info;
+
+    gmtime_r(&now, &tm_info);
+    strftime(buffer, buf_size, "%Y-%m-%dT%H:%M:%SZ", &tm_info);
 }
 
 /* Test message initialization */
@@ -122,6 +157,104 @@ TEST(message_save_basic) {
     cleanup_test_log();
 }
 
+TEST(message_load_skips_malformed_records) {
+    char ts[64];
+    char log_path[PATH_MAX];
+    message_t *messages = NULL;
+
+    setup_state_dir();
+    format_rfc3339_now(ts, sizeof(ts));
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+
+    FILE *fp = fopen(log_path, "wb");
+    assert(fp != NULL);
+    fprintf(fp, "%s|alice|valid one\n", ts);
+    fprintf(fp, "not-a-date|bob|bad date\n");
+    fprintf(fp, "%s||empty user\n", ts);
+    fprintf(fp, "%s|mallory|extra|pipe\n", ts);
+    fprintf(fp, "%s|badutf|bad \xC3\x28\n", ts);
+    fprintf(fp, "%s|partial|truncated record", ts);
+    fclose(fp);
+
+    int count = message_load(&messages, 10);
+    assert(count == 1);
+    assert(strcmp(messages[0].username, "alice") == 0);
+    assert(strcmp(messages[0].content, "valid one") == 0);
+    free(messages);
+    cleanup_state_dir();
+}
+
+TEST(message_search_skips_malformed_records) {
+    char ts[64];
+    char log_path[PATH_MAX];
+    message_t *results = NULL;
+
+    setup_state_dir();
+    format_rfc3339_now(ts, sizeof(ts));
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+
+    FILE *fp = fopen(log_path, "wb");
+    assert(fp != NULL);
+    fprintf(fp, "%s|alice|needle valid\n", ts);
+    fprintf(fp, "%s|mallory|needle extra|pipe\n", ts);
+    fprintf(fp, "%s|partial|needle truncated", ts);
+    fclose(fp);
+
+    int count = message_search("needle", &results, 10);
+    assert(count == 1);
+    assert(strcmp(results[0].username, "alice") == 0);
+    assert(strcmp(results[0].content, "needle valid") == 0);
+    free(results);
+    cleanup_state_dir();
+}
+
+TEST(message_dump_exports_valid_records) {
+    char ts[64];
+    char log_path[PATH_MAX];
+    char expected_all[512];
+    char expected_last_two[512];
+    char *dump = NULL;
+    size_t dump_len = 0;
+
+    setup_state_dir();
+    format_rfc3339_now(ts, sizeof(ts));
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+
+    FILE *fp = fopen(log_path, "wb");
+    assert(fp != NULL);
+    fprintf(fp, "%s|alice|first valid\n", ts);
+    fprintf(fp, "%s|mallory|extra|pipe\n", ts);
+    fprintf(fp, "%s|bob|second valid\n", ts);
+    fprintf(fp, "%s|carol|third valid\n", ts);
+    fprintf(fp, "%s|partial|truncated record", ts);
+    fclose(fp);
+
+    snprintf(expected_all, sizeof(expected_all),
+             "%s|alice|first valid\n"
+             "%s|bob|second valid\n"
+             "%s|carol|third valid\n",
+             ts, ts, ts);
+    assert(message_dump_text(&dump, &dump_len, 0) == 0);
+    assert(dump != NULL);
+    assert(dump_len == strlen(expected_all));
+    assert(strcmp(dump, expected_all) == 0);
+    free(dump);
+
+    dump = NULL;
+    dump_len = 0;
+    snprintf(expected_last_two, sizeof(expected_last_two),
+             "%s|bob|second valid\n"
+             "%s|carol|third valid\n",
+             ts, ts);
+    assert(message_dump_text(&dump, &dump_len, 2) == 0);
+    assert(dump != NULL);
+    assert(dump_len == strlen(expected_last_two));
+    assert(strcmp(dump, expected_last_two) == 0);
+    free(dump);
+
+    cleanup_state_dir();
+}
+
 /* Test edge cases */
 TEST(message_edge_cases) {
     message_t msg;
@@ -215,12 +348,16 @@ int main(void) {
     RUN_TEST(message_format_unicode);
     RUN_TEST(message_format_width_limits);
     RUN_TEST(message_save_basic);
+    RUN_TEST(message_load_skips_malformed_records);
+    RUN_TEST(message_search_skips_malformed_records);
+    RUN_TEST(message_dump_exports_valid_records);
     RUN_TEST(message_edge_cases);
     RUN_TEST(message_special_characters);
     RUN_TEST(message_buffer_safety);
     RUN_TEST(message_timestamp_formats);
 
     cleanup_test_log();
+    cleanup_state_dir();
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;

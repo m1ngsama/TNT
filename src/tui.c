@@ -373,7 +373,9 @@ void tui_render_screen(client_t *client) {
     chips[chip_count].value_color = mode_color;
     chip_count++;
 
-    const char *hint = i18n_text(client->ui_lang, I18N_TITLE_HELP_HINT);
+    const char *hint = client->mode == MODE_NORMAL
+                       ? i18n_text(client->ui_lang, I18N_TITLE_HELP_HINT)
+                       : "";
     int hint_width = utf8_string_width(hint);
     const char *mute_label = i18n_text(client->ui_lang, I18N_TITLE_MUTED);
     int mute_width = client->mute_joins ? utf8_string_width(mute_label) + 2 : 0;
@@ -401,7 +403,7 @@ void tui_render_screen(client_t *client) {
 
     /* Decide what fits.  Reserve at least 1 col of gap between left and
      * right halves so they never visually touch. */
-    int show_hint = 1;
+    int show_hint = hint[0] != '\0';
     int show_mute = client->mute_joins ? 1 : 0;
     int show_unread = unread_count > 0 ? 1 : 0;
     int show_whisper = whisper_count > 0 ? 1 : 0;
@@ -677,7 +679,10 @@ void tui_render_command_output(client_t *client) {
 
     buffer_appendf(buffer, sizeof(buffer), &pos,
                    i18n_text(client->ui_lang,
-                             I18N_COMMAND_OUTPUT_STATUS_FORMAT),
+                             client->command_output_kind ==
+                                     TNT_COMMAND_OUTPUT_INBOX
+                                 ? I18N_COMMAND_OUTPUT_REFRESH_STATUS_FORMAT
+                                 : I18N_COMMAND_OUTPUT_STATUS_FORMAT),
                    start + 1, max_scroll + 1);
 
     client_send(client, buffer, pos);

@@ -80,10 +80,21 @@ TEST(default_uses_locale_when_no_tnt_lang) {
 
 TEST(text_lookup_matches_language) {
     i18n_string_t sample = I18N_STRING("fallback", "替代");
+    i18n_string_t mapped = I18N_STRING_MAP(
+        I18N_EN("mapped fallback"),
+        I18N_ZH("映射替代")
+    );
+    i18n_string_t english_only = I18N_STRING_MAP(
+        I18N_EN("english only")
+    );
 
     assert(strcmp(i18n_string(sample, UI_LANG_EN), "fallback") == 0);
     assert(strcmp(i18n_string(sample, UI_LANG_ZH), "替代") == 0);
     assert(strcmp(i18n_string(sample, (ui_lang_t)99), "fallback") == 0);
+    assert(strcmp(i18n_string(mapped, UI_LANG_EN), "mapped fallback") == 0);
+    assert(strcmp(i18n_string(mapped, UI_LANG_ZH), "映射替代") == 0);
+    assert(strcmp(i18n_string(english_only, UI_LANG_ZH),
+                  "english only") == 0);
 
     assert(strstr(i18n_text(UI_LANG_EN, I18N_USERNAME_PROMPT),
                   "display name") != NULL);
@@ -111,6 +122,12 @@ TEST(text_lookup_matches_language) {
                   "q:close") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_COMMAND_OUTPUT_STATUS_FORMAT),
                   "q:关闭") != NULL);
+    assert(strstr(i18n_text(UI_LANG_EN,
+                            I18N_COMMAND_OUTPUT_REFRESH_STATUS_FORMAT),
+                  "r:refresh") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH,
+                            I18N_COMMAND_OUTPUT_REFRESH_STATUS_FORMAT),
+                  "r:刷新") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_MOTD_CONTINUE_HINT),
                   "Press any key") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_MOTD_CONTINUE_HINT),
@@ -147,6 +164,10 @@ TEST(text_lookup_matches_language) {
                   "message cannot be empty") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_EXEC_POST_EMPTY),
                   "消息不能为空") != NULL);
+    assert(strstr(i18n_text(UI_LANG_EN, I18N_EXEC_COMMAND_TOO_LONG),
+                  "command too long") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH, I18N_EXEC_COMMAND_TOO_LONG),
+                  "命令过长") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_EXEC_UNKNOWN_COMMAND_FORMAT),
                   "Unknown command") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_EXEC_UNKNOWN_COMMAND_FORMAT),

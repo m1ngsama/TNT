@@ -52,12 +52,60 @@ static void append_command_usage(char *output, size_t buf_size, size_t *pos,
     command_catalog_append_usage(output, buf_size, pos, id, lang);
 }
 
+static void append_inbox_output(client_t *client, char *output,
+                                size_t buf_size, size_t *pos) {
+    whisper_t snapshot[WHISPER_INBOX_SIZE];
+    int snap_count;
+
+    pthread_mutex_lock(&client->whisper_lock);
+    snap_count = client->whisper_inbox_count;
+    memcpy(snapshot, client->whisper_inbox,
+           snap_count * sizeof(whisper_t));
+    client->unread_whispers = 0;
+    pthread_mutex_unlock(&client->whisper_lock);
+
+    buffer_appendf(output, buf_size, pos,
+                   "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
+                   i18n_text(client->ui_lang, I18N_INBOX_TITLE),
+                   snap_count);
+    if (snap_count == 0) {
+        buffer_appendf(output, buf_size, pos,
+                       "  \033[2;37m%s\033[0m\n",
+                       i18n_text(client->ui_lang, I18N_INBOX_EMPTY));
+    }
+    for (int i = 0; i < snap_count; i++) {
+        char ts[20];
+        struct tm tmi;
+        localtime_r(&snapshot[i].timestamp, &tmi);
+        strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
+        buffer_appendf(output, buf_size, pos,
+                       "  \033[90m%s\033[0m  \033[35m%s\033[0m: %s\n",
+                       ts, snapshot[i].from, snapshot[i].content);
+    }
+}
+
+bool commands_refresh_active_output(client_t *client) {
+    char output[MAX_COMMAND_OUTPUT_LEN] = {0};
+    size_t pos = 0;
+
+    if (!client || client->command_output_kind != TNT_COMMAND_OUTPUT_INBOX) {
+        return false;
+    }
+
+    append_inbox_output(client, output, sizeof(output), &pos);
+    snprintf(client->command_output, sizeof(client->command_output), "%s",
+             output);
+    client->command_output_scroll = 0;
+    return true;
+}
+
 void commands_dispatch(client_t *client) {
     char cmd_buf[256];
     strncpy(cmd_buf, client->command_input, sizeof(cmd_buf) - 1);
     cmd_buf[sizeof(cmd_buf) - 1] = '\0';
     char *cmd = cmd_buf;
     char output[MAX_COMMAND_OUTPUT_LEN] = {0};
+    tnt_command_output_kind_t output_kind = TNT_COMMAND_OUTPUT_GENERIC;
     size_t pos = 0;
 
     /* Trim whitespace */
@@ -69,6 +117,10 @@ void commands_dispatch(client_t *client) {
             *end = '\0';
             end--;
         }
+    }
+    if (cmd[0] == ':') {
+        cmd++;
+        while (*cmd == ' ') cmd++;
     }
 
     /* Save to command history */
@@ -199,9 +251,9 @@ void commands_dispatch(client_t *client) {
             pthread_rwlock_unlock(&g_room->lock);
 
             if (target) {
-                /* Push into recipient's inbox.  io_lock serialises so two
-                 * senders to the same recipient don't tear the ring. */
-                pthread_mutex_lock(&target->io_lock);
+                /* Push into recipient's inbox.  whisper_lock serialises so
+                 * two senders to the same recipient don't tear the ring. */
+                pthread_mutex_lock(&target->whisper_lock);
                 int slot;
                 if (target->whisper_inbox_count < WHISPER_INBOX_SIZE) {
                     slot = target->whisper_inbox_count++;
@@ -219,13 +271,12 @@ void commands_dispatch(client_t *client) {
                 snprintf(target->whisper_inbox[slot].content,
                          sizeof(target->whisper_inbox[slot].content),
                          "%s", rest);
-                pthread_mutex_unlock(&target->io_lock);
-
                 target->unread_whispers++;
-                target->redraw_pending = true;
+                pthread_mutex_unlock(&target->whisper_lock);
+
                 /* Audible nudge — the title bar ✉ counter (UX-11 style)
                  * carries the persistent signal. */
-                client_send(target, "\a", 1);
+                client_queue_bell(target);
                 client_release(target);
             }
 
@@ -243,35 +294,8 @@ void commands_dispatch(client_t *client) {
         }
 
     } else if (command_id == TNT_COMMAND_INBOX) {
-        /* Snapshot the inbox under io_lock so a concurrent sender doesn't
-         * tear what we're rendering.  Counter reset happens after copy. */
-        whisper_t snapshot[WHISPER_INBOX_SIZE];
-        int snap_count;
-        pthread_mutex_lock(&client->io_lock);
-        snap_count = client->whisper_inbox_count;
-        memcpy(snapshot, client->whisper_inbox,
-               snap_count * sizeof(whisper_t));
-        pthread_mutex_unlock(&client->io_lock);
-        client->unread_whispers = 0;
-
-        buffer_appendf(output, sizeof(output), &pos,
-                       "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
-                       i18n_text(client->ui_lang, I18N_INBOX_TITLE),
-                       snap_count);
-        if (snap_count == 0) {
-            buffer_appendf(output, sizeof(output), &pos,
-                           "  \033[2;37m%s\033[0m\n",
-                           i18n_text(client->ui_lang, I18N_INBOX_EMPTY));
-        }
-        for (int i = 0; i < snap_count; i++) {
-            char ts[20];
-            struct tm tmi;
-            localtime_r(&snapshot[i].timestamp, &tmi);
-            strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
-            buffer_appendf(output, sizeof(output), &pos,
-                           "  \033[90m%s\033[0m  \033[35m%s\033[0m: %s\n",
-                           ts, snapshot[i].from, snapshot[i].content);
-        }
+        output_kind = TNT_COMMAND_OUTPUT_INBOX;
+        append_inbox_output(client, output, sizeof(output), &pos);
 
     } else if (command_id == TNT_COMMAND_NICK) {
         const char *new_name = arg;
@@ -415,6 +439,7 @@ void commands_dispatch(client_t *client) {
 cmd_done:
     snprintf(client->command_output, sizeof(client->command_output), "%s", output);
     client->command_output_scroll = 0;
+    client->command_output_kind = output_kind;
     client->command_input[0] = '\0';
     tui_render_command_output(client);
 }

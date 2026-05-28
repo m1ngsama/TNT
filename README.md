@@ -21,8 +21,9 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 ```sh
 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
-The installer verifies the downloaded release binary against `checksums.txt`
-before installing it.
+The installer verifies downloaded release binaries against `checksums.txt`
+before installing them. Older releases may provide only `tnt`; newer releases
+also install `tntctl`.
 
 **From source:**
 ```sh
@@ -47,8 +48,11 @@ PORT=3333 tnt    # via env var
 ### Connecting
 
 ```sh
-ssh -p 2222 chat.example.com
+ssh -p 2222 localhost
 ```
+
+For a deployed server, replace `localhost` with your public host, for example
+`chat.example.com`.
 
 **Anonymous access by default**: Users can connect with ANY username/password (or empty password). No SSH keys required. Perfect for public chat servers.
 
@@ -94,7 +98,7 @@ Ctrl+C     - Exit chat
 :w <user> <text>     - Short alias for :msg
 :inbox               - Show private messages
 :last [N]            - Show last N messages from history (max 50, default 10)
-:search <keyword>    - Search full message history (case-insensitive)
+:search <keyword>    - Search message history (shows last 15 matches)
 :mute-joins          - Toggle join/leave system notifications
 :lang <en|zh>        - Switch UI language for this session
 :help                - Show concise manual
@@ -103,6 +107,10 @@ Ctrl+C     - Exit chat
 Up/Down              - Browse command history
 ESC                  - Return to NORMAL mode
 ```
+
+Command output pages use `j/k`, `Ctrl+D/U`, and `g/G` for paging.  `:inbox`
+is live: press `r` to refresh it manually, and it refreshes when a new private
+message arrives while the inbox is open.
 
 **Special messages (INSERT mode)**
 ```
@@ -131,6 +139,21 @@ TNT_PUBLIC_HOST=chat.example.com tnt
 
 # Choose interactive UI language (en or zh; defaults from locale)
 TNT_LANG=zh tnt
+```
+
+The same operational settings can be passed explicitly, which is often
+clearer in package scripts and one-off test deployments:
+
+```sh
+tnt \
+  --bind 127.0.0.1 \
+  --public-host chat.example.com \
+  --max-connections 100 \
+  --max-conn-per-ip 10 \
+  --max-conn-rate-per-ip 30 \
+  --idle-timeout 3600 \
+  -p 2222 \
+  -d /var/lib/tnt
 ```
 
 **Rate limiting:**
@@ -177,11 +200,49 @@ ssh -p 2222 chat.example.com health
 ssh -p 2222 chat.example.com stats --json
 ssh -p 2222 chat.example.com users
 ssh -p 2222 chat.example.com "tail -n 20"
+ssh -p 2222 chat.example.com "dump -n 100"
 ssh -p 2222 operator@chat.example.com post "service notice"
 ssh -p 2222 chat.example.com post "/me deploys v2.0"
 ```
 
 **`post` identity**: the message is attributed to the SSH login name (the `user@` part of the URL, falling back to `anonymous`). In the default anonymous-access configuration there is no identity check, so any client can post as any name. Set `TNT_ACCESS_TOKEN` if you need authenticated posting.
+
+See [docs/INTERFACE.md](docs/INTERFACE.md) for the stable exec command
+contract, exit statuses, and JSON field definitions.
+
+Source and package-manager installs also include `tntctl`, a thin wrapper
+around the same SSH exec interface:
+
+```sh
+tntctl chat.example.com health
+tntctl -p 2222 chat.example.com stats --json
+tntctl -p 2222 chat.example.com dump -n 100
+tntctl -l operator chat.example.com post "service notice"
+```
+
+### Log Maintenance
+
+Persisted public history is stored as `messages.log` in the TNT state
+directory.  For manual maintenance, archive and compact it with:
+
+```sh
+scripts/logrotate.sh /var/lib/tnt/messages.log 100 10000
+```
+
+The script archives the full log, keeps the last `KEEP_LINES` records in the
+active file, compresses the archive when `gzip` is available, and can be
+previewed with `--dry-run`.
+
+Installed binaries also include offline checks for the v1 log format:
+
+```sh
+tnt --log-check /var/lib/tnt/messages.log
+tnt --log-recover /var/lib/tnt/messages.log > messages.recovered.log
+```
+
+`--log-check` prints record counts and exits non-zero when invalid records are
+found.  `--log-recover` writes valid records to stdout and reports skipped
+records to stderr; it never edits the source log in place.
 
 ## Development
 
@@ -205,6 +266,9 @@ make anonymous-access-test # verify default anonymous login behavior
 make connection-limit-test # verify per-IP concurrency and rate limits
 make security-test # run security feature checks
 make stress-test   # run configurable concurrent-client stress test
+make soak-test     # run idle/reconnect/control-plane soak test
+make slow-client-test # run slow interactive-client backpressure test
+make user-lifecycle-test # run a two-user TUI lifecycle test
 make ci-test       # run the same checks as GitHub Actions
 
 # Individual tests
@@ -214,6 +278,9 @@ cd tests
 ./test_anonymous_access.sh   # anonymous access
 ./test_connection_limits.sh  # per-IP concurrency and rate limits
 ./test_stress.sh             # stress test
+./test_soak.sh               # soak test
+./test_slow_client.sh        # slow-client backpressure
+./test_user_lifecycle.sh     # two-user TUI lifecycle
 ```
 
 **Test coverage:**
@@ -221,6 +288,8 @@ cd tests
 - Anonymous access: 2 tests
 - Security features: 12 tests
 - Stress test: configurable concurrent clients (`CLIENTS=20 DURATION=60 make stress-test`)
+- Slow-client test: an unread interactive SSH client cannot block health,
+  stats, post, tail, or server survival checks
 
 ### Dependencies
 
@@ -254,6 +323,8 @@ TNT/
 │   ├── commands.c    # COMMAND-mode command dispatch
 │   ├── exec_catalog.c # SSH exec command matching, usage, and argument shape
 │   ├── exec.c        # SSH exec command dispatch
+│   ├── tntctl.c      # local wrapper around the SSH exec interface
+│   ├── tntctl_text.c # tntctl help and option text
 │   ├── ssh_server.c  # SSH server implementation
 │   ├── bootstrap.c   # SSH authentication and session bootstrap
 │   ├── chat_room.c   # chat room logic
@@ -324,10 +395,17 @@ Before preparing a release locally:
 make release-check
 ```
 
-Before publishing package recipes, replace placeholder checksums and run:
+Longer local preflight can opt into runtime soak and slow-client coverage:
 
 ```sh
-make release-check-strict
+RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
+```
+
+Before publishing package recipes, download the final GitHub source archive,
+replace placeholder checksums, and run:
+
+```sh
+SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
 ```
 
 ## Files
@@ -338,6 +416,9 @@ host_key        - SSH host key (auto-generated, 4096-bit RSA)
 motd.txt        - Message of the Day (optional, shown to users on connect)
 tnt.service     - systemd service unit
 ```
+
+The persisted chat-history format is documented in
+[docs/MESSAGE_LOG.md](docs/MESSAGE_LOG.md).
 
 ### MOTD (Message of the Day)
 
@@ -358,6 +439,7 @@ Delete `motd.txt` to disable the MOTD.
 - [Development Guide](https://github.com/m1ngsama/TNT/wiki/Development-Guide) - Complete development manual
 - [Quick Setup](docs/EASY_SETUP.md) - 5-minute deployment guide
 - [Roadmap](docs/ROADMAP.md) - Long-term Unix/GNU direction and next stages
+- [Interface Contract](docs/INTERFACE.md) - Scriptable commands, exit statuses, and JSON fields
 - [Security Reference](docs/SECURITY_QUICKREF.md) - Security config quick reference
 - [Contributing](docs/CONTRIBUTING.md) - How to contribute
 - [Changelog](docs/CHANGELOG.md) - Version history

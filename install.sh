@@ -27,6 +27,34 @@ sha256_of() {
     fi
 }
 
+warn_missing_libssh() {
+    case "$OS" in
+        linux)
+            if command -v ldconfig >/dev/null 2>&1 &&
+               ldconfig -p 2>/dev/null | grep -q 'libssh\.so'; then
+                return
+            fi
+            for path in /usr/lib/libssh.so* /usr/lib64/libssh.so* \
+                        /lib/libssh.so* /lib64/libssh.so*; do
+                [ -e "$path" ] && return
+            done
+            echo "WARNING: TNT requires the libssh runtime library."
+            echo "Install it first, for example:"
+            echo "  Ubuntu/Debian: sudo apt install libssh-4"
+            echo "  Arch:          sudo pacman -S libssh"
+            ;;
+        darwin)
+            if [ -e /opt/homebrew/opt/libssh/lib/libssh.dylib ] ||
+               [ -e /usr/local/opt/libssh/lib/libssh.dylib ]; then
+                return
+            fi
+            echo "WARNING: TNT requires the libssh runtime library."
+            echo "Install it first:"
+            echo "  brew install libssh"
+            ;;
+    esac
+}
+
 need_cmd curl
 need_cmd awk
 
@@ -45,13 +73,15 @@ case "$ARCH" in
     *) fail "Unsupported architecture: $ARCH" ;;
 esac
 
-BINARY="tnt-${OS}-${ARCH}"
+SERVER_BINARY="tnt-${OS}-${ARCH}"
+CTL_BINARY="tntctl-${OS}-${ARCH}"
 
 echo "=== TNT Installer ==="
 echo "OS: $OS"
 echo "Arch: $ARCH"
 echo "Version: $VERSION"
 echo ""
+warn_missing_libssh
 
 # Get latest version if not specified
 if [ "$VERSION" = "latest" ]; then
@@ -65,51 +95,81 @@ fi
 echo "Installing version: $VERSION"
 
 # Download
-URL="https://github.com/$REPO/releases/download/$VERSION/$BINARY"
+SERVER_URL="https://github.com/$REPO/releases/download/$VERSION/$SERVER_BINARY"
+CTL_URL="https://github.com/$REPO/releases/download/$VERSION/$CTL_BINARY"
 CHECKSUM_URL="https://github.com/$REPO/releases/download/$VERSION/checksums.txt"
-echo "Downloading from: $URL"
+echo "Downloading from: $SERVER_URL"
 
-TMP_FILE=$(mktemp "${TMPDIR:-/tmp}/tnt.XXXXXX")
+SERVER_TMP_FILE=$(mktemp "${TMPDIR:-/tmp}/tnt.XXXXXX")
+CTL_TMP_FILE=$(mktemp "${TMPDIR:-/tmp}/tntctl.XXXXXX")
 CHECKSUM_FILE=$(mktemp "${TMPDIR:-/tmp}/tnt-checksums.XXXXXX")
+INSTALL_CTL=0
 cleanup() {
-    rm -f "$TMP_FILE" "$CHECKSUM_FILE"
+    rm -f "$SERVER_TMP_FILE" "$CTL_TMP_FILE" "$CHECKSUM_FILE"
 }
 trap cleanup EXIT INT TERM
 
-curl -fsSL -o "$TMP_FILE" "$URL" || fail "Failed to download $BINARY"
+curl -fsSL -o "$SERVER_TMP_FILE" "$SERVER_URL" ||
+    fail "Failed to download $SERVER_BINARY"
 
 echo "Downloading checksums from: $CHECKSUM_URL"
 curl -fsSL -o "$CHECKSUM_FILE" "$CHECKSUM_URL" ||
     fail "Failed to download checksums.txt"
 
-EXPECTED_SHA=$(awk -v name="$BINARY" '$2 == name { print $1; exit }' "$CHECKSUM_FILE")
-[ -n "$EXPECTED_SHA" ] || fail "No checksum entry found for $BINARY"
+EXPECTED_SERVER_SHA=$(awk -v name="$SERVER_BINARY" '$2 == name { print $1; exit }' "$CHECKSUM_FILE")
+[ -n "$EXPECTED_SERVER_SHA" ] || fail "No checksum entry found for $SERVER_BINARY"
+EXPECTED_CTL_SHA=$(awk -v name="$CTL_BINARY" '$2 == name { print $1; exit }' "$CHECKSUM_FILE")
 
-ACTUAL_SHA=$(sha256_of "$TMP_FILE") ||
+ACTUAL_SERVER_SHA=$(sha256_of "$SERVER_TMP_FILE") ||
     fail "sha256sum or shasum is required for checksum verification"
 
-[ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] ||
-    fail "Checksum mismatch for $BINARY"
+[ "$ACTUAL_SERVER_SHA" = "$EXPECTED_SERVER_SHA" ] ||
+    fail "Checksum mismatch for $SERVER_BINARY"
 
-echo "Checksum verified: $ACTUAL_SHA"
+echo "Checksum verified: $SERVER_BINARY $ACTUAL_SERVER_SHA"
+if [ -n "$EXPECTED_CTL_SHA" ]; then
+    echo "Downloading from: $CTL_URL"
+    curl -fsSL -o "$CTL_TMP_FILE" "$CTL_URL" ||
+        fail "Failed to download $CTL_BINARY"
+    ACTUAL_CTL_SHA=$(sha256_of "$CTL_TMP_FILE") ||
+        fail "sha256sum or shasum is required for checksum verification"
+    [ "$ACTUAL_CTL_SHA" = "$EXPECTED_CTL_SHA" ] ||
+        fail "Checksum mismatch for $CTL_BINARY"
+    echo "Checksum verified: $CTL_BINARY $ACTUAL_CTL_SHA"
+    INSTALL_CTL=1
+else
+    echo "No checksum entry found for $CTL_BINARY; skipping tntctl for this release"
+fi
 
 # Install
-chmod +x "$TMP_FILE"
+chmod +x "$SERVER_TMP_FILE"
+[ "$INSTALL_CTL" -eq 0 ] || chmod +x "$CTL_TMP_FILE"
 
 if [ -d "$INSTALL_DIR" ] && [ -w "$INSTALL_DIR" ]; then
-    install -m 755 "$TMP_FILE" "$INSTALL_DIR/tnt"
+    install -m 755 "$SERVER_TMP_FILE" "$INSTALL_DIR/tnt"
+    [ "$INSTALL_CTL" -eq 0 ] || install -m 755 "$CTL_TMP_FILE" "$INSTALL_DIR/tntctl"
 else
     echo "Need sudo for installation to $INSTALL_DIR"
     need_cmd sudo
     sudo mkdir -p "$INSTALL_DIR"
-    sudo install -m 755 "$TMP_FILE" "$INSTALL_DIR/tnt"
+    sudo install -m 755 "$SERVER_TMP_FILE" "$INSTALL_DIR/tnt"
+    [ "$INSTALL_CTL" -eq 0 ] || sudo install -m 755 "$CTL_TMP_FILE" "$INSTALL_DIR/tntctl"
 fi
 
 echo ""
-echo "TNT installed successfully to $INSTALL_DIR/tnt"
+if [ "$INSTALL_CTL" -eq 1 ]; then
+    echo "TNT installed successfully to $INSTALL_DIR/tnt and $INSTALL_DIR/tntctl"
+else
+    echo "TNT installed successfully to $INSTALL_DIR/tnt"
+fi
 echo ""
 echo "Run with:"
 echo "  tnt"
 echo ""
 echo "Or specify port:"
 echo "  PORT=3333 tnt"
+if [ "$INSTALL_CTL" -eq 1 ]; then
+    echo ""
+    echo "Control a server with:"
+    echo "  tntctl localhost health"
+fi

@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build ${{ matrix.target }}
@@ -15,18 +18,25 @@ jobs:
           - os: ubuntu-24.04
             target: linux-amd64
             artifact: tnt-linux-amd64
+            ctl_artifact: tntctl-linux-amd64
           - os: ubuntu-24.04-arm
             target: linux-arm64
             artifact: tnt-linux-arm64
+            ctl_artifact: tntctl-linux-arm64
           - os: macos-15-intel
             target: darwin-amd64
             artifact: tnt-darwin-amd64
+            ctl_artifact: tntctl-darwin-amd64
           - os: macos-15
             target: darwin-arm64
             artifact: tnt-darwin-arm64
+            ctl_artifact: tntctl-darwin-arm64
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Verify release tag matches source version
+      run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
 
     - name: Install dependencies (Ubuntu)
       if: runner.os == 'Linux'
@@ -48,29 +58,38 @@ jobs:
     - name: Verify artifact architecture
       run: |
         file tnt
+        file tntctl
         case "${{ matrix.target }}" in
           linux-amd64)
             file tnt | grep -E 'ELF 64-bit.*x86-64'
+            file tntctl | grep -E 'ELF 64-bit.*x86-64'
             ;;
           linux-arm64)
             file tnt | grep -E 'ELF 64-bit.*(aarch64|ARM aarch64)'
+            file tntctl | grep -E 'ELF 64-bit.*(aarch64|ARM aarch64)'
             ;;
           darwin-amd64)
             file tnt | grep -E 'Mach-O 64-bit.*x86_64'
+            file tntctl | grep -E 'Mach-O 64-bit.*x86_64'
             ;;
           darwin-arm64)
             file tnt | grep -E 'Mach-O 64-bit.*arm64'
+            file tntctl | grep -E 'Mach-O 64-bit.*arm64'
             ;;
         esac
 
     - name: Rename binary
-      run: mv tnt ${{ matrix.artifact }}
+      run: |
+        mv tnt ${{ matrix.artifact }}
+        mv tntctl ${{ matrix.ctl_artifact }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact }}
-        path: ${{ matrix.artifact }}
+        path: |
+          ${{ matrix.artifact }}
+          ${{ matrix.ctl_artifact }}
 
   release:
     needs: build
@@ -81,6 +100,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Verify release tag matches source version
+      run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
@@ -90,7 +112,8 @@ jobs:
       run: |
         cd artifacts
         : > checksums.txt
-        for artifact in */tnt-*; do
+        for artifact in */tnt-* */tntctl-*; do
+          [ -f "$artifact" ] || continue
           sha256sum "$artifact" | sed "s#  $artifact#  $(basename "$artifact")#" >> checksums.txt
         done
         cat checksums.txt
@@ -100,43 +123,76 @@ jobs:
       with:
         files: |
           artifacts/*/tnt-*
+          artifacts/*/tntctl-*
           artifacts/checksums.txt
         body: |
           ## Installation
+
+          Install the libssh runtime before running TNT:
+          ```bash
+          # Ubuntu/Debian
+          sudo apt install libssh-4
+
+          # Arch
+          sudo pacman -S libssh
+
+          # macOS
+          brew install libssh
+          ```
 
           Download the binary for your platform:
 
           **Linux AMD64:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-linux-amd64
           chmod +x tnt-linux-amd64
+          chmod +x tntctl-linux-amd64
           sudo mv tnt-linux-amd64 /usr/local/bin/tnt
+          sudo mv tntctl-linux-amd64 /usr/local/bin/tntctl
           ```
 
           **Linux ARM64:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-linux-arm64
           chmod +x tnt-linux-arm64
+          chmod +x tntctl-linux-arm64
           sudo mv tnt-linux-arm64 /usr/local/bin/tnt
+          sudo mv tntctl-linux-arm64 /usr/local/bin/tntctl
           ```
 
           **macOS Intel:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-darwin-amd64
           chmod +x tnt-darwin-amd64
+          chmod +x tntctl-darwin-amd64
           sudo mv tnt-darwin-amd64 /usr/local/bin/tnt
+          sudo mv tntctl-darwin-amd64 /usr/local/bin/tntctl
           ```
 
           **macOS Apple Silicon:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-darwin-arm64
           chmod +x tnt-darwin-arm64
+          chmod +x tntctl-darwin-arm64
           sudo mv tnt-darwin-arm64 /usr/local/bin/tnt
+          sudo mv tntctl-darwin-arm64 /usr/local/bin/tntctl
           ```
 
           **Verify checksums:**
           ```bash
-          sha256sum -c checksums.txt
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/checksums.txt
+
+          # Linux
+          sha256sum -c checksums.txt --ignore-missing
+
+          # macOS
+          for f in tnt-* tntctl-*; do
+            grep "  $f$" checksums.txt | shasum -a 256 -c -
+          done
           ```
 
           ## What's Changed

@@ -15,9 +15,13 @@
  *   - Toggles client->mute_joins on `:mute-joins`
  *   - May broadcast a system rename message on `:nick`
  *
- * Reads g_room.  Caller must already hold the channel I/O serialisation
- * established by handle_key() — this function calls back into client_send
- * (via tui_render_command_output) which acquires client->io_lock. */
+ * Reads g_room.  Renders command output through the normal client_send()
+ * path; callers must not hold client->io_lock before dispatching. */
 void commands_dispatch(client_t *client);
+
+/* Rebuild the currently visible command output when it is backed by live
+ * client state, such as :inbox.  Returns true if output changed and the caller
+ * should render it again. */
+bool commands_refresh_active_output(client_t *client);
 
 #endif /* COMMANDS_H */

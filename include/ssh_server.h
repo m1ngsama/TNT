@@ -17,6 +17,12 @@ typedef struct {
     char content[MAX_MESSAGE_LEN];
 } whisper_t;
 
+typedef enum {
+    TNT_COMMAND_OUTPUT_NONE,
+    TNT_COMMAND_OUTPUT_GENERIC,
+    TNT_COMMAND_OUTPUT_INBOX
+} tnt_command_output_kind_t;
+
 /* Client connection structure */
 typedef struct client {
     ssh_session session;             /* SSH session */
@@ -42,16 +48,23 @@ typedef struct client {
     int insert_history_pos;
     char command_output[MAX_COMMAND_OUTPUT_LEN];
     int command_output_scroll;
+    tnt_command_output_kind_t command_output_kind;
     bool show_motd;                  /* command_output holds MOTD text */
     char exec_command[MAX_EXEC_COMMAND_LEN];
+    bool exec_command_too_long;
     char ssh_login[MAX_USERNAME_LEN];
     time_t connect_time;
     time_t last_active;
     atomic_bool redraw_pending;
+    _Atomic int pending_bells;       /* Bell nudges for this client's loop */
     _Atomic int unread_mentions;     /* @-mentions received since last reset */
     _Atomic int unread_whispers;     /* whispers received since last :inbox view */
-    /* Per-client whisper inbox.  Pushes serialise on io_lock; readers are
-     * the client's own thread inside :inbox handling. */
+    char *outbox;                    /* Bounded queued output for interactive writes */
+    size_t outbox_len;
+    size_t outbox_pos;
+    size_t outbox_capacity;
+    /* Per-client whisper inbox.  Protected separately from SSH channel I/O
+     * so slow writes do not block in-memory private-message delivery. */
     whisper_t whisper_inbox[WHISPER_INBOX_SIZE];
     int whisper_inbox_count;
     bool mute_joins;
@@ -60,6 +73,8 @@ typedef struct client {
     int ref_count;                   /* Reference count for safe cleanup */
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */
+    pthread_mutex_t whisper_lock;    /* Serialize whisper inbox access */
+    bool channel_callback_ref;       /* client.c owns one ref while callbacks are installed */
     struct ssh_channel_callbacks_struct *channel_cb;
 } client_t;
 

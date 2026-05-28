@@ -2,7 +2,149 @@
 
 ## Unreleased
 
+### Added
+- Added a release tag/version guard used by the GitHub release workflow, so a
+  `vX.Y.Z` tag must match `TNT_VERSION` before release assets are built.
+- Added `make package-publish-check` for verifying Arch/Homebrew source
+  checksums against the final GitHub source archive after a tag exists.
+- Added a `config_defaults` module and unit coverage for runtime default
+  values, env keys, and accepted numeric ranges.
+- Added a dedicated `tntctl_text` module with unit coverage for local
+  `tntctl` help and validation diagnostics.
+- Documented the stable SSH exec interface contract, including exit statuses
+  and JSON field shapes for package tests, scripts, and future `tntctl` work.
+- Documented `messages.log` v1 as the stable TNT 1.x persisted history format,
+  including parser, sanitization, and partial-record recovery rules.
+- Added `dump [N]` / `dump -n N` to the SSH exec interface and `tntctl` for
+  exporting valid persisted `messages.log` v1 records.
+- Added regression-tested manual log archive and compaction coverage for
+  `scripts/logrotate.sh`.
+- Added offline `tnt --log-check` and `tnt --log-recover` modes for auditing
+  and recovering valid `messages.log` v1 records without editing the source
+  log in place.
+- Added a public security policy, supported-version guidance, and GitHub issue
+  templates for bug reports and feature requests.
+- Added `tntctl`, a thin local wrapper around the documented SSH exec
+  interface for health, stats, users, tail, post, help, and exit commands.
+- Added explicit server configuration flags for bind address, public host,
+  connection limits, rate limiting, idle timeout, and SSH log verbosity.
+- Added a configurable soak test that keeps an interactive session open while
+  repeatedly checking health, stats, users, reconnects, and post/tail behavior.
+- Added a two-user TUI lifecycle regression test and user-lifecycle notes for
+  the main onboarding, chat, help, history, search, private-message, nickname,
+  action-message, and exit paths.
+- Added a VHS tape draft for recording the core TNT terminal-chat experience.
+- Added live `:inbox` refresh behavior: `r` refreshes the inbox manually, and
+  an open inbox refreshes when a new private message arrives.
+- Added `/` in NORMAL mode as a fast history-search entrypoint backed by the
+  existing `:search` command.
+- Added `make slow-client-test`, an opt-in regression for an unread
+  interactive SSH client under backpressure while health, stats, post, tail,
+  and server survival stay responsive.
+
 ### Changed
+- INSERT-mode chrome now only advertises message sending and `Esc` to NORMAL;
+  `? keys` appears only in NORMAL mode, matching where help keys work.
+- Dismissing MOTD now returns first-time users to INSERT mode, and `Ctrl+C`
+  closes the full key reference before it disconnects from NORMAL mode.
+- COMMAND mode now accepts an optional leading `:` in typed commands, matching
+  the way commands are written in the manual.
+- `:search` output and docs now state that the command shows the last 15
+  matches, avoiding the impression that the pager is a complete result set.
+- Release checks now separate tag/source-archive readiness from package-manager
+  checksum publishing, avoiding self-referential checksum requirements before
+  the final GitHub source archive exists.
+- `tntctl --help` now gets its exec command list from `exec_catalog`, reducing
+  duplicate command metadata between the local wrapper and SSH exec mode.
+- Updated `tnt(1)` to document the current TUI search and pager keys, and
+  added script coverage to keep active help surfaces free of removed support
+  commands.
+- `make install-systemd` now rewrites the installed unit's `ExecStart` to match
+  the selected `PREFIX`/`BINDIR`, so package builds that install to `/usr`
+  produce a unit pointing at `/usr/bin/tnt`.
+- Release preflight now checks the staged systemd unit path, and strict release
+  checks also require a clean tree, tag-at-HEAD, changelog release section, and
+  non-placeholder maintainer metadata.
+- CI and release workflows now use explicit least-privilege repository
+  permissions.
+- The release guide now documents SemVer expectations, manual release review,
+  smoke testing, and rollback steps.
+- Package installs now include `tntctl` and its man page alongside `tnt`.
+- The binary naming policy is now explicit: `tnt` remains the stable 1.x
+  server process name, and any future `tntd` split requires a major-version
+  compatibility plan.
+- SSH exec commands longer than the command buffer are now rejected with a
+  usage error instead of being truncated and executed.
+- SSH exec `post` now persists the message before broadcasting or returning
+  `posted`, so persistence failures are not visible as successful room events.
+- Mention and private-message bell notifications are now queued on the target
+  client and flushed by that client's own session loop, so slow SSH writes do
+  not block the sender's message path.
+- Interactive client writes now pass through a bounded per-client outbox and
+  flush against the remote SSH window from that client's session loop.  Exec
+  sessions still write synchronously to preserve script output ordering.
+- Session callback refs are now owned and released through `client.c`, so
+  bootstrap and interactive cleanup no longer need to manually mirror the
+  main-ref / callback-ref release sequence.
+- Message-log replay and search now share one strict record parser and skip
+  malformed, invalid UTF-8, extra-separator, oversized, or unterminated
+  records instead of accepting partial replay data.
+- `scripts/logrotate.sh` now has validated arguments, stable exit statuses,
+  dry-run support, archive retention, gzip-aware archives, and a regression
+  test in the normal test suite.
+- `messages.log` v1 record parsing and formatting now live in a dedicated
+  `message_log` module instead of being embedded in `message.c`.
+- Offline message-log recovery shares the same `message_log` parser used by
+  replay, search, and `dump`, so recovery behavior follows the documented v1
+  contract.
+- The two-user lifecycle test now covers opening `:inbox` before a private
+  message arrives, matching the way users often leave an inbox page open.
+- Help and command-output pagers now accept arrow keys, PgUp/PgDn, Home/End,
+  and Space/`b` in addition to the existing Vim-style keys.
+- Pre-login username entry now handles Ctrl+C/Ctrl+D cancel, Ctrl+U clear
+  line, and Ctrl+W delete-word before the user joins the room.
+- Long COMMAND-mode input is now left-truncated with a visible marker in the
+  status line instead of wrapping and damaging the TUI.
+- Private-message inbox access now uses its own mutex instead of sharing the
+  SSH channel write lock, reducing unrelated contention on slow clients.
+- Client writes now check the SSH channel's remote window before writing and
+  mark the client disconnected when the window is closed, avoiding the most
+  direct slow-reader blocking path.
+- `make release-check` can now run the soak test with `RUN_SOAK=1`, keeping
+  longer runtime checks opt-in for local release validation.
+- `make release-check` can also run the slow-client backpressure test with
+  `RUN_SLOW_CLIENT=1`.
+- Room capacity and mention notification bookkeeping now follow
+  `TNT_MAX_CONNECTIONS` instead of a hidden fixed 64-client array limit.
+- Updated the roadmap to reflect completed `tntctl`, stable exec contract, and
+  monitoring-interface work, leaving the remaining daemon naming and runtime
+  queue work explicit.
+- Strict release preflight now builds and installs from the local `vX.Y.Z` tag
+  source archive, catching untracked files that would be missing from a GitHub
+  source release.
+- Release documentation now creates the local tag before strict release checks,
+  matching the strict gate's tag-at-HEAD requirement.
+- Startup option parsing now reports missing values for `--bind`, `-p`,
+  `--idle-timeout`, and related flags with the localized
+  "option requires argument" diagnostic instead of treating the option as
+  unknown.
+- `tntctl` now reuses the SSH exec command matcher for local command
+  validation, so `tntctl host --help` reaches the server-side exec help alias
+  instead of being rejected locally.
+- `tntctl` local help and local validation errors now follow `TNT_LANG` and
+  locale selection, matching the server CLI's i18n behavior.
+- Arch and Debian packaging drafts now create the `tnt` system user used by
+  the packaged systemd unit, and release preflight checks that metadata.
+- The Homebrew formula draft now defines a `brew services` entry that runs the
+  installed `tnt` binary with state under `var/tnt`.
+- Added `scripts/package_debian_source.sh` and `make debian-source-package`
+  to assemble Debian/Ubuntu source-package trees from the current project
+  without publishing or uploading anything.
+- Release preflight now smoke-tests the staged installed `tnt` binary's
+  `--log-check` and `--log-recover` modes, catching package artifact drift.
+- The i18n helper now supports language-keyed string initializers through
+  `I18N_STRING_MAP`, so future languages can be added incrementally without
+  changing every existing two-language string initializer.
 - Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
   locale/code parsing, while `src/i18n_text.c` owns the table-driven text
   catalog with coverage checks for every message ID.
@@ -17,10 +159,15 @@
 - Refreshed contributor and development guidance so new commands are added
   through `command_catalog`, `exec_catalog`, and `i18n_text` instead of stale
   `ssh_server.c` / inline-`strcmp` instructions.
+- Refreshed developer ownership guidance to match the current update-sequence
+  model: room broadcasts update shared state only, while each interactive
+  client renders and flushes its own SSH channel.
 - `exec_catalog` now owns SSH exec command matching as well as help metadata,
   reducing duplicate command knowledge in `src/exec.c`.
 - Replaced hard-coded `chat.m1ng.space` examples with `chat.example.com` so
   public documentation does not imply a specific production host.
+- First-run connection examples now use `localhost`, keeping
+  `chat.example.com` for deployed public-host examples.
 - Moved SSH exec usage text and argument-shape checks into `exec_catalog`, so
   `src/exec.c` no longer duplicates `--json` and required-message validation.
 - Moved interactive command usage text and first-pass argument-shape checks

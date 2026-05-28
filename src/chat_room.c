@@ -1,22 +1,11 @@
 #include "chat_room.h"
+#include "config_defaults.h"
 
 /* Global chat room instance */
 chat_room_t *g_room = NULL;
 
 static int room_capacity_from_env(void) {
-    const char *env = getenv("TNT_MAX_CONNECTIONS");
-
-    if (!env || env[0] == '\0') {
-        return MAX_CLIENTS;
-    }
-
-    char *end;
-    long capacity = strtol(env, &end, 10);
-    if (*end != '\0' || capacity < 1 || capacity > 1024) {
-        return MAX_CLIENTS;
-    }
-
-    return (int)capacity;
+    return tnt_config_env_int(&TNT_CONFIG_MAX_CONNECTIONS);
 }
 
 /* Initialize chat room */

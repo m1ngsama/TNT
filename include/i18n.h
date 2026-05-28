@@ -7,8 +7,12 @@ typedef struct {
     const char *text[UI_LANG_COUNT];
 } i18n_string_t;
 
+#define I18N_LANG_TEXT(lang, value) [lang] = (value)
+#define I18N_EN(value) I18N_LANG_TEXT(UI_LANG_EN, value)
+#define I18N_ZH(value) I18N_LANG_TEXT(UI_LANG_ZH, value)
+#define I18N_STRING_MAP(...) {{ __VA_ARGS__ }}
 #define I18N_STRING(en_text, zh_text) \
-    {{ [UI_LANG_EN] = (en_text), [UI_LANG_ZH] = (zh_text) }}
+    I18N_STRING_MAP(I18N_EN(en_text), I18N_ZH(zh_text))
 
 typedef enum {
     I18N_USERNAME_PROMPT,
@@ -25,6 +29,7 @@ typedef enum {
     I18N_HELP_STATUS_FORMAT,
     I18N_COMMAND_OUTPUT_TITLE,
     I18N_COMMAND_OUTPUT_STATUS_FORMAT,
+    I18N_COMMAND_OUTPUT_REFRESH_STATUS_FORMAT,
     I18N_MOTD_TITLE,
     I18N_MOTD_CONTINUE_HINT,
     I18N_TITLE_ONLINE_FORMAT,
@@ -58,6 +63,9 @@ typedef enum {
     I18N_UNKNOWN_GUIDANCE,
     I18N_EXEC_POST_EMPTY,
     I18N_EXEC_POST_INVALID_UTF8,
+    I18N_EXEC_POST_TOO_LONG,
+    I18N_EXEC_POST_PERSIST_FAILED,
+    I18N_EXEC_COMMAND_TOO_LONG,
     I18N_EXEC_UNKNOWN_COMMAND_FORMAT,
     I18N_TEXT_COUNT
 } i18n_text_id_t;
