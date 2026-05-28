@@ -7,6 +7,8 @@
   `vX.Y.Z` tag must match `TNT_VERSION` before release assets are built.
 - Added `make package-publish-check` for verifying Arch/Homebrew source
   checksums against the final GitHub source archive after a tag exists.
+- Added a `config_defaults` module and unit coverage for runtime default
+  values, env keys, and accepted numeric ranges.
 - Added a dedicated `tntctl_text` module with unit coverage for local
   `tntctl` help and validation diagnostics.
 - Documented the stable SSH exec interface contract, including exit statuses

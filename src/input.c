@@ -2,6 +2,7 @@
 #include "chat_room.h"
 #include "client.h"
 #include "commands.h"
+#include "config_defaults.h"
 #include "common.h"
 #include "exec.h"
 #include "history_view.h"
@@ -20,11 +21,11 @@
 #include <string.h>
 #include <time.h>
 
-static int g_idle_timeout = DEFAULT_IDLE_TIMEOUT;
+static int g_idle_timeout = TNT_DEFAULT_IDLE_TIMEOUT;
 static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 
 void input_init(void) {
-    g_idle_timeout = env_int("TNT_IDLE_TIMEOUT", DEFAULT_IDLE_TIMEOUT, 0, 86400);
+    g_idle_timeout = tnt_config_env_int(&TNT_CONFIG_IDLE_TIMEOUT);
     g_default_ui_lang = i18n_default_ui_lang();
 }
 

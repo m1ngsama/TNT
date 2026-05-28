@@ -26,7 +26,7 @@ OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 DEPS = $(OBJECTS:.o=.d) $(CTL_OBJECTS:.o=.d)
 TARGET = tnt
 CTL_TARGET = tntctl
-CTL_OBJECTS = $(OBJ_DIR)/tntctl.o $(OBJ_DIR)/tntctl_text.o $(OBJ_DIR)/exec_catalog.o $(OBJ_DIR)/common.o $(OBJ_DIR)/i18n.o
+CTL_OBJECTS = $(OBJ_DIR)/tntctl.o $(OBJ_DIR)/tntctl_text.o $(OBJ_DIR)/exec_catalog.o $(OBJ_DIR)/common.o $(OBJ_DIR)/config_defaults.o $(OBJ_DIR)/i18n.o
 TARGETS = $(TARGET) $(CTL_TARGET)
 
 PREFIX ?= /usr/local

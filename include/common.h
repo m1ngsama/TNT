@@ -11,6 +11,8 @@
 #include <limits.h>
 #include <pthread.h>
 
+#include "config_defaults.h"
+
 /* Project Metadata */
 #define TNT_VERSION "1.0.1"
 
@@ -23,7 +25,6 @@
 #define TNT_EXIT_CONFIG 78
 
 /* Configuration constants */
-#define DEFAULT_PORT 2222
 #define MAX_MESSAGES 100
 #define MAX_USERNAME_LEN 64
 #define MAX_MESSAGE_LEN 1024
@@ -31,13 +32,17 @@
 #define MAX_COMMAND_OUTPUT_LEN 8192
 #define CLIENT_OUTBOX_CAPACITY (128 * 1024)
 #define CLIENT_OUTBOX_FLUSH_BUDGET 32768
-#define DEFAULT_MAX_CLIENTS 64
-#define MAX_CONFIGURED_CLIENTS 1024
 #define LOG_FILE "messages.log"
 #define MAX_LOG_SIZE (10 * 1024 * 1024)  /* 10 MiB */
 #define HOST_KEY_FILE "host_key"
 #define TNT_DEFAULT_STATE_DIR "."
-#define DEFAULT_IDLE_TIMEOUT 1800  /* 30 minutes */
+
+/* Backward-compatible names for older modules while config_defaults owns the
+ * actual runtime defaults and accepted ranges. */
+#define DEFAULT_PORT TNT_DEFAULT_PORT
+#define DEFAULT_MAX_CLIENTS TNT_DEFAULT_MAX_CONNECTIONS
+#define MAX_CONFIGURED_CLIENTS TNT_MAX_CONFIGURED_CLIENTS
+#define DEFAULT_IDLE_TIMEOUT TNT_DEFAULT_IDLE_TIMEOUT
 
 /* ANSI color codes */
 #define ANSI_RESET "\033[0m"

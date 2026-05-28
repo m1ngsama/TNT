@@ -1,5 +1,6 @@
 #include "chat_room.h"
 #include "cli_text.h"
+#include "config_defaults.h"
 #include "common.h"
 #include "i18n.h"
 #include "message.h"
@@ -17,24 +18,6 @@ static void signal_handler(int sig) {
     ssize_t ignored = write(STDERR_FILENO, msg, sizeof(msg) - 1);
     (void)ignored;
     _exit(0);
-}
-
-static bool parse_int_arg(const char *value, int min_val, int max_val,
-                          int *out) {
-    char *end = NULL;
-    long val;
-
-    if (!value || value[0] == '\0' || !out) {
-        return false;
-    }
-
-    val = strtol(value, &end, 10);
-    if (!end || *end != '\0' || val < min_val || val > max_val) {
-        return false;
-    }
-
-    *out = (int)val;
-    return true;
 }
 
 static bool is_config_token(const char *value) {
@@ -60,16 +43,16 @@ static int set_env_option(const char *name, const char *value) {
     return 0;
 }
 
-static int set_numeric_env_option(const char *env_name, const char *opt_name,
-                                  const char *value, int min_val,
-                                  int max_val, ui_lang_t lang) {
+static int set_numeric_env_option(const tnt_int_config_spec_t *spec,
+                                  const char *opt_name, const char *value,
+                                  ui_lang_t lang) {
     int parsed;
 
-    if (!parse_int_arg(value, min_val, max_val, &parsed)) {
+    if (!tnt_config_parse_int(value, spec, &parsed)) {
         fprintf(stderr, cli_text_invalid_value_format(lang), opt_name, value);
         return TNT_EXIT_USAGE;
     }
-    if (set_env_option(env_name, value) != 0) {
+    if (set_env_option(spec->env_name, value) != 0) {
         return TNT_EXIT_ERROR;
     }
     return TNT_EXIT_OK;
@@ -86,20 +69,10 @@ static bool require_option_arg(int argc, char **argv, int index,
 }
 
 int main(int argc, char **argv) {
-    int port = DEFAULT_PORT;
+    int port = tnt_config_env_int(&TNT_CONFIG_PORT);
     ui_lang_t lang = i18n_default_ui_lang();
     const char *log_check_path = NULL;
     const char *log_recover_path = NULL;
-
-    /* Environment provides defaults; command-line flags override it. */
-    const char *port_env = getenv("PORT");
-    if (port_env && port_env[0] != '\0') {
-        char *end;
-        long val = strtol(port_env, &end, 10);
-        if (*end == '\0' && val > 0 && val <= 65535) {
-            port = (int)val;
-        }
-    }
 
     /* Parse command line arguments */
     for (int i = 1; i < argc; i++) {
@@ -108,7 +81,7 @@ int main(int argc, char **argv) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
-            if (!parse_int_arg(argv[i + 1], 1, 65535, &val)) {
+            if (!tnt_config_parse_int(argv[i + 1], &TNT_CONFIG_PORT, &val)) {
                 fprintf(stderr, cli_text_invalid_port_format(lang),
                         argv[i + 1]);
                 return TNT_EXIT_USAGE;
@@ -154,9 +127,8 @@ int main(int argc, char **argv) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
-            int rc = set_numeric_env_option("TNT_MAX_CONNECTIONS", argv[i],
-                                            argv[i + 1], 1,
-                                            MAX_CONFIGURED_CLIENTS, lang);
+            int rc = set_numeric_env_option(&TNT_CONFIG_MAX_CONNECTIONS,
+                                            argv[i], argv[i + 1], lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }
@@ -165,9 +137,8 @@ int main(int argc, char **argv) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
-            int rc = set_numeric_env_option("TNT_MAX_CONN_PER_IP", argv[i],
-                                            argv[i + 1], 1,
-                                            MAX_CONFIGURED_CLIENTS, lang);
+            int rc = set_numeric_env_option(&TNT_CONFIG_MAX_CONN_PER_IP,
+                                            argv[i], argv[i + 1], lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }
@@ -176,9 +147,8 @@ int main(int argc, char **argv) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
-            int rc = set_numeric_env_option("TNT_MAX_CONN_RATE_PER_IP",
-                                            argv[i], argv[i + 1], 1,
-                                            MAX_CONFIGURED_CLIENTS, lang);
+            int rc = set_numeric_env_option(&TNT_CONFIG_MAX_CONN_RATE_PER_IP,
+                                            argv[i], argv[i + 1], lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }
@@ -187,8 +157,8 @@ int main(int argc, char **argv) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
-            int rc = set_numeric_env_option("TNT_RATE_LIMIT", argv[i],
-                                            argv[i + 1], 0, 1, lang);
+            int rc = set_numeric_env_option(&TNT_CONFIG_RATE_LIMIT, argv[i],
+                                            argv[i + 1], lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }
@@ -197,8 +167,8 @@ int main(int argc, char **argv) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
-            int rc = set_numeric_env_option("TNT_IDLE_TIMEOUT", argv[i],
-                                            argv[i + 1], 0, 86400, lang);
+            int rc = set_numeric_env_option(&TNT_CONFIG_IDLE_TIMEOUT, argv[i],
+                                            argv[i + 1], lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }
@@ -207,8 +177,8 @@ int main(int argc, char **argv) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;
             }
-            int rc = set_numeric_env_option("TNT_SSH_LOG_LEVEL", argv[i],
-                                            argv[i + 1], 0, 4, lang);
+            int rc = set_numeric_env_option(&TNT_CONFIG_SSH_LOG_LEVEL,
+                                            argv[i], argv[i + 1], lang);
             if (rc != TNT_EXIT_OK) {
                 return rc;
             }

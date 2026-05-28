@@ -1,4 +1,5 @@
 #include "common.h"
+#include "config_defaults.h"
 #include "exec_catalog.h"
 #include "i18n.h"
 #include "tntctl_text.h"
@@ -145,7 +146,7 @@ static int run_ssh(char **ssh_argv) {
 }
 
 int main(int argc, char **argv) {
-    const char *port = "2222";
+    const char *port = TNT_DEFAULT_PORT_TEXT;
     const char *login = NULL;
     const char *host_key_checking = NULL;
     const char *known_hosts = NULL;

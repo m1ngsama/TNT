@@ -1,5 +1,6 @@
 #include "cli_text.h"
 
+#include "config_defaults.h"
 #include "i18n.h"
 
 void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
@@ -12,7 +13,7 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
         "  -d, --state-dir DIR          Store host key and logs in DIR\n"
         "      --bind ADDR              Bind to ADDR (default: 0.0.0.0)\n"
         "      --public-host HOST       Show HOST in startup connection hints\n"
-        "      --max-connections N      Global connection limit (default: 64)\n"
+        "      --max-connections N      Global connection limit (default: %d)\n"
         "      --max-conn-per-ip N      Per-IP concurrent session limit\n"
         "      --max-conn-rate-per-ip N Per-IP connection-rate limit\n"
         "      --rate-limit 0|1         Disable/enable rate-based blocking\n"
@@ -28,9 +29,9 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
         "  TNT_STATE_DIR         State directory\n"
         "  TNT_ACCESS_TOKEN      Require this password for SSH auth\n"
         "  TNT_LANG              UI language: en or zh (default: locale)\n"
-        "  TNT_MAX_CONNECTIONS   Global connection limit (default: 64)\n"
+        "  TNT_MAX_CONNECTIONS   Global connection limit (default: %d)\n"
         "  TNT_RATE_LIMIT        Set to 0 to disable rate limiting\n"
-        "  TNT_IDLE_TIMEOUT      Idle disconnect timeout in seconds (default: 1800)\n",
+        "  TNT_IDLE_TIMEOUT      Idle disconnect timeout in seconds (default: %d)\n",
         "tnt %s - 匿名 SSH 聊天服务器\n\n"
         "用法: %s [options]\n\n"
         "选项:\n"
@@ -38,7 +39,7 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
         "  -d, --state-dir DIR          将主机密钥和日志存放在 DIR\n"
         "      --bind ADDR              绑定到 ADDR (默认: 0.0.0.0)\n"
         "      --public-host HOST       在启动提示中显示 HOST\n"
-        "      --max-connections N      全局连接数限制 (默认: 64)\n"
+        "      --max-connections N      全局连接数限制 (默认: %d)\n"
         "      --max-conn-per-ip N      单 IP 并发会话限制\n"
         "      --max-conn-rate-per-ip N 单 IP 连接速率限制\n"
         "      --rate-limit 0|1         禁用/启用速率封禁\n"
@@ -54,16 +55,19 @@ void cli_text_append_help(char *buffer, size_t buf_size, size_t *pos,
         "  TNT_STATE_DIR         状态目录\n"
         "  TNT_ACCESS_TOKEN      要求 SSH 认证使用此密码\n"
         "  TNT_LANG              UI 语言: en 或 zh (默认跟随 locale)\n"
-        "  TNT_MAX_CONNECTIONS   全局连接数限制 (默认: 64)\n"
+        "  TNT_MAX_CONNECTIONS   全局连接数限制 (默认: %d)\n"
         "  TNT_RATE_LIMIT        设为 0 可禁用速率限制\n"
-        "  TNT_IDLE_TIMEOUT      空闲断开时间，单位秒 (默认: 1800)\n"
+        "  TNT_IDLE_TIMEOUT      空闲断开时间，单位秒 (默认: %d)\n"
     );
     const char *program = (program_name && program_name[0] != '\0')
                               ? program_name
                               : "tnt";
 
     buffer_appendf(buffer, buf_size, pos, i18n_string(help_format, lang),
-                   TNT_VERSION, program, DEFAULT_PORT);
+                   TNT_VERSION, program, TNT_DEFAULT_PORT,
+                   TNT_DEFAULT_MAX_CONNECTIONS,
+                   TNT_DEFAULT_MAX_CONNECTIONS,
+                   TNT_DEFAULT_IDLE_TIMEOUT);
 }
 
 const char *cli_text_invalid_port_format(ui_lang_t lang) {

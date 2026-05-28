@@ -1,5 +1,6 @@
 #include "tntctl_text.h"
 
+#include "config_defaults.h"
 #include "exec_catalog.h"
 #include "i18n.h"
 
@@ -61,7 +62,7 @@ void tntctl_text_append_usage(char *buffer, size_t buf_size, size_t *pos,
         "Usage: tntctl [options] host command [args...]\n"
         "\n"
         "Options:\n"
-        "  -p, --port PORT        SSH port (default: 2222)\n"
+        "  -p, --port PORT        SSH port (default: " TNT_DEFAULT_PORT_TEXT ")\n"
         "  -l, --login USER       SSH login name for exec identity\n"
         "  --host-key-checking MODE\n"
         "                         OpenSSH host-key mode: yes, accept-new, no\n"
@@ -74,7 +75,7 @@ void tntctl_text_append_usage(char *buffer, size_t buf_size, size_t *pos,
         "用法: tntctl [options] host command [args...]\n"
         "\n"
         "选项:\n"
-        "  -p, --port PORT        SSH 端口 (默认: 2222)\n"
+        "  -p, --port PORT        SSH 端口 (默认: " TNT_DEFAULT_PORT_TEXT ")\n"
         "  -l, --login USER       SSH 登录名，用作 exec 身份\n"
         "  --host-key-checking MODE\n"
         "                         OpenSSH 主机密钥模式: yes, accept-new, no\n"
