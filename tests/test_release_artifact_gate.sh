@@ -67,12 +67,8 @@ build_artifact_tree() {
     write_macho_arm64 "$artifact_root/darwin-arm64/tntctl-darwin-arm64"
 
     if [ "$include_source" = "yes" ]; then
-        source_root="$STATE_DIR/source-$ver/TNT-$ver"
-        mkdir -p "$source_root/src" "$source_root/packaging" "$artifact_root/source"
-        printf 'MIT\n' > "$source_root/LICENSE"
-        printf 'int main(void) { return 0; }\n' > "$source_root/src/tntctl.c"
-        printf '# Packaging\n' > "$source_root/packaging/README.md"
-        (cd "$STATE_DIR/source-$ver" && tar -czf "$artifact_root/source/tnt-chat-v$ver-source.tar.gz" "TNT-$ver")
+        mkdir -p "$artifact_root/source"
+        ../scripts/package_source_archive.sh HEAD "$artifact_root/source" >/dev/null
     fi
 }
 

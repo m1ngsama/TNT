@@ -21,6 +21,15 @@ sha256_of() {
     fi
 }
 
+require_archive_entry() {
+    entry=$1
+    label=$2
+
+    printf '%s\n' "$source_listing" |
+        awk -v target="$entry" '$0 == target { found = 1 } END { exit found ? 0 : 1 }' ||
+        fail "SOURCE_TARBALL is missing $label"
+}
+
 version=$(sed -n 's/^#define TNT_VERSION "\([^"]*\)".*/\1/p' include/common.h)
 [ -n "$version" ] || fail "could not read TNT_VERSION from include/common.h"
 release_source="tnt-chat-v${version}-source.tar.gz"
@@ -30,14 +39,13 @@ source_tarball=${SOURCE_TARBALL:-${RELEASE_SOURCE_TARBALL:-}}
     fail "set SOURCE_TARBALL to the explicit release source archive"
 [ -f "$source_tarball" ] ||
     fail "SOURCE_TARBALL does not exist: $source_tarball"
-tar -tzf "$source_tarball" >/dev/null ||
+source_listing=$(tar -tzf "$source_tarball") ||
     fail "SOURCE_TARBALL is not a readable tar.gz archive"
-tar -tzf "$source_tarball" | grep -q "^TNT-$version/LICENSE$" ||
-    fail "SOURCE_TARBALL is missing LICENSE"
-tar -tzf "$source_tarball" | grep -q "^TNT-$version/packaging/README.md$" ||
-    fail "SOURCE_TARBALL is missing packaging/README.md"
-tar -tzf "$source_tarball" | grep -q "^TNT-$version/src/tntctl.c$" ||
-    fail "SOURCE_TARBALL is missing src/tntctl.c"
+require_archive_entry "TNT-$version/LICENSE" "LICENSE"
+require_archive_entry "TNT-$version/packaging/README.md" "packaging/README.md"
+require_archive_entry "TNT-$version/src/tntctl.c" "src/tntctl.c"
+require_archive_entry "TNT-$version/tnt.1" "tnt.1"
+require_archive_entry "TNT-$version/tntctl.1" "tntctl.1"
 
 ! grep -R "REPLACE_WITH_EMAIL" packaging/arch packaging/debian >/dev/null ||
     fail "replace maintainer email placeholders before package publishing"

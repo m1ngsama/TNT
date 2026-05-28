@@ -12,6 +12,9 @@
 - Added CI governance layers for fast PR checks, release-branch validation,
   extended runtime validation, container portability builds, and package recipe
   validation.
+- Added `scripts/package_source_archive.sh` so the explicit release source
+  archive can be built and tested locally instead of living only inside the
+  GitHub release workflow.
 - Added a `config_defaults` module and unit coverage for runtime default
   values, env keys, and accepted numeric ranges.
 - Added a dedicated `tntctl_text` module with unit coverage for local

@@ -67,7 +67,8 @@ Runs only for SemVer tags matching `vMAJOR.MINOR.PATCH`:
 - Builds Linux glibc AMD64 and ARM64 binaries.
 - Builds macOS Intel and Apple Silicon binaries.
 - Verifies binary architecture labels.
-- Builds an explicit source archive: `tnt-chat-vX.Y.Z-source.tar.gz`.
+- Builds an explicit source archive with `scripts/package_source_archive.sh`:
+  `tnt-chat-vX.Y.Z-source.tar.gz`.
 - Runs `scripts/package_release_assets.sh` to collect release assets, verify
   expected asset names, verify binary architecture labels again after artifact
   download, verify source archive contents, generate `checksums.txt`, and verify
@@ -217,6 +218,7 @@ Stage 1, implemented now:
 - Draft release, manual publish.
 - Binary architecture validation.
 - Source archive validation.
+- Local source-archive dry-run coverage.
 - SHA-256 checksums for every release asset.
 - Package recipe checksum preflight.
 
