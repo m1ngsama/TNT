@@ -37,6 +37,9 @@
   and server survival stay responsive.
 
 ### Changed
+- Updated `tnt(1)` to document the current TUI search and pager keys, and
+  added script coverage to keep active help surfaces free of removed support
+  commands.
 - `make install-systemd` now rewrites the installed unit's `ExecStart` to match
   the selected `PREFIX`/`BINDIR`, so package builds that install to `/usr`
   produce a unit pointing at `/usr/bin/tnt`.

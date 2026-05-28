@@ -167,6 +167,8 @@ Press
 to return to INSERT,
 .B :
 to enter COMMAND mode,
+.B /
+to search message history,
 .B ?
 to open the full key reference.
 .TP
@@ -198,6 +200,7 @@ Ctrl+F/Ctrl+B	Scroll full page down/up
 PageDown/PageUp	Scroll full page down/up
 End/Home	Jump to bottom/top
 g/G	Jump to top/bottom
+/	Search message history
 i	Switch to INSERT
 :	Enter COMMAND mode
 ?	Open full key reference
@@ -219,6 +222,7 @@ l l.
 :last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
 :search \fIkeyword\fR	Case\-insensitive search across full message history
 :mute\-joins	Toggle join/leave system notifications on/off
+:lang	Show current UI language
 :lang \fIen|zh\fR	Switch UI language for this session
 :help	Show concise manual
 :clear	Clear command output
@@ -227,12 +231,23 @@ Up/Down	Browse command history
 ESC	Cancel and return to NORMAL
 .TE
 .PP
-Command output pages use j/k, Ctrl+D/Ctrl+U, and g/G for paging.
+Command output pages use the same paging keys as the help screen.
+.TS
+l l.
+q, ESC	Close output
+j/k, arrows	Scroll down/up
+Ctrl+D/Ctrl+U	Scroll half page down/up
+Ctrl+F/Ctrl+B	Scroll full page down/up
+Space/b	Scroll full page down/up
+PageDown/PageUp	Scroll full page down/up
+End/Home	Jump to bottom/top
+g/G	Jump to top/bottom
+r	Refresh live output (:inbox)
+.TE
+.PP
 The
 .B :inbox
-page can also be refreshed with
-.B r
-and refreshes automatically when a new private message arrives while it is
+page refreshes automatically when a new private message arrives while it is
 open.
 .SH EXEC INTERFACE
 Commands can be run non\-interactively for scripting:
