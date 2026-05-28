@@ -20,12 +20,12 @@ SRC_DIR = src
 INC_DIR = include
 OBJ_DIR = obj
 
-SOURCES = $(filter-out $(SRC_DIR)/tntctl.c,$(wildcard $(SRC_DIR)/*.c))
+SOURCES = $(filter-out $(SRC_DIR)/tntctl.c $(SRC_DIR)/tntctl_text.c,$(wildcard $(SRC_DIR)/*.c))
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 DEPS = $(OBJECTS:.o=.d) $(CTL_OBJECTS:.o=.d)
 TARGET = tnt
 CTL_TARGET = tntctl
-CTL_OBJECTS = $(OBJ_DIR)/tntctl.o $(OBJ_DIR)/exec_catalog.o $(OBJ_DIR)/common.o $(OBJ_DIR)/i18n.o
+CTL_OBJECTS = $(OBJ_DIR)/tntctl.o $(OBJ_DIR)/tntctl_text.o $(OBJ_DIR)/exec_catalog.o $(OBJ_DIR)/common.o $(OBJ_DIR)/i18n.o
 TARGETS = $(TARGET) $(CTL_TARGET)
 
 PREFIX ?= /usr/local

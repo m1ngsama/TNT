@@ -16,6 +16,7 @@ MESSAGE_LOG_SRC = ../../src/message_log.c
 COMMON_SRC = ../../src/common.c
 COMMAND_CATALOG_SRC = ../../src/command_catalog.c
 CLI_TEXT_SRC = ../../src/cli_text.c
+TNTCTL_TEXT_SRC = ../../src/tntctl_text.c
 CHAT_ROOM_SRC = ../../src/chat_room.c
 HISTORY_VIEW_SRC = ../../src/history_view.c
 I18N_SRC = ../../src/i18n.c
@@ -26,7 +27,7 @@ HELP_TEXT_SRC = ../../src/help_text.c
 MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
 
-TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_ratelimit
+TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit
 
 .PHONY: all clean run
 
@@ -65,6 +66,9 @@ test_manual_text: test_manual_text.c $(MANUAL_TEXT_SRC) $(COMMAND_CATALOG_SRC) $
 test_cli_text: test_cli_text.c $(CLI_TEXT_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_tntctl_text: test_tntctl_text.c $(TNTCTL_TEXT_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 test_ratelimit: test_ratelimit.c $(RATELIMIT_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
@@ -101,6 +105,9 @@ run: all
 	@echo ""
 	@echo "=== Running CLI Text Tests ==="
 	./test_cli_text
+	@echo ""
+	@echo "=== Running tntctl Text Tests ==="
+	./test_tntctl_text
 	@echo ""
 	@echo "=== Running Rate Limit Tests ==="
 	./test_ratelimit

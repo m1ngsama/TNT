@@ -40,6 +40,7 @@ make check
 ```
 main.c           → entry point, signal handling
 cli_text.c       → startup CLI text
+tntctl_text.c    → tntctl local help and diagnostics
 command_catalog.c → COMMAND-mode command metadata, usage, and argument shape
 commands.c       → COMMAND-mode command dispatch
 exec_catalog.c   → SSH exec command matching, usage, and argument shape

@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Added a dedicated `tntctl_text` module with unit coverage for local
+  `tntctl` help and validation diagnostics.
 - Documented the stable SSH exec interface contract, including exit statuses
   and JSON field shapes for package tests, scripts, and future `tntctl` work.
 - Documented `messages.log` v1 as the stable TNT 1.x persisted history format,

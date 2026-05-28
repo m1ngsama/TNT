@@ -324,6 +324,7 @@ TNT/
 │   ├── exec_catalog.c # SSH exec command matching, usage, and argument shape
 │   ├── exec.c        # SSH exec command dispatch
 │   ├── tntctl.c      # local wrapper around the SSH exec interface
+│   ├── tntctl_text.c # tntctl help and option text
 │   ├── ssh_server.c  # SSH server implementation
 │   ├── bootstrap.c   # SSH authentication and session bootstrap
 │   ├── chat_room.c   # chat room logic

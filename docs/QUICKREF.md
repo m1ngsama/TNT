@@ -66,6 +66,7 @@ MAINTENANCE
 STRUCTURE
   src/main.c          entry, signals
   src/cli_text.c      startup CLI text
+  src/tntctl_text.c   tntctl local help and diagnostics
   src/command_catalog.c command metadata, usage, argument shape
   src/ssh_server.c    SSH listener and server setup
   src/bootstrap.c     SSH auth/session bootstrap

@@ -24,4 +24,5 @@ tests/unit/test_help_text
 tests/unit/test_manual_text
 tests/unit/test_support_text
 tests/unit/test_cli_text
+tests/unit/test_tntctl_text
 tests/unit/test_ratelimit
