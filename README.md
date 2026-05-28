@@ -401,10 +401,11 @@ Longer local preflight can opt into runtime soak and slow-client coverage:
 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
 ```
 
-Before publishing package recipes, replace placeholder checksums and run:
+Before publishing package recipes, download the final GitHub source archive,
+replace placeholder checksums, and run:
 
 ```sh
-make release-check-strict
+SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
 ```
 
 ## Files

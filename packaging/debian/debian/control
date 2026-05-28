@@ -1,7 +1,7 @@
 Source: tnt-chat
 Section: net
 Priority: optional
-Maintainer: M1ng <REPLACE_WITH_EMAIL>
+Maintainer: M1ng <contact@m1ng.space>
 Build-Depends:
  debhelper-compat (= 13),
  libssh-dev,

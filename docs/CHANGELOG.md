@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Added a release tag/version guard used by the GitHub release workflow, so a
+  `vX.Y.Z` tag must match `TNT_VERSION` before release assets are built.
+- Added `make package-publish-check` for verifying Arch/Homebrew source
+  checksums against the final GitHub source archive after a tag exists.
 - Added a dedicated `tntctl_text` module with unit coverage for local
   `tntctl` help and validation diagnostics.
 - Documented the stable SSH exec interface contract, including exit statuses
@@ -37,6 +41,17 @@
   and server survival stay responsive.
 
 ### Changed
+- INSERT-mode chrome now only advertises message sending and `Esc` to NORMAL;
+  `? keys` appears only in NORMAL mode, matching where help keys work.
+- Dismissing MOTD now returns first-time users to INSERT mode, and `Ctrl+C`
+  closes the full key reference before it disconnects from NORMAL mode.
+- COMMAND mode now accepts an optional leading `:` in typed commands, matching
+  the way commands are written in the manual.
+- `:search` output and docs now state that the command shows the last 15
+  matches, avoiding the impression that the pager is a complete result set.
+- Release checks now separate tag/source-archive readiness from package-manager
+  checksum publishing, avoiding self-referential checksum requirements before
+  the final GitHub source archive exists.
 - `tntctl --help` now gets its exec command list from `exec_catalog`, reducing
   duplicate command metadata between the local wrapper and SSH exec mode.
 - Updated `tnt(1)` to document the current TUI search and pager keys, and

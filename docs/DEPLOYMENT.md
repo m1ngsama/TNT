@@ -9,7 +9,7 @@ curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 
 Specific version:
 ```bash
-VERSION=v1.0.1 curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+VERSION=vX.Y.Z curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
 
 ## Manual Install
@@ -18,12 +18,12 @@ Download binary for your platform from [releases](https://github.com/m1ngsama/TN
 
 ```bash
 # Linux AMD64
-wget https://github.com/m1ngsama/TNT/releases/latest/download/tnt-linux-amd64
+curl -LO https://github.com/m1ngsama/TNT/releases/latest/download/tnt-linux-amd64
 chmod +x tnt-linux-amd64
 sudo mv tnt-linux-amd64 /usr/local/bin/tnt
 
 # macOS ARM64 (Apple Silicon)
-wget https://github.com/m1ngsama/TNT/releases/latest/download/tnt-darwin-arm64
+curl -LO https://github.com/m1ngsama/TNT/releases/latest/download/tnt-darwin-arm64
 chmod +x tnt-darwin-arm64
 sudo mv tnt-darwin-arm64 /usr/local/bin/tnt
 ```

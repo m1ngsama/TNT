@@ -26,8 +26,9 @@ Environment:
   PORT=12720         base port for integration tests
 
 Strict checks additionally require a clean tree, a vX.Y.Z tag at HEAD, a
-matching changelog release section, real package checksums, and non-placeholder
-maintainer metadata, then build from the tagged source archive.
+matching changelog release section, non-placeholder maintainer metadata, and a
+build from the tagged source archive.  Run `make package-publish-check` after
+the final GitHub source archive exists to verify package checksums.
 USAGE
 }
 
@@ -190,6 +191,14 @@ grep -q '^invalid_records 1$' "$recover_report" ||
 
 step "checking installer syntax"
 sh -n install.sh
+sh -n scripts/check_release_ref.sh
+sh -n scripts/package_publish_check.sh
+scripts/check_release_ref.sh "v$version"
+bad_ref=v0.0.0
+[ "$version" != "0.0.0" ] || bad_ref=v9.9.9
+if scripts/check_release_ref.sh "$bad_ref" >/dev/null 2>&1; then
+    fail "release ref check accepted a mismatched tag"
+fi
 
 step "checking Debian packaging metadata"
 [ -x packaging/debian/debian/rules ] ||
@@ -248,12 +257,6 @@ if [ "$STRICT" -eq 1 ]; then
         fail "local tag v$version does not point at HEAD"
     grep -q "^## $version " docs/CHANGELOG.md ||
         fail "docs/CHANGELOG.md does not contain a release section for $version"
-    ! grep -q "sha256sums=('SKIP')" packaging/arch/PKGBUILD ||
-        fail "replace PKGBUILD sha256sums before strict release"
-    ! grep -q "sha256sums = SKIP" packaging/arch/.SRCINFO ||
-        fail "replace .SRCINFO sha256sums before strict release"
-    ! grep -q "REPLACE_WITH_RELEASE_TARBALL_SHA256" packaging/homebrew/tnt-chat.rb ||
-        fail "replace Homebrew sha256 before strict release"
     ! grep -R "REPLACE_WITH_EMAIL" packaging/arch packaging/debian >/dev/null ||
         fail "replace maintainer email placeholders before strict release"
 

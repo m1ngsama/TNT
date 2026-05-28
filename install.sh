@@ -27,6 +27,34 @@ sha256_of() {
     fi
 }
 
+warn_missing_libssh() {
+    case "$OS" in
+        linux)
+            if command -v ldconfig >/dev/null 2>&1 &&
+               ldconfig -p 2>/dev/null | grep -q 'libssh\.so'; then
+                return
+            fi
+            for path in /usr/lib/libssh.so* /usr/lib64/libssh.so* \
+                        /lib/libssh.so* /lib64/libssh.so*; do
+                [ -e "$path" ] && return
+            done
+            echo "WARNING: TNT requires the libssh runtime library."
+            echo "Install it first, for example:"
+            echo "  Ubuntu/Debian: sudo apt install libssh-4"
+            echo "  Arch:          sudo pacman -S libssh"
+            ;;
+        darwin)
+            if [ -e /opt/homebrew/opt/libssh/lib/libssh.dylib ] ||
+               [ -e /usr/local/opt/libssh/lib/libssh.dylib ]; then
+                return
+            fi
+            echo "WARNING: TNT requires the libssh runtime library."
+            echo "Install it first:"
+            echo "  brew install libssh"
+            ;;
+    esac
+}
+
 need_cmd curl
 need_cmd awk
 
@@ -53,6 +81,7 @@ echo "OS: $OS"
 echo "Arch: $ARCH"
 echo "Version: $VERSION"
 echo ""
+warn_missing_libssh
 
 # Get latest version if not specified
 if [ "$VERSION" = "latest" ]; then

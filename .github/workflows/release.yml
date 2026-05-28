@@ -35,6 +35,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Verify release tag matches source version
+      run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
+
     - name: Install dependencies (Ubuntu)
       if: runner.os == 'Linux'
       run: |
@@ -97,6 +100,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Verify release tag matches source version
+      run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
@@ -122,12 +128,24 @@ jobs:
         body: |
           ## Installation
 
+          Install the libssh runtime before running TNT:
+          ```bash
+          # Ubuntu/Debian
+          sudo apt install libssh-4
+
+          # Arch
+          sudo pacman -S libssh
+
+          # macOS
+          brew install libssh
+          ```
+
           Download the binary for your platform:
 
           **Linux AMD64:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-amd64
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-linux-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-linux-amd64
           chmod +x tnt-linux-amd64
           chmod +x tntctl-linux-amd64
           sudo mv tnt-linux-amd64 /usr/local/bin/tnt
@@ -136,8 +154,8 @@ jobs:
 
           **Linux ARM64:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-arm64
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-linux-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-linux-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-linux-arm64
           chmod +x tnt-linux-arm64
           chmod +x tntctl-linux-arm64
           sudo mv tnt-linux-arm64 /usr/local/bin/tnt
@@ -146,8 +164,8 @@ jobs:
 
           **macOS Intel:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-amd64
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-darwin-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-darwin-amd64
           chmod +x tnt-darwin-amd64
           chmod +x tntctl-darwin-amd64
           sudo mv tnt-darwin-amd64 /usr/local/bin/tnt
@@ -156,8 +174,8 @@ jobs:
 
           **macOS Apple Silicon:**
           ```bash
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-arm64
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-darwin-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tnt-darwin-arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/tntctl-darwin-arm64
           chmod +x tnt-darwin-arm64
           chmod +x tntctl-darwin-arm64
           sudo mv tnt-darwin-arm64 /usr/local/bin/tnt
@@ -166,7 +184,15 @@ jobs:
 
           **Verify checksums:**
           ```bash
-          sha256sum -c checksums.txt
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/checksums.txt
+
+          # Linux
+          sha256sum -c checksums.txt --ignore-missing
+
+          # macOS
+          for f in tnt-* tntctl-*; do
+            grep "  $f$" checksums.txt | shasum -a 256 -c -
+          done
           ```
 
           ## What's Changed

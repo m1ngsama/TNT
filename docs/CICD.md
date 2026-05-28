@@ -35,8 +35,7 @@ Release policy:
    - packaging/arch/PKGBUILD
    - packaging/homebrew/tnt-chat.rb
    - packaging/debian/debian/changelog
-   - package checksums and maintainer metadata, when preparing public package
-     recipes
+   - maintainer metadata, when preparing public package recipes
 
 2. Run the local preflight:
    make release-check
@@ -46,7 +45,7 @@ Release policy:
 
 3. Commit the release changes and create a local tag.  Do not push the tag
    until strict checks pass:
-   git tag v1.0.1
+   git tag vX.Y.Z
 
 4. Run strict release checks:
    make release-check-strict
@@ -56,7 +55,7 @@ Release policy:
    untracked and would be missing from GitHub's source archive.
 
 5. Push the tag:
-   git push origin v1.0.1
+   git push origin vX.Y.Z
 
 6. GitHub Actions automatically:
    - Builds `tnt` and `tntctl` binaries (Linux/macOS, AMD64/ARM64)
@@ -77,7 +76,9 @@ RELEASE REVIEW CHECKLIST
 Before publishing a draft release:
   - Confirm `git tag` points at the intended commit.
   - Download every release asset from GitHub, not from the local workspace.
-  - Verify `checksums.txt` with `sha256sum -c checksums.txt`.
+  - Verify downloaded assets against `checksums.txt` (`sha256sum -c
+    checksums.txt --ignore-missing` on Linux, or `shasum -a 256 -c` for each
+    downloaded asset on macOS).
   - Run downloaded `tnt --version` and `tntctl --version`.
   - Start a temporary server and check:
       ssh -p 2222 server health
@@ -87,8 +88,10 @@ Before publishing a draft release:
       ssh -p 2222 server "tail -n 1"
   - Check runtime dynamic links (`ldd` on Linux, `otool -L` on macOS) and make
     sure `libssh` is documented for the target install path.
-  - Confirm `make release-check-strict` passed after package checksums were
-    replaced.
+  - Confirm `make release-check-strict` passed before pushing the tag.
+  - For package-manager recipes, download the final GitHub source archive,
+    replace Arch/Homebrew source checksums, then run:
+      SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
 
 
 ROLLBACK
@@ -158,8 +161,8 @@ make && make asan && make release-check
 ./tnt
 
 # Create release
-git tag v1.0.1
-git push origin v1.0.1
+git tag vX.Y.Z
+git push origin vX.Y.Z
 # Wait 5 minutes for builds
 
 # Deploy to production manually after validation
