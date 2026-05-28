@@ -25,6 +25,7 @@ Goal: make TNT predictable for operators, scripts, and package maintainers.
   - `stats`
   - `users`
   - `tail`
+  - `dump`
   - `post`
 - ✅ support text and JSON output modes where machine use is likely
 - ✅ normalize command parsing, help text, and error reporting
@@ -43,12 +44,13 @@ Goal: make long-running operation boring and reliable.
 - ✅ remove cross-client SSH channel writes from mention and private-message
   notifications
 - continue replacing ad hoc cross-thread UI mutation with per-client event
-  delivery
+  delivery where new features need cross-client notifications
 - ✅ add bounded outbound queues so closed SSH windows cannot immediately stall
   interactive output writes
 - separate accept, session bootstrap, interactive I/O, and persistence concerns more cleanly
-- make room/client capacity fully runtime-configurable with no hidden compile-time ceiling
-- document hard guarantees and soft limits
+- ✅ make room/client capacity fully runtime-configurable with no hidden
+  compile-time ceiling
+- ✅ document hard guarantees and soft limits
 
 ## Stage 3: Data and Persistence
 
@@ -65,26 +67,30 @@ Goal: make stored history durable, inspectable, and recoverable.
 
 Goal: keep the interface efficient for terminal users without sacrificing simplicity.
 
-- keep the current modal editing model, but make its behavior precise and documented
-- support resize, cursor movement, command history, and predictable paste behavior
+- ✅ keep the current modal editing model precise and documented
+- ✅ support resize, command history, pager navigation, and predictable paste
+  behavior
+- add in-line cursor movement/editing only if it can stay simple and testable
 - add useful chat commands with clear semantics:
   - ✅ `:nick` / `:name` — nickname change with broadcast
   - ✅ `/me` — action messages
   - ✅ `:last N` — show last N messages from disk history
   - ✅ `:search <keyword>` — case-insensitive full-text search
   - ✅ `:mute-joins` — per-client join/leave notification toggle
-- improve discoverability of NORMAL and COMMAND mode actions
-- make status lines and help output concise enough for small terminals
+- ✅ improve discoverability of NORMAL and COMMAND mode actions
+- ✅ make status lines and help output concise enough for small terminals
 
 ## Stage 5: Operations and Security
 
 Goal: make public deployment manageable.
 
-- provide clear distinction between concurrent session limits and connection-rate limits
+- ✅ provide clear distinction between concurrent session limits and
+  connection-rate limits
 - add admin-only controls for read-only mode, mute, and ban
 - ✅ expose a minimal health and stats surface suitable for monitoring
 - support systemd-friendly readiness and watchdog behavior
-- document recommended production defaults for public, private, and localhost-only deployments
+- ✅ document recommended production defaults for public, private, and
+  localhost-only deployments
 - tighten CI around authentication, limits, and restart behavior
 
 ## Stage 6: Release Quality
@@ -97,6 +103,9 @@ Goal: make regressions harder to introduce.
   interface availability
 - ✅ add deeper slow-client coverage with a deliberately backpressured SSH
   client
+- ✅ verify staged package installs, systemd unit paths, packaging metadata,
+  Debian source assembly, Homebrew service metadata, and installed log
+  maintenance modes in release preflight
 - keep deployment and test docs aligned with actual runtime behavior
 - require every user-visible interface change to update docs and tests in the same change set
 
@@ -106,3 +115,7 @@ These are the next changes that should happen before new feature work expands th
 
 1. Replace remaining release placeholders with real maintainer metadata and
    source-archive checksums when cutting a public package release.
+2. Create or move the `v1.0.1` tag only when the release commit is final, then
+   run `make release-check-strict`.
+3. Decide whether admin-only moderation controls belong in 1.0.x or should
+   wait for a later minor release.
