@@ -3,6 +3,8 @@
 
 PASS=0
 FAIL=0
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 pass() {
     echo "✓ $1"
@@ -22,7 +24,7 @@ require_fixed() {
     text="$2"
     label="$3"
 
-    if grep -F -q "$text" "../$file"; then
+    if grep -F -q "$text" "$REPO_ROOT/$file"; then
         pass "$label"
     else
         fail "$label missing" "$file: $text"
@@ -34,7 +36,7 @@ forbid_fixed() {
     text="$2"
     label="$3"
 
-    if grep -F -q "$text" "../$file"; then
+    if grep -F -q "$text" "$REPO_ROOT/$file"; then
         fail "$label still mentions $text" "$file"
     else
         pass "$label excludes $text"

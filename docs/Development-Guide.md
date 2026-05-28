@@ -72,6 +72,7 @@ TNT uses a multi-threaded architecture with a main accept loop and per-client th
 ```
 src/
 ├── main.c           - CLI entry point and startup option parsing
+├── cli_text.c       - Server CLI help and option diagnostics
 ├── ssh_server.c     - SSH listener setup and connection accept loop
 ├── bootstrap.c      - SSH authentication/session bootstrap
 ├── input.c          - Interactive session loop and key handling
@@ -79,6 +80,8 @@ src/
 ├── command_catalog.c - COMMAND-mode names, aliases, and help summaries
 ├── exec_catalog.c   - SSH exec command matching and help metadata
 ├── exec.c           - SSH exec command dispatch
+├── tntctl.c         - Local wrapper around the SSH exec interface
+├── tntctl_text.c    - tntctl local help and diagnostics
 ├── chat_room.c      - Chat room state, message ring, and update sequence
 ├── message.c        - Message persistence (RFC3339 format)
 ├── message_log.c    - messages.log v1 parsing and formatting
@@ -108,12 +111,17 @@ include/
 ├── message_log.h    - messages.log v1 parser/formatter interface
 ├── message_log_tool.h - Offline log check/recover interface
 ├── command_catalog.h - COMMAND-mode command metadata interface
+├── exec_catalog.h   - SSH exec command metadata interface
+├── cli_text.h       - Server CLI text interface
+├── tntctl_text.h    - tntctl text interface
 ├── history_view.h   - Scroll-state helpers
 ├── tui.h            - TUI rendering functions
+├── tui_status.h     - TUI status/input-line rendering interface
 ├── i18n.h           - Language and shared text IDs
 ├── help_text.h      - Key reference text interface
 ├── manual.h         - Concise manual panel interface
 ├── manual_text.h    - Concise manual text interface
+├── system_message.h - Localized system message builders
 ├── ratelimit.h      - Connection limit interface
 └── utf8.h           - UTF-8 utilities
 ```
@@ -414,6 +422,8 @@ tests/test_slow_client.sh        # slow SSH reader/backpressure behavior
 tests/unit/test_i18n.c           # localized shared text
 tests/unit/test_command_catalog.c # interactive command metadata
 tests/unit/test_exec_catalog.c   # exec command help metadata
+tests/unit/test_tntctl_text.c    # tntctl local help/diagnostic text
+tests/test_docs_help_surface.sh  # active help/manual drift checks
 ```
 
 ### Adding a New Keybinding
