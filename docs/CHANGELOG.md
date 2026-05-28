@@ -107,6 +107,8 @@
 - `tntctl` now reuses the SSH exec command matcher for local command
   validation, so `tntctl host --help` reaches the server-side exec help alias
   instead of being rejected locally.
+- `tntctl` local help and local validation errors now follow `TNT_LANG` and
+  locale selection, matching the server CLI's i18n behavior.
 - Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
   locale/code parsing, while `src/i18n_text.c` owns the table-driven text
   catalog with coverage checks for every message ID.

@@ -73,6 +73,33 @@ case "$VERSION_OUTPUT" in
     *) echo "✗ version output unexpected: $VERSION_OUTPUT"; FAIL=$((FAIL + 1)) ;;
 esac
 
+HELP_ZH=$(TNT_LANG=zh "$BIN" --help 2>/dev/null || true)
+printf '%s\n' "$HELP_ZH" | grep -q '^用法: tntctl \[options\] host command \[args...\]' &&
+printf '%s\n' "$HELP_ZH" | grep -q '^选项:$'
+if [ $? -eq 0 ]; then
+    echo "✓ local help follows TNT_LANG"
+    PASS=$((PASS + 1))
+else
+    echo "✗ localized help output unexpected"
+    printf '%s\n' "$HELP_ZH"
+    FAIL=$((FAIL + 1))
+fi
+
+rm -f "$SSH_LOG"
+BAD_PORT_ZH=$(PATH="$FAKE_BIN:$PATH" TNTCTL_SSH_LOG="$SSH_LOG" TNT_LANG=zh "$BIN" -p nope example.com health 2>&1)
+BAD_PORT_STATUS=$?
+if [ "$BAD_PORT_STATUS" -eq 64 ] &&
+   [ ! -f "$SSH_LOG" ] &&
+   printf '%s\n' "$BAD_PORT_ZH" | grep -q '^tntctl: 端口无效$'; then
+    echo "✓ local diagnostics follow TNT_LANG"
+    PASS=$((PASS + 1))
+else
+    echo "✗ localized diagnostic unexpected"
+    printf '%s\n' "$BAD_PORT_ZH"
+    [ -f "$SSH_LOG" ] && echo "fake ssh was invoked"
+    FAIL=$((FAIL + 1))
+fi
+
 run_ok "basic argv shape" "$BIN" -p 2222 example.com health
 grep -q '^example.com$' "$SSH_LOG" &&
 grep -q '^health$' "$SSH_LOG"
