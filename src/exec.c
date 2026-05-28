@@ -517,6 +517,8 @@ int exec_dispatch(client_t *client) {
                 return exec_command_post(client, args);
             case TNT_EXEC_COMMAND_EXIT:
                 return TNT_EXIT_OK;
+            case TNT_EXEC_COMMAND_COUNT:
+                break;
         }
     }
 

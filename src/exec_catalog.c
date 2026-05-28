@@ -155,6 +155,26 @@ void exec_catalog_append_help(char *buffer, size_t buf_size, size_t *pos,
     }
 }
 
+void exec_catalog_append_command_list(char *buffer, size_t buf_size,
+                                      size_t *pos) {
+    bool seen[TNT_EXEC_COMMAND_COUNT] = {0};
+    size_t count = 0;
+
+    for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
+        tnt_exec_command_id_t id = entries[i].id;
+
+        if (id < 0 || id >= TNT_EXEC_COMMAND_COUNT || seen[id]) {
+            continue;
+        }
+        if (count > 0) {
+            buffer_appendf(buffer, buf_size, pos, ", ");
+        }
+        buffer_appendf(buffer, buf_size, pos, "%s", entries[i].name);
+        seen[id] = true;
+        count++;
+    }
+}
+
 void exec_catalog_append_usage(char *buffer, size_t buf_size, size_t *pos,
                                tnt_exec_command_id_t id, ui_lang_t lang) {
     const exec_catalog_entry_t *entry = entry_for_id(id);

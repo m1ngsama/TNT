@@ -4,7 +4,6 @@
 #include "common.h"
 
 typedef enum {
-    TNTCTL_TEXT_USAGE,
     TNTCTL_TEXT_INVALID_PORT,
     TNTCTL_TEXT_INVALID_LOGIN,
     TNTCTL_TEXT_INVALID_HOST_KEY_MODE,
@@ -23,6 +22,8 @@ typedef enum {
     TNTCTL_TEXT_COUNT
 } tntctl_text_id_t;
 
+void tntctl_text_append_usage(char *buffer, size_t buf_size, size_t *pos,
+                              ui_lang_t lang);
 const char *tntctl_text(ui_lang_t lang, tntctl_text_id_t id);
 
 #endif /* TNTCTL_TEXT_H */

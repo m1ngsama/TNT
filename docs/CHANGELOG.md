@@ -37,6 +37,8 @@
   and server survival stay responsive.
 
 ### Changed
+- `tntctl --help` now gets its exec command list from `exec_catalog`, reducing
+  duplicate command metadata between the local wrapper and SSH exec mode.
 - Updated `tnt(1)` to document the current TUI search and pager keys, and
   added script coverage to keep active help surfaces free of removed support
   commands.

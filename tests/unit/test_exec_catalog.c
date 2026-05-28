@@ -124,6 +124,16 @@ TEST(generates_localized_usage) {
     assert(strcmp(en, "dump: usage: dump [N] | dump -n N\n") == 0);
 }
 
+TEST(generates_unique_command_list) {
+    char output[256] = {0};
+    size_t pos = 0;
+
+    exec_catalog_append_command_list(output, sizeof(output), &pos);
+
+    assert(strcmp(output,
+                  "help, health, users, stats, tail, dump, post, exit") == 0);
+}
+
 int main(void) {
     printf("Running exec catalog unit tests...\n\n");
 
@@ -131,6 +141,7 @@ int main(void) {
     RUN_TEST(matches_exec_commands_and_args);
     RUN_TEST(validates_argument_shapes);
     RUN_TEST(generates_localized_usage);
+    RUN_TEST(generates_unique_command_list);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;

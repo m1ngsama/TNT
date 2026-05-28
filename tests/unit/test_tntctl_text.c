@@ -16,15 +16,22 @@
 static int tests_passed = 0;
 
 TEST(usage_matches_language) {
-    const char *en = tntctl_text(UI_LANG_EN, TNTCTL_TEXT_USAGE);
-    const char *zh = tntctl_text(UI_LANG_ZH, TNTCTL_TEXT_USAGE);
+    char en[2048] = {0};
+    char zh[2048] = {0};
+    size_t en_pos = 0;
+    size_t zh_pos = 0;
+
+    tntctl_text_append_usage(en, sizeof(en), &en_pos, UI_LANG_EN);
+    tntctl_text_append_usage(zh, sizeof(zh), &zh_pos, UI_LANG_ZH);
 
     assert(strstr(en, "Usage: tntctl [options] host command [args...]") != NULL);
     assert(strstr(en, "--host-key-checking MODE") != NULL);
-    assert(strstr(en, "health, stats, users") != NULL);
+    assert(strstr(en,
+                  "help, health, users, stats, tail, dump, post, exit") != NULL);
     assert(strstr(zh, "用法: tntctl [options] host command [args...]") != NULL);
     assert(strstr(zh, "OpenSSH 主机密钥模式") != NULL);
-    assert(strstr(zh, "health, stats, users") != NULL);
+    assert(strstr(zh,
+                  "help, health, users, stats, tail, dump, post, exit") != NULL);
 }
 
 TEST(errors_match_language) {

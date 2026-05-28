@@ -10,7 +10,12 @@
 #include <unistd.h>
 
 static void print_usage(FILE *stream, ui_lang_t lang) {
-    fputs(tntctl_text(lang, TNTCTL_TEXT_USAGE), stream);
+    char output[2048];
+    size_t pos = 0;
+
+    output[0] = '\0';
+    tntctl_text_append_usage(output, sizeof(output), &pos, lang);
+    fputs(output, stream);
 }
 
 static void print_error(ui_lang_t lang, tntctl_text_id_t id) {

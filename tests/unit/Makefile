@@ -66,7 +66,7 @@ test_manual_text: test_manual_text.c $(MANUAL_TEXT_SRC) $(COMMAND_CATALOG_SRC) $
 test_cli_text: test_cli_text.c $(CLI_TEXT_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_tntctl_text: test_tntctl_text.c $(TNTCTL_TEXT_SRC)
+test_tntctl_text: test_tntctl_text.c $(TNTCTL_TEXT_SRC) $(EXEC_CATALOG_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_ratelimit: test_ratelimit.c $(RATELIMIT_SRC) $(COMMON_SRC)
