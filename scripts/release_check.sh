@@ -179,6 +179,12 @@ grep -q '^u tnt ' packaging/arch/tnt-chat.sysusers ||
 grep -q 'usr/lib/sysusers.d' packaging/arch/PKGBUILD ||
     fail "PKGBUILD must install the sysusers.d file"
 
+step "checking Homebrew service metadata"
+grep -q "service do" packaging/homebrew/tnt-chat.rb ||
+    fail "Homebrew formula must define a brew services entry"
+grep -q 'opt_bin/"tnt"' packaging/homebrew/tnt-chat.rb ||
+    fail "Homebrew service must run the installed tnt binary"
+
 step "checking packaging syntax"
 if command -v bash >/dev/null 2>&1; then
     bash -n packaging/arch/PKGBUILD

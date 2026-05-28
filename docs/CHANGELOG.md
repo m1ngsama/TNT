@@ -111,6 +111,8 @@
   locale selection, matching the server CLI's i18n behavior.
 - Arch and Debian packaging drafts now create the `tnt` system user used by
   the packaged systemd unit, and release preflight checks that metadata.
+- The Homebrew formula draft now defines a `brew services` entry that runs the
+  installed `tnt` binary with state under `var/tnt`.
 - Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
   locale/code parsing, while `src/i18n_text.c` owns the table-driven text
   catalog with coverage checks for every message ID.

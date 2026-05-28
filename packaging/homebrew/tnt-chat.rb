@@ -15,6 +15,17 @@ class TntChat < Formula
     bin.install "#{buildpath}/stage#{prefix}/bin/tntctl"
     man1.install "#{buildpath}/stage#{prefix}/share/man/man1/tnt.1"
     man1.install "#{buildpath}/stage#{prefix}/share/man/man1/tntctl.1"
+
+    (var/"tnt").mkpath
+    (var/"log").mkpath
+  end
+
+  service do
+    run [opt_bin/"tnt", "-d", var/"tnt"]
+    keep_alive true
+    working_dir var/"tnt"
+    log_path var/"log/tnt.log"
+    error_log_path var/"log/tnt.log"
   end
 
   test do

@@ -6,6 +6,7 @@ project tap first, not Homebrew core:
 ```sh
 brew tap m1ngsama/tnt
 brew install tnt-chat
+brew services start tnt-chat
 ```
 
 Homebrew core should wait until TNT has stable releases and broader usage.
@@ -18,6 +19,7 @@ From a tap repository:
 brew audit --strict --online tnt-chat
 brew install --build-from-source ./Formula/tnt-chat.rb
 brew test tnt-chat
+brew services run tnt-chat
 ```
 
 For local syntax-only validation from this repository:
