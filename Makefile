@@ -134,6 +134,7 @@ script-test: all
 	@cd tests && ./test_docs_help_surface.sh
 	@cd tests && ./test_logrotate.sh
 	@cd tests && ./test_message_log_tool.sh
+	@cd tests && ./test_release_artifact_gate.sh
 
 integration-test: all
 	@echo "Running integration tests..."

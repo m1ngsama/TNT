@@ -8,11 +8,15 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
@@ -33,7 +37,7 @@ jobs:
             ctl_artifact: tntctl-darwin-arm64
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Verify release tag matches source version
       run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
@@ -91,40 +95,91 @@ jobs:
           ${{ matrix.artifact }}
           ${{ matrix.ctl_artifact }}
 
+  source-archive:
+    name: Source archive
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Verify release tag matches source version
+      run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
+
+    - name: Build source archive
+      run: |
+        set -eu
+        version=$(sed -n 's/^#define TNT_VERSION "\([^"]*\)".*/\1/p' include/common.h)
+        commit=$(git rev-list -n 1 "${GITHUB_REF_NAME}")
+        mkdir -p dist
+        git archive --format=tar.gz --prefix="TNT-${version}/" \
+          -o "dist/tnt-chat-v${version}-source.tar.gz" "$commit"
+        tar -tzf "dist/tnt-chat-v${version}-source.tar.gz" >/dev/null
+        tar -tzf "dist/tnt-chat-v${version}-source.tar.gz" | grep -q "^TNT-${version}/LICENSE$"
+        tar -tzf "dist/tnt-chat-v${version}-source.tar.gz" | grep -q "^TNT-${version}/packaging/README.md$"
+        sha256sum "dist/tnt-chat-v${version}-source.tar.gz"
+
+    - name: Upload source archive
+      uses: actions/upload-artifact@v4
+      with:
+        name: tnt-chat-source
+        path: dist/tnt-chat-v*-source.tar.gz
+
+  artifact-gate:
+    name: Release artifact gate
+    needs: [build, source-archive]
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Verify release tag matches source version
+      run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: Verify and package release assets
+      run: scripts/package_release_assets.sh ./artifacts ./dist/release-assets
+
+    - name: Upload release asset bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-assets
+        path: dist/release-assets/*
+
   release:
-    needs: build
+    needs: [artifact-gate, source-archive]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Verify release tag matches source version
       run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
 
-    - name: Download all artifacts
+    - name: Download release asset bundle
       uses: actions/download-artifact@v4
       with:
-        path: ./artifacts
+        name: release-assets
+        path: ./release-assets
 
-    - name: Create checksums
+    - name: Verify release checksums
       run: |
-        cd artifacts
-        : > checksums.txt
-        for artifact in */tnt-* */tntctl-*; do
-          [ -f "$artifact" ] || continue
-          sha256sum "$artifact" | sed "s#  $artifact#  $(basename "$artifact")#" >> checksums.txt
-        done
+        cd release-assets
+        sha256sum -c checksums.txt
         cat checksums.txt
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          artifacts/*/tnt-*
-          artifacts/*/tntctl-*
-          artifacts/checksums.txt
+          release-assets/*
         body: |
           ## Installation
 
@@ -190,10 +245,15 @@ jobs:
           sha256sum -c checksums.txt --ignore-missing
 
           # macOS
-          for f in tnt-* tntctl-*; do
+          for f in tnt-* tntctl-* tnt-chat-*-source.tar.gz; do
             grep "  $f$" checksums.txt | shasum -a 256 -c -
           done
           ```
+
+          The release also includes `tnt-chat-${{ github.ref_name }}-source.tar.gz`
+          for package-manager recipes. Verify it with the same `checksums.txt`
+          before updating Arch, Homebrew, Debian, Ubuntu, or container package
+          metadata.
 
           ## What's Changed
           See [docs/CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/CHANGELOG.md)

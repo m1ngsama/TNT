@@ -1,171 +1,268 @@
-CI / RELEASE GUIDE
-==================
+# CI/CD and Release Governance
 
-AUTOMATIC TESTING
------------------
-Every push or PR automatically runs:
-  - Build on Ubuntu
-  - AddressSanitizer build
-  - `make ci-test` (strict integration, anonymous access, connection limits,
-    and security feature checks)
-  - Release/package preflight (`make release-check`)
+TNT is a C SSH terminal chat server. The CI/CD system is designed for a public
+open-source project: fast feedback on pull requests, broader scheduled
+validation across target environments, reproducible release artifacts, and a
+manual production deployment boundary.
 
-Check status:
-  https://github.com/m1ngsama/TNT/actions
+Production deployment is intentionally manual. Workflows must not SSH into
+production, restart services, upload to OSS buckets, publish package-manager
+recipes, or mutate running servers.
 
-Production deployment is intentionally manual. The CI workflow must not SSH
-into production or restart services on push.
+## Pipeline Layers
 
+### PR Fast Gate
 
-CREATING RELEASES
------------------
-Release policy:
-  - Use SemVer-style tags: vMAJOR.MINOR.PATCH.
-  - Bump PATCH for compatible bug fixes and release hardening.
-  - Bump MINOR for new commands, new documented flags, JSON field additions,
-    or visible user-interface behavior changes.
-  - Bump MAJOR for incompatible command, config, storage, or package behavior.
-  - Keep GitHub draft release review manual. Do not auto-publish releases.
-  - Keep production deployment manual. Do not SSH into production from CI.
+Workflow: `.github/workflows/ci.yml`
 
-1. Update version metadata:
-   - include/common.h
-   - tnt.1
-   - docs/CHANGELOG.md
-   - packaging/arch/PKGBUILD
-   - packaging/homebrew/tnt-chat.rb
-   - packaging/debian/debian/changelog
-   - maintainer metadata, when preparing public package recipes
+Runs on pull requests targeting `main` or `release/**`, and pushes to `main`
+or `release/**`:
 
-2. Run the local preflight:
-   make release-check
+- Ubuntu 24.04 and macOS latest builds.
+- Normal build with `make`.
+- AddressSanitizer build with `make asan`.
+- Integration/security gate with `make ci-test`.
+- Local release/package preflight with `make release-check`.
 
-   For a longer local runtime gate before publishing or production rollout:
-   RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
+Purpose:
 
-3. Commit the release changes and create a local tag.  Do not push the tag
-   until strict checks pass:
-   git tag vX.Y.Z
+- Keep contributor feedback fast enough for normal review.
+- Catch build, integration, packaging metadata, and release-preflight regressions
+  before merge.
+- Avoid slow soak, valgrind, and container matrix jobs on every PR.
 
-4. Run strict release checks:
-   make release-check-strict
+### Extended and Nightly Validation
 
-   Strict mode requires the local `vX.Y.Z` tag to point at HEAD.  It also
-   builds from the tagged source archive, so it catches files that were left
-   untracked and would be missing from GitHub's source archive.
+Workflow: `.github/workflows/ci.yml`
 
-5. Push the tag:
-   git push origin vX.Y.Z
+Runs on `main` or `release/**` pushes, manual dispatch, and the nightly
+schedule:
 
-6. GitHub Actions automatically:
-   - Builds `tnt` and `tntctl` binaries (Linux/macOS, AMD64/ARM64)
-   - Creates a draft release
-   - Uploads binaries
-   - Generates one `checksums.txt` file
-   - Verifies that artifact architecture matches the asset name
+- `extended-linux-runtime`
+  - Runs `RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check`.
+  - Runs a valgrind smoke test against a temporary server.
+- `portable-container-builds`
+  - Builds in Debian stable glibc.
+  - Builds in Ubuntu 24.04 glibc.
+  - Builds in Alpine musl.
+- `package-recipe-gate`
+  - Syntax-checks shell scripts.
+  - Syntax-checks the Arch `PKGBUILD`.
+  - Syntax-checks the Homebrew formula.
+  - Assembles the Debian source tree.
 
-7. Review the draft release, smoke-test downloaded assets, then publish it
-   manually from GitHub.
+Purpose:
 
-8. Release appears at:
-   https://github.com/m1ngsama/TNT/releases
+- Broaden platform confidence without making every PR wait for the full matrix.
+- Detect musl/glibc portability issues early.
+- Keep package metadata reviewable before public registry submission.
 
+### Release Artifact Gates
 
-RELEASE REVIEW CHECKLIST
-------------------------
-Before publishing a draft release:
-  - Confirm `git tag` points at the intended commit.
-  - Download every release asset from GitHub, not from the local workspace.
-  - Verify downloaded assets against `checksums.txt` (`sha256sum -c
-    checksums.txt --ignore-missing` on Linux, or `shasum -a 256 -c` for each
-    downloaded asset on macOS).
-  - Run downloaded `tnt --version` and `tntctl --version`.
-  - Start a temporary server and check:
-      ssh -p 2222 server health
-      ssh -p 2222 server stats --json
-      ssh -p 2222 server users --json
-      ssh -p 2222 operator@server post "release smoke"
-      ssh -p 2222 server "tail -n 1"
-  - Check runtime dynamic links (`ldd` on Linux, `otool -L` on macOS) and make
-    sure `libssh` is documented for the target install path.
-  - Confirm `make release-check-strict` passed before pushing the tag.
-  - For package-manager recipes, download the final GitHub source archive,
-    replace Arch/Homebrew source checksums, then run:
-      SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
+Workflow: `.github/workflows/release.yml`
 
+Runs only for SemVer tags matching `vMAJOR.MINOR.PATCH`:
 
-ROLLBACK
---------
-Production rollback stays manual:
-  1. Keep the previous binary before replacing it.
-  2. Stop or restart only the intended `tnt` service.
-  3. Restore the previous binary if smoke checks fail.
-  4. Re-run `health`, `stats --json`, and one post/tail smoke test.
+- Verifies the tag matches `TNT_VERSION` through `scripts/check_release_ref.sh`.
+- Builds Linux glibc AMD64 and ARM64 binaries.
+- Builds macOS Intel and Apple Silicon binaries.
+- Verifies binary architecture labels.
+- Builds an explicit source archive: `tnt-chat-vX.Y.Z-source.tar.gz`.
+- Runs `scripts/package_release_assets.sh` to collect release assets, verify
+  expected asset names, verify binary architecture labels again after artifact
+  download, verify source archive contents, generate `checksums.txt`, and verify
+  the checksum file.
+- Creates a GitHub draft release only. Publishing stays manual.
 
-Do not overwrite `TNT_STATE_DIR` during rollback.  If a future release changes
-the message log format, its release notes must include the downgrade behavior.
+The release workflow does not publish package-manager recipes or deploy
+production servers.
 
+## Platform Policy
 
-DEPLOYING TO SERVERS
---------------------
-Deployments are operator-driven:
-  1. Build and test locally or in a temporary server directory.
-  2. Back up the installed binary.
-  3. Install the new binary.
-  4. Restart the service.
-  5. Run black-box checks (`health`, `stats --json`, `users --json`,
-     and a post/tail smoke test).
+Current release assets:
 
-The installer can still be used manually on a server:
-  curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+- Linux glibc AMD64: `tnt-linux-amd64`, `tntctl-linux-amd64`
+- Linux glibc ARM64: `tnt-linux-arm64`, `tntctl-linux-arm64`
+- macOS Intel: `tnt-darwin-amd64`, `tntctl-darwin-amd64`
+- macOS Apple Silicon: `tnt-darwin-arm64`, `tntctl-darwin-arm64`
+- Source archive: `tnt-chat-vX.Y.Z-source.tar.gz`
 
+Current CI validation:
 
-PRODUCTION SETUP (systemd)
----------------------------
-1. Install binary (see above)
+- Ubuntu 24.04
+- macOS latest
+- Debian stable glibc container build
+- Ubuntu 24.04 glibc container build
+- Alpine musl container build
 
-2. Setup service:
-   sudo useradd -r -s /bin/false tnt
-   sudo mkdir -p /var/lib/tnt
-   sudo chown tnt:tnt /var/lib/tnt
-   sudo cp tnt.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now tnt
+Package-manager routes:
 
-3. Check status:
-   sudo systemctl status tnt
-   sudo journalctl -u tnt -f
+- Debian/Ubuntu: maintain draft Debian metadata and start with a Launchpad PPA.
+- Arch/AUR: maintain `packaging/arch/PKGBUILD` and `.SRCINFO`; submit manually.
+- Homebrew/macOS: maintain a tap formula first; Homebrew core can wait for a
+  stable release cadence and broader adoption.
+- Source archive: every public package recipe must pin the final GitHub release
+  source archive checksum.
+- Containers: first stage is Docker-based build validation in CI. Publishing
+  images should wait until image labels, SBOM, provenance, CVE scanning, and
+  registry ownership are defined.
 
+## Release Policy
 
-UPDATING SERVERS
-----------------
-Manual binary replacement pattern:
-  backup=/usr/local/bin/tnt.bak-$(date +%Y%m%d%H%M%S)
-  sudo cp -a /usr/local/bin/tnt "$backup"
-  sudo install -m 755 ./tnt /usr/local/bin/tnt
-  sudo systemctl restart tnt
+- Use SemVer-style tags: `vMAJOR.MINOR.PATCH`.
+- Bump PATCH for compatible bug fixes and release hardening.
+- Bump MINOR for new commands, new documented flags, JSON field additions, or
+  visible user-interface behavior changes.
+- Bump MAJOR for incompatible command, config, storage, or package behavior.
+- Keep GitHub release publishing manual by using draft releases.
+- Keep production deployment manual.
 
+Update version metadata before tagging:
 
-PLATFORMS SUPPORTED
--------------------
-✓ Linux AMD64 (x86_64)
-✓ Linux ARM64 (aarch64)
-✓ macOS Intel (x86_64)
-✓ macOS Apple Silicon (arm64)
+- `include/common.h`
+- `tnt.1`
+- `tntctl.1`
+- `docs/CHANGELOG.md`
+- `packaging/arch/PKGBUILD`
+- `packaging/arch/.SRCINFO`
+- `packaging/homebrew/tnt-chat.rb`
+- `packaging/debian/debian/changelog`
 
+Local preflight:
 
-EXAMPLE WORKFLOW
-----------------
-# Local development
-make && make asan && make release-check
-./tnt
+```sh
+make release-check
+```
 
-# Create release
+Longer local runtime gate:
+
+```sh
+RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
+```
+
+Strict local release gate before pushing a tag:
+
+```sh
 git tag vX.Y.Z
-git push origin vX.Y.Z
-# Wait 5 minutes for builds
+make release-check-strict
+```
 
-# Deploy to production manually after validation
-ssh server "sudo install -m 755 /tmp/tnt-build/tnt /usr/local/bin/tnt"
-ssh server "sudo systemctl restart tnt"
-ssh -p 2222 server health
+Strict mode requires the local `vX.Y.Z` tag to point at `HEAD` and builds from
+the tagged source archive, so it catches files that were left untracked and
+would be missing from the release source archive.
+
+After strict checks pass:
+
+```sh
+git push origin vX.Y.Z
+```
+
+GitHub Actions then builds artifacts and opens a draft release. Review and
+publish that draft manually.
+
+## Release Review Checklist
+
+Before publishing a draft release:
+
+- Confirm the Git tag points at the intended commit.
+- Confirm the release workflow passed.
+- Download every release asset from GitHub, not from the local workspace.
+- Verify downloaded assets against `checksums.txt`.
+- Run downloaded `tnt --version` and `tntctl --version`.
+- Start a temporary server and check:
+
+  ```sh
+  ssh -p 2222 server health
+  ssh -p 2222 server stats --json
+  ssh -p 2222 server users --json
+  ssh -p 2222 operator@server post "release smoke"
+  ssh -p 2222 server "tail -n 1"
+  ```
+
+- Check runtime dynamic links with `ldd` on Linux or `otool -L` on macOS.
+- Confirm `libssh` runtime installation is documented for the target install
+  path.
+- Verify the explicit source archive checksum before updating Arch, Homebrew,
+  Debian, Ubuntu, or container package metadata.
+- Run package publication preflight after package recipes pin final source
+  checksums:
+
+  ```sh
+  SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z-source.tar.gz make package-publish-check
+  ```
+
+## Checksums
+
+Release assets include `checksums.txt`.
+
+Linux:
+
+```sh
+sha256sum -c checksums.txt --ignore-missing
+```
+
+macOS:
+
+```sh
+for f in tnt-* tntctl-* tnt-chat-*-source.tar.gz; do
+  grep "  $f$" checksums.txt | shasum -a 256 -c -
+done
+```
+
+## Supply Chain Roadmap
+
+Stage 1, implemented now:
+
+- Tag/version gate.
+- Draft release, manual publish.
+- Binary architecture validation.
+- Source archive validation.
+- SHA-256 checksums for every release asset.
+- Package recipe checksum preflight.
+
+Stage 2, next:
+
+- Generate an SBOM for release artifacts, preferably CycloneDX or SPDX.
+- Attach SBOM files to draft releases.
+- Add package lint jobs for Debian source packages, Arch packages, Homebrew
+  audit, and container image metadata.
+
+Stage 3, later:
+
+- Sign release checksums and/or artifacts with a documented maintainer key or
+  Sigstore flow.
+- Add SLSA provenance for GitHub Actions builds.
+- Define container image ownership, tag policy, vulnerability scan policy, and
+  rollback behavior before publishing images.
+
+## Manual Production Deployment
+
+Deployment remains operator-driven:
+
+1. Build and test locally or in a temporary server directory.
+2. Back up the installed binary.
+3. Install the new binary.
+4. Restart only the intended `tnt` service.
+5. Run black-box checks: `health`, `stats --json`, `users --json`, and one
+   post/tail smoke test.
+
+Manual binary replacement pattern:
+
+```sh
+backup=/usr/local/bin/tnt.bak-$(date +%Y%m%d%H%M%S)
+sudo cp -a /usr/local/bin/tnt "$backup"
+sudo install -m 755 ./tnt /usr/local/bin/tnt
+sudo systemctl restart tnt
+```
+
+## Rollback
+
+Production rollback stays manual:
+
+1. Keep the previous binary before replacing it.
+2. Stop or restart only the intended `tnt` service.
+3. Restore the previous binary if smoke checks fail.
+4. Re-run `health`, `stats --json`, and one post/tail smoke test.
+
+Do not overwrite `TNT_STATE_DIR` during rollback. If a future release changes
+the message log format, its release notes must include downgrade behavior.

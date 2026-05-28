@@ -2,22 +2,34 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
 
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-and-test:
+  pr-gate:
+    name: PR gate (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-latest]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install dependencies (Ubuntu)
       if: runner.os == 'Linux'
@@ -42,11 +54,26 @@ jobs:
     - name: Run release preflight
       run: make release-check
 
+  extended-linux-runtime:
+    name: Extended Linux runtime
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y expect libssh-dev valgrind
+
+    - name: Run extended release preflight
+      run: |
+        RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
+
     - name: Check for memory leaks
-      if: runner.os == 'Linux'
       run: |
         set -eu
-        sudo apt-get install -y valgrind
         STATE_DIR=$(mktemp -d)
         SERVER_LOG="$STATE_DIR/server.log"
         VALGRIND_LOG="$STATE_DIR/valgrind.log"
@@ -101,3 +128,60 @@ jobs:
           cat "$VALGRIND_LOG"
           exit 1
         fi
+
+  portable-container-builds:
+    name: Portable build (${{ matrix.name }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debian-stable-glibc
+            image: debian:stable-slim
+            setup: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential libssh-dev ca-certificates
+          - name: ubuntu-24.04-glibc
+            image: ubuntu:24.04
+            setup: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential libssh-dev ca-certificates
+          - name: alpine-musl
+            image: alpine:3.20
+            setup: apk add --no-cache build-base libssh-dev ca-certificates
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Build in container
+      run: |
+        docker run --rm -v "$PWD:/src:ro" "${{ matrix.image }}" sh -c '
+          set -eu
+          ${{ matrix.setup }}
+          mkdir /work
+          cp -R /src/. /work/
+          cd /work
+          make clean
+          make
+          ./tnt --version
+          ./tntctl --version
+        '
+
+  package-recipe-gate:
+    name: Package recipe gate
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Install packaging tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ruby cpio
+
+    - name: Validate packaging metadata
+      run: |
+        for script in scripts/*.sh; do
+          sh -n "$script"
+        done
+        bash -n packaging/arch/PKGBUILD
+        ruby -c packaging/homebrew/tnt-chat.rb
+        scripts/package_debian_source.sh "$RUNNER_TEMP/debian-source"

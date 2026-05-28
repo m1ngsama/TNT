@@ -6,7 +6,12 @@
 - Added a release tag/version guard used by the GitHub release workflow, so a
   `vX.Y.Z` tag must match `TNT_VERSION` before release assets are built.
 - Added `make package-publish-check` for verifying Arch/Homebrew source
-  checksums against the final GitHub source archive after a tag exists.
+  checksums against the explicit release source archive after a tag exists.
+- Added a release artifact gate that bundles Linux/macOS binaries, the explicit
+  release source archive, and `checksums.txt` before opening the draft release.
+- Added CI governance layers for fast PR checks, release-branch validation,
+  extended runtime validation, container portability builds, and package recipe
+  validation.
 - Added a `config_defaults` module and unit coverage for runtime default
   values, env keys, and accepted numeric ranges.
 - Added a dedicated `tntctl_text` module with unit coverage for local
@@ -53,7 +58,7 @@
   matches, avoiding the impression that the pager is a complete result set.
 - Release checks now separate tag/source-archive readiness from package-manager
   checksum publishing, avoiding self-referential checksum requirements before
-  the final GitHub source archive exists.
+  the explicit release source archive exists.
 - `tntctl --help` now gets its exec command list from `exec_catalog`, reducing
   duplicate command metadata between the local wrapper and SSH exec mode.
 - Updated `tnt(1)` to document the current TUI search and pager keys, and

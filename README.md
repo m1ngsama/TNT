@@ -398,14 +398,14 @@ make release-check
 Longer local preflight can opt into runtime soak and slow-client coverage:
 
 ```sh
-RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
+RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
 ```
 
-Before publishing package recipes, download the final GitHub source archive,
+Before publishing package recipes, download the explicit release source archive,
 replace placeholder checksums, and run:
 
 ```sh
-SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
+SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z-source.tar.gz make package-publish-check
 ```
 
 ## Files
