@@ -49,6 +49,21 @@ require_file_label() {
         fail "unexpected file type for $(basename "$path"): $label"
 }
 
+archive_has_entry() {
+    entry=$1
+
+    printf '%s\n' "$archive_listing" |
+        awk -v target="$entry" '$0 == target { found = 1 } END { exit found ? 0 : 1 }'
+}
+
+require_archive_entry() {
+    entry=$1
+    label=$2
+
+    archive_has_entry "$entry" ||
+        fail "source archive is missing $label"
+}
+
 verify_asset() {
     name=$1
     path=$2
@@ -69,13 +84,13 @@ verify_asset() {
             require_file_label "$path" 'Mach-O 64-bit.*arm64'
             ;;
         tnt-chat-v*-source.tar.gz)
-            tar -tzf "$path" >/dev/null
-            tar -tzf "$path" | grep -q "^TNT-$VERSION/LICENSE$" ||
-                fail "source archive is missing LICENSE"
-            tar -tzf "$path" | grep -q "^TNT-$VERSION/src/tntctl.c$" ||
-                fail "source archive is missing src/tntctl.c"
-            tar -tzf "$path" | grep -q "^TNT-$VERSION/packaging/README.md$" ||
-                fail "source archive is missing packaging/README.md"
+            archive_listing=$(tar -tzf "$path") ||
+                fail "source archive is not a readable tar.gz: $name"
+            require_archive_entry "TNT-$VERSION/LICENSE" "LICENSE"
+            require_archive_entry "TNT-$VERSION/src/tntctl.c" "src/tntctl.c"
+            require_archive_entry "TNT-$VERSION/packaging/README.md" "packaging/README.md"
+            require_archive_entry "TNT-$VERSION/tnt.1" "tnt.1"
+            require_archive_entry "TNT-$VERSION/tntctl.1" "tntctl.1"
             ;;
         *)
             fail "unexpected release artifact: $name"

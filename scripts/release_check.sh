@@ -198,6 +198,7 @@ sh -n install.sh
 sh -n scripts/check_release_ref.sh
 sh -n scripts/package_publish_check.sh
 sh -n scripts/package_release_assets.sh
+sh -n scripts/package_source_archive.sh
 scripts/check_release_ref.sh "v$version"
 bad_ref=v0.0.0
 [ "$version" != "0.0.0" ] || bad_ref=v9.9.9
@@ -266,13 +267,12 @@ if [ "$STRICT" -eq 1 ]; then
         fail "replace maintainer email placeholders before strict release"
 
     step "checking tagged source archive"
-    archive="$tmpdir/tnt-$version-source.tar.gz"
+    archive="$tmpdir/tnt-chat-v$version-source.tar.gz"
     archive_extract="$tmpdir/source"
     archive_install="$tmpdir/source-install"
     archive_root="$archive_extract/TNT-$version"
 
-    git archive --format=tar.gz --prefix="TNT-$version/" \
-        -o "$archive" "refs/tags/v$version"
+    scripts/package_source_archive.sh "refs/tags/v$version" "$tmpdir" >/dev/null
     mkdir -p "$archive_extract"
     tar -xzf "$archive" -C "$archive_extract"
 

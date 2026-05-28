@@ -109,16 +109,8 @@ jobs:
 
     - name: Build source archive
       run: |
-        set -eu
-        version=$(sed -n 's/^#define TNT_VERSION "\([^"]*\)".*/\1/p' include/common.h)
-        commit=$(git rev-list -n 1 "${GITHUB_REF_NAME}")
-        mkdir -p dist
-        git archive --format=tar.gz --prefix="TNT-${version}/" \
-          -o "dist/tnt-chat-v${version}-source.tar.gz" "$commit"
-        tar -tzf "dist/tnt-chat-v${version}-source.tar.gz" >/dev/null
-        tar -tzf "dist/tnt-chat-v${version}-source.tar.gz" | grep -q "^TNT-${version}/LICENSE$"
-        tar -tzf "dist/tnt-chat-v${version}-source.tar.gz" | grep -q "^TNT-${version}/packaging/README.md$"
-        sha256sum "dist/tnt-chat-v${version}-source.tar.gz"
+        archive=$(scripts/package_source_archive.sh "${GITHUB_REF_NAME}" dist)
+        sha256sum "$archive"
 
     - name: Upload source archive
       uses: actions/upload-artifact@v4
