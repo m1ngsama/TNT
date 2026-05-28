@@ -80,10 +80,21 @@ TEST(default_uses_locale_when_no_tnt_lang) {
 
 TEST(text_lookup_matches_language) {
     i18n_string_t sample = I18N_STRING("fallback", "替代");
+    i18n_string_t mapped = I18N_STRING_MAP(
+        I18N_EN("mapped fallback"),
+        I18N_ZH("映射替代")
+    );
+    i18n_string_t english_only = I18N_STRING_MAP(
+        I18N_EN("english only")
+    );
 
     assert(strcmp(i18n_string(sample, UI_LANG_EN), "fallback") == 0);
     assert(strcmp(i18n_string(sample, UI_LANG_ZH), "替代") == 0);
     assert(strcmp(i18n_string(sample, (ui_lang_t)99), "fallback") == 0);
+    assert(strcmp(i18n_string(mapped, UI_LANG_EN), "mapped fallback") == 0);
+    assert(strcmp(i18n_string(mapped, UI_LANG_ZH), "映射替代") == 0);
+    assert(strcmp(i18n_string(english_only, UI_LANG_ZH),
+                  "english only") == 0);
 
     assert(strstr(i18n_text(UI_LANG_EN, I18N_USERNAME_PROMPT),
                   "display name") != NULL);

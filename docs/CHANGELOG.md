@@ -113,6 +113,9 @@
   the packaged systemd unit, and release preflight checks that metadata.
 - The Homebrew formula draft now defines a `brew services` entry that runs the
   installed `tnt` binary with state under `var/tnt`.
+- The i18n helper now supports language-keyed string initializers through
+  `I18N_STRING_MAP`, so future languages can be added incrementally without
+  changing every existing two-language string initializer.
 - Split UI-language parsing from localized text lookup: `src/i18n.c` now owns
   locale/code parsing, while `src/i18n_text.c` owns the table-driven text
   catalog with coverage checks for every message ID.

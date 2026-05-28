@@ -480,6 +480,10 @@ keys.
      fragments.
    - Keep placeholders visible and stable, for example `%s`, `%d`,
      `<user>`, and `<message>`.
+   - Use `I18N_STRING(en, zh)` for ordinary two-language entries.  Use
+     `I18N_STRING_MAP(I18N_EN(...), I18N_ZH(...))` when an entry needs
+     language-keyed initialization so future languages can be added without
+     changing every existing initializer.
    - Every new user-facing string needs tests for at least English fallback
      and Chinese output while this project has two UI languages.
 
@@ -488,7 +492,8 @@ keys.
 The current `src/i18n_text.c` implementation is a small-project translation
 table implemented in C, not a full gettext catalog.  It is acceptable for two
 languages because message lookup is already split from language parsing in
-`src/i18n.c`, but adding more languages should move toward catalog-like
+`src/i18n.c`, and localized strings can now be initialized by language key.
+Adding many more languages should still move toward external catalog-like
 storage instead of adding ad hoc branches for every locale.
 
 Relevant conventions:

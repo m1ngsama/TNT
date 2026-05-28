@@ -7,8 +7,12 @@ typedef struct {
     const char *text[UI_LANG_COUNT];
 } i18n_string_t;
 
+#define I18N_LANG_TEXT(lang, value) [lang] = (value)
+#define I18N_EN(value) I18N_LANG_TEXT(UI_LANG_EN, value)
+#define I18N_ZH(value) I18N_LANG_TEXT(UI_LANG_ZH, value)
+#define I18N_STRING_MAP(...) {{ __VA_ARGS__ }}
 #define I18N_STRING(en_text, zh_text) \
-    {{ [UI_LANG_EN] = (en_text), [UI_LANG_ZH] = (zh_text) }}
+    I18N_STRING_MAP(I18N_EN(en_text), I18N_ZH(zh_text))
 
 typedef enum {
     I18N_USERNAME_PROMPT,
