@@ -26,12 +26,12 @@ After editing `PKGBUILD`, regenerate `.SRCINFO`:
 makepkg --printsrcinfo > .SRCINFO
 ```
 
-Before AUR submission, replace `sha256sums=('SKIP')` with the real GitHub
+Before AUR submission, replace `sha256sums=('SKIP')` with the real release
 source archive checksum, regenerate `.SRCINFO`, then run the package publish
 check:
 
 ```sh
-SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
+SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z-source.tar.gz make package-publish-check
 ```
 
 ## Manual AUR submission

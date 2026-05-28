@@ -113,8 +113,8 @@ Goal: make regressions harder to introduce.
 
 These are the next changes that should happen before new feature work expands the surface area.
 
-1. Replace remaining source-archive checksum placeholders only after the final
-   GitHub source archive exists, then run `make package-publish-check`.
+1. Replace remaining source-archive checksum placeholders only after the
+   explicit release source archive exists, then run `make package-publish-check`.
 2. Create or move the `vX.Y.Z` tag only when the release commit is final, then
    run `make release-check-strict` before pushing it.
 3. Decide whether admin-only moderation controls belong in 1.0.x or should

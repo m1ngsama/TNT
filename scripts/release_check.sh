@@ -28,7 +28,7 @@ Environment:
 Strict checks additionally require a clean tree, a vX.Y.Z tag at HEAD, a
 matching changelog release section, non-placeholder maintainer metadata, and a
 build from the tagged source archive.  Run `make package-publish-check` after
-the final GitHub source archive exists to verify package checksums.
+the explicit release source archive exists to verify package checksums.
 USAGE
 }
 
@@ -78,8 +78,12 @@ grep -q "^pkgname=tnt-chat$" packaging/arch/PKGBUILD ||
     fail "packaging/arch/PKGBUILD pkgname is not tnt-chat"
 grep -q "^pkgname = tnt-chat$" packaging/arch/.SRCINFO ||
     fail "packaging/arch/.SRCINFO pkgname is not tnt-chat"
-grep -q "v${version}.tar.gz" packaging/homebrew/tnt-chat.rb ||
-    fail "packaging/homebrew/tnt-chat.rb URL does not match v$version"
+grep -q '${pkgname}-v${pkgver}-source.tar.gz' packaging/arch/PKGBUILD ||
+    fail "packaging/arch/PKGBUILD source must use the release source archive"
+grep -q "tnt-chat-v${version}-source.tar.gz" packaging/arch/.SRCINFO ||
+    fail "packaging/arch/.SRCINFO source does not match v$version release archive"
+grep -q "tnt-chat-v${version}-source.tar.gz" packaging/homebrew/tnt-chat.rb ||
+    fail "packaging/homebrew/tnt-chat.rb URL does not match v$version release archive"
 grep -q "^class TntChat < Formula$" packaging/homebrew/tnt-chat.rb ||
     fail "packaging/homebrew/tnt-chat.rb formula class is not TntChat"
 grep -q 'depends_on "libssh"' packaging/homebrew/tnt-chat.rb ||
@@ -193,6 +197,7 @@ step "checking installer syntax"
 sh -n install.sh
 sh -n scripts/check_release_ref.sh
 sh -n scripts/package_publish_check.sh
+sh -n scripts/package_release_assets.sh
 scripts/check_release_ref.sh "v$version"
 bad_ref=v0.0.0
 [ "$version" != "0.0.0" ] || bad_ref=v9.9.9

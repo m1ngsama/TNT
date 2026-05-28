@@ -34,16 +34,16 @@ ruby -c packaging/homebrew/tnt-chat.rb
 2. Download or hash the release source archive:
 
    ```sh
-   curl -L -o dist/tnt-chat-vX.Y.Z.tar.gz \
-     https://github.com/m1ngsama/TNT/archive/refs/tags/vX.Y.Z.tar.gz
-   shasum -a 256 dist/tnt-chat-vX.Y.Z.tar.gz
+   curl -L -o dist/tnt-chat-vX.Y.Z-source.tar.gz \
+     https://github.com/m1ngsama/TNT/releases/download/vX.Y.Z/tnt-chat-vX.Y.Z-source.tar.gz
+   shasum -a 256 dist/tnt-chat-vX.Y.Z-source.tar.gz
    ```
 
 3. Replace `REPLACE_WITH_RELEASE_TARBALL_SHA256` in `tnt-chat.rb`.
 4. Run:
 
    ```sh
-   SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z.tar.gz make package-publish-check
+   SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z-source.tar.gz make package-publish-check
    ```
 
 5. Copy the formula into the tap repository and open a normal review PR.

@@ -23,12 +23,21 @@ sha256_of() {
 
 version=$(sed -n 's/^#define TNT_VERSION "\([^"]*\)".*/\1/p' include/common.h)
 [ -n "$version" ] || fail "could not read TNT_VERSION from include/common.h"
+release_source="tnt-chat-v${version}-source.tar.gz"
 
 source_tarball=${SOURCE_TARBALL:-${RELEASE_SOURCE_TARBALL:-}}
 [ -n "$source_tarball" ] ||
-    fail "set SOURCE_TARBALL to the final GitHub source archive"
+    fail "set SOURCE_TARBALL to the explicit release source archive"
 [ -f "$source_tarball" ] ||
     fail "SOURCE_TARBALL does not exist: $source_tarball"
+tar -tzf "$source_tarball" >/dev/null ||
+    fail "SOURCE_TARBALL is not a readable tar.gz archive"
+tar -tzf "$source_tarball" | grep -q "^TNT-$version/LICENSE$" ||
+    fail "SOURCE_TARBALL is missing LICENSE"
+tar -tzf "$source_tarball" | grep -q "^TNT-$version/packaging/README.md$" ||
+    fail "SOURCE_TARBALL is missing packaging/README.md"
+tar -tzf "$source_tarball" | grep -q "^TNT-$version/src/tntctl.c$" ||
+    fail "SOURCE_TARBALL is missing src/tntctl.c"
 
 ! grep -R "REPLACE_WITH_EMAIL" packaging/arch packaging/debian >/dev/null ||
     fail "replace maintainer email placeholders before package publishing"
@@ -60,8 +69,12 @@ grep -q "^pkgver=$version$" packaging/arch/PKGBUILD ||
     fail "PKGBUILD pkgver does not match $version"
 grep -q "pkgver = $version" packaging/arch/.SRCINFO ||
     fail ".SRCINFO pkgver does not match $version"
-grep -q "v${version}.tar.gz" packaging/homebrew/tnt-chat.rb ||
-    fail "Homebrew URL does not match v$version"
+grep -q '${pkgname}-v${pkgver}-source.tar.gz' packaging/arch/PKGBUILD ||
+    fail "PKGBUILD source must use the release source archive"
+grep -q "$release_source" packaging/arch/.SRCINFO ||
+    fail ".SRCINFO source does not match $release_source"
+grep -q "$release_source" packaging/homebrew/tnt-chat.rb ||
+    fail "Homebrew URL does not match $release_source"
 grep -q "^tnt-chat (${version}-1)" packaging/debian/debian/changelog ||
     fail "Debian changelog version does not match $version"
 

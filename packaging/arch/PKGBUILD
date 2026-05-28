@@ -9,7 +9,7 @@ url='https://github.com/m1ngsama/TNT'
 license=('MIT')
 depends=('libssh')
 makedepends=('gcc' 'make')
-source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz"
+source=("${pkgname}-v${pkgver}-source.tar.gz::${url}/releases/download/v${pkgver}/${pkgname}-v${pkgver}-source.tar.gz"
         "${pkgname}.sysusers")
 sha256sums=('SKIP'
             '8a1f7dfbdc9f1305c4ed50d80e89f91333ffdf937890c497f93e41abaf76e3ed')
