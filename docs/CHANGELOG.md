@@ -116,6 +116,8 @@
 - Added `scripts/package_debian_source.sh` and `make debian-source-package`
   to assemble Debian/Ubuntu source-package trees from the current project
   without publishing or uploading anything.
+- Release preflight now smoke-tests the staged installed `tnt` binary's
+  `--log-check` and `--log-recover` modes, catching package artifact drift.
 - The i18n helper now supports language-keyed string initializers through
   `I18N_STRING_MAP`, so future languages can be added incrementally without
   changing every existing two-language string initializer.

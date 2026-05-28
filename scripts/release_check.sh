@@ -158,6 +158,36 @@ make DESTDIR="$tmpdir" PREFIX=/usr install-systemd
 grep -q "^ExecStart=/usr/bin/tnt$" "$tmpdir/usr/lib/systemd/system/tnt.service" ||
     fail "systemd unit ExecStart does not match PREFIX=/usr install path"
 
+step "checking installed log maintenance modes"
+log_smoke="$tmpdir/messages.log"
+recovered_log="$tmpdir/recovered.messages.log"
+recover_report="$tmpdir/recovered.report"
+smoke_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cat > "$log_smoke" <<EOF
+$smoke_ts|alice|one
+$smoke_ts|mallory|extra|pipe
+$smoke_ts|bob|two
+EOF
+if "$tmpdir/usr/bin/tnt" --log-check "$log_smoke" >"$tmpdir/log-check.out" 2>&1; then
+    fail "installed tnt --log-check should report invalid records"
+fi
+grep -q '^valid_records 2$' "$tmpdir/log-check.out" ||
+    fail "installed tnt --log-check did not report valid records"
+grep -q '^invalid_records 1$' "$tmpdir/log-check.out" ||
+    fail "installed tnt --log-check did not report invalid records"
+if "$tmpdir/usr/bin/tnt" --log-recover "$log_smoke" \
+        >"$recovered_log" 2>"$recover_report"; then
+    fail "installed tnt --log-recover should report invalid records"
+fi
+grep -q "$smoke_ts|alice|one" "$recovered_log" ||
+    fail "installed tnt --log-recover missed alice record"
+grep -q "$smoke_ts|bob|two" "$recovered_log" ||
+    fail "installed tnt --log-recover missed bob record"
+! grep -q 'mallory' "$recovered_log" ||
+    fail "installed tnt --log-recover preserved invalid record"
+grep -q '^invalid_records 1$' "$recover_report" ||
+    fail "installed tnt --log-recover did not report invalid records"
+
 step "checking installer syntax"
 sh -n install.sh
 
