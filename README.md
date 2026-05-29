@@ -114,6 +114,7 @@ Command output pages use `j/k`, `Ctrl+D/U`, and `g/G` for paging.  `:inbox`
 shows incoming and sent private messages newest-first; press `r` to refresh it
 manually, and it refreshes when a new private message arrives while the inbox
 is open. `:reply text` and `:r text` send to the latest private-message peer.
+Unread incoming private messages are marked with `*` until `:inbox` renders.
 Private messages are per-session only and are not written to `messages.log`.
 
 **Special messages (INSERT mode)**

@@ -82,6 +82,7 @@ static void client_append_whisper(client_t *owner, const char *from,
     snprintf(owner->whisper_inbox[slot].content,
              sizeof(owner->whisper_inbox[slot].content), "%s", content);
     owner->whisper_inbox[slot].outgoing = outgoing;
+    owner->whisper_inbox[slot].unread = count_unread;
     snprintf(owner->last_whisper_peer, sizeof(owner->last_whisper_peer), "%s",
              outgoing ? to : from);
     if (count_unread) {
@@ -142,6 +143,9 @@ static void append_inbox_output(client_t *client, char *output,
     snap_count = client->whisper_inbox_count;
     memcpy(snapshot, client->whisper_inbox,
            snap_count * sizeof(whisper_t));
+    for (int i = 0; i < snap_count; i++) {
+        client->whisper_inbox[i].unread = false;
+    }
     client->unread_whispers = 0;
     pthread_mutex_unlock(&client->whisper_lock);
 
@@ -157,6 +161,7 @@ static void append_inbox_output(client_t *client, char *output,
     for (int i = snap_count - 1; i >= 0; i--) {
         char ts[20];
         char peer[MAX_USERNAME_LEN + 16];
+        const char *marker = snapshot[i].unread ? "\033[1;35m*\033[0m" : " ";
         struct tm tmi;
         localtime_r(&snapshot[i].timestamp, &tmi);
         strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
@@ -169,8 +174,8 @@ static void append_inbox_output(client_t *client, char *output,
             snprintf(peer, sizeof(peer), "%s", snapshot[i].from);
         }
         buffer_appendf(output, buf_size, pos,
-                       "  \033[90m%s\033[0m  \033[35m%s\033[0m: %s\n",
-                       ts, peer, snapshot[i].content);
+                       "  %s \033[90m%s\033[0m  \033[35m%s\033[0m: %s\n",
+                       marker, ts, peer, snapshot[i].content);
     }
 }
 

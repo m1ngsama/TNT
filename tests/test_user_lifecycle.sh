@@ -273,6 +273,18 @@ else
 fi
 BOB_PID=""
 
+if grep -q '.*alice.*private lifecycle second' "$STATE_DIR/bob.log" &&
+   grep -q '\*.*alice.*private lifecycle second' "$STATE_DIR/bob.log" &&
+   grep -q '\*.*bob.*private lifecycle reply' "$STATE_DIR/alice.log"; then
+    echo "✓ unread private messages are visibly marked in inbox"
+    PASS=$((PASS + 1))
+else
+    echo "✗ inbox unread marker missing"
+    sed -n '1,220p' "$STATE_DIR/bob.log"
+    sed -n '1,260p' "$STATE_DIR/alice.log"
+    FAIL=$((FAIL + 1))
+fi
+
 TAIL_OUTPUT=$(ssh $SSH_EXEC_OPTS localhost "tail -n 10" 2>/dev/null || true)
 printf '%s\n' "$TAIL_OUTPUT" | grep -q 'hello lifecycle alpha' &&
 printf '%s\n' "$TAIL_OUTPUT" | grep -q 'alice2 ships lifecycle'

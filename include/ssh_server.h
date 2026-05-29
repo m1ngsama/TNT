@@ -17,6 +17,7 @@ typedef struct {
     char to[MAX_USERNAME_LEN];
     char content[MAX_MESSAGE_LEN];
     bool outgoing;
+    bool unread;
 } whisper_t;
 
 typedef enum {

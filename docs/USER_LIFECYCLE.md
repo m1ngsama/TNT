@@ -38,7 +38,8 @@ The product path should stay short:
   reconnect.
 - `:inbox` is live enough for normal chat use: it can be refreshed with `r`
   and refreshes automatically when a new private message arrives while the
-  inbox is open.
+  inbox is open. Incoming unread messages are marked with `*` until the inbox
+  renders them.
 - `:reply` / `:r` keeps the private-message path keyboard-short: it answers
   the latest private-message peer in the current session without retyping a
   username.
