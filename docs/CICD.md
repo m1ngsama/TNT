@@ -1,7 +1,7 @@
 # CI/CD and Release Governance
 
 TNT is a C SSH terminal chat server. The CI/CD system is designed for a public
-open-source project: fast feedback on pull requests, broader scheduled
+open-source project: fast feedback on pull requests, broader push and manual
 validation across target environments, reproducible release artifacts, and a
 manual production deployment boundary.
 
@@ -31,12 +31,11 @@ Purpose:
   before merge.
 - Avoid slow soak, valgrind, and container matrix jobs on every PR.
 
-### Extended and Nightly Validation
+### Extended Validation
 
 Workflow: `.github/workflows/ci.yml`
 
-Runs on `main` or `release/**` pushes, manual dispatch, and the nightly
-schedule:
+Runs on `main` or `release/**` pushes and manual dispatch:
 
 - `extended-linux-runtime`
   - Runs `RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check`.

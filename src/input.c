@@ -822,9 +822,11 @@ void input_run_session(client_t *client) {
     if (client->exec_command[0] != '\0' || client->exec_command_too_long) {
         int exit_status = exec_dispatch(client);
         ssh_channel_request_send_exit_status(client->channel, exit_status);
+        ssh_blocking_flush(client->session, 1000);
         ssh_channel_send_eof(client->channel);
         ssh_blocking_flush(client->session, 1000);
         ssh_channel_close(client->channel);
+        ssh_blocking_flush(client->session, 1000);
         goto cleanup;
     }
 

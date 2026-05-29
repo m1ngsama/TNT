@@ -6,8 +6,6 @@ on:
   pull_request:
     branches: [ main, 'release/**' ]
   workflow_dispatch:
-  schedule:
-    - cron: '17 3 * * *'
 
 permissions:
   contents: read
@@ -56,7 +54,7 @@ jobs:
 
   extended-linux-runtime:
     name: Extended Linux runtime
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-24.04
 
     steps:
@@ -131,7 +129,7 @@ jobs:
 
   portable-container-builds:
     name: Portable build (${{ matrix.name }})
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -166,7 +164,7 @@ jobs:
 
   package-recipe-gate:
     name: Package recipe gate
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-24.04
 
     steps:
