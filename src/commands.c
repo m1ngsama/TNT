@@ -52,6 +52,42 @@ static void append_command_usage(char *output, size_t buf_size, size_t *pos,
     command_catalog_append_usage(output, buf_size, pos, id, lang);
 }
 
+static bool message_visible_for_client(const client_t *client,
+                                       const message_t *msg) {
+    return !client || !client->mute_joins ||
+           !system_message_is_join_leave(msg);
+}
+
+static void client_append_whisper(client_t *owner, const char *from,
+                                  const char *to, const char *content,
+                                  bool outgoing, bool count_unread) {
+    if (!owner || !from || !to || !content) return;
+
+    pthread_mutex_lock(&owner->whisper_lock);
+    int slot;
+    if (owner->whisper_inbox_count < WHISPER_INBOX_SIZE) {
+        slot = owner->whisper_inbox_count++;
+    } else {
+        memmove(&owner->whisper_inbox[0],
+                &owner->whisper_inbox[1],
+                (WHISPER_INBOX_SIZE - 1) * sizeof(whisper_t));
+        slot = WHISPER_INBOX_SIZE - 1;
+    }
+
+    owner->whisper_inbox[slot].timestamp = time(NULL);
+    snprintf(owner->whisper_inbox[slot].from,
+             sizeof(owner->whisper_inbox[slot].from), "%s", from);
+    snprintf(owner->whisper_inbox[slot].to,
+             sizeof(owner->whisper_inbox[slot].to), "%s", to);
+    snprintf(owner->whisper_inbox[slot].content,
+             sizeof(owner->whisper_inbox[slot].content), "%s", content);
+    owner->whisper_inbox[slot].outgoing = outgoing;
+    if (count_unread) {
+        owner->unread_whispers++;
+    }
+    pthread_mutex_unlock(&owner->whisper_lock);
+}
+
 static void append_inbox_output(client_t *client, char *output,
                                 size_t buf_size, size_t *pos) {
     whisper_t snapshot[WHISPER_INBOX_SIZE];
@@ -73,14 +109,23 @@ static void append_inbox_output(client_t *client, char *output,
                        "  \033[2;37m%s\033[0m\n",
                        i18n_text(client->ui_lang, I18N_INBOX_EMPTY));
     }
-    for (int i = 0; i < snap_count; i++) {
+    for (int i = snap_count - 1; i >= 0; i--) {
         char ts[20];
+        char peer[MAX_USERNAME_LEN + 16];
         struct tm tmi;
         localtime_r(&snapshot[i].timestamp, &tmi);
         strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
+        if (snapshot[i].outgoing) {
+            snprintf(peer, sizeof(peer),
+                     i18n_text(client->ui_lang,
+                               I18N_INBOX_SENT_TO_FORMAT),
+                     snapshot[i].to);
+        } else {
+            snprintf(peer, sizeof(peer), "%s", snapshot[i].from);
+        }
         buffer_appendf(output, buf_size, pos,
                        "  \033[90m%s\033[0m  \033[35m%s\033[0m: %s\n",
-                       ts, snapshot[i].from, snapshot[i].content);
+                       ts, peer, snapshot[i].content);
     }
 }
 
@@ -251,28 +296,12 @@ void commands_dispatch(client_t *client) {
             pthread_rwlock_unlock(&g_room->lock);
 
             if (target) {
-                /* Push into recipient's inbox.  whisper_lock serialises so
-                 * two senders to the same recipient don't tear the ring. */
-                pthread_mutex_lock(&target->whisper_lock);
-                int slot;
-                if (target->whisper_inbox_count < WHISPER_INBOX_SIZE) {
-                    slot = target->whisper_inbox_count++;
-                } else {
-                    /* FIFO evict the oldest */
-                    memmove(&target->whisper_inbox[0],
-                            &target->whisper_inbox[1],
-                            (WHISPER_INBOX_SIZE - 1) * sizeof(whisper_t));
-                    slot = WHISPER_INBOX_SIZE - 1;
+                client_append_whisper(target, client->username, target_name,
+                                      rest, false, true);
+                if (target != client) {
+                    client_append_whisper(client, client->username,
+                                          target_name, rest, true, false);
                 }
-                target->whisper_inbox[slot].timestamp = time(NULL);
-                snprintf(target->whisper_inbox[slot].from,
-                         sizeof(target->whisper_inbox[slot].from),
-                         "%s", client->username);
-                snprintf(target->whisper_inbox[slot].content,
-                         sizeof(target->whisper_inbox[slot].content),
-                         "%s", rest);
-                target->unread_whispers++;
-                pthread_mutex_unlock(&target->whisper_lock);
 
                 /* Audible nudge — the title bar ✉ counter (UX-11 style)
                  * carries the persistent signal. */
@@ -374,17 +403,31 @@ void commands_dispatch(client_t *client) {
         }
 
         message_t *last_msgs = NULL;
-        int last_count = message_load(&last_msgs, n);
+        int load_count = message_load(&last_msgs,
+                                      client->mute_joins ? MAX_MESSAGES : n);
+        int visible_count = 0;
+        for (int i = 0; i < load_count; i++) {
+            if (message_visible_for_client(client, &last_msgs[i])) {
+                last_msgs[visible_count++] = last_msgs[i];
+            }
+        }
+        int start = visible_count > n ? visible_count - n : 0;
+        int last_count = visible_count - start;
         buffer_appendf(output, sizeof(output), &pos,
                        i18n_text(client->ui_lang, I18N_LAST_HEADER_FORMAT),
                        last_count);
+        if (last_count == 0) {
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->ui_lang, I18N_LAST_EMPTY));
+        }
         for (int i = 0; i < last_count; i++) {
+            message_t *msg = &last_msgs[start + i];
             char ts[20];
             struct tm tmi;
-            localtime_r(&last_msgs[i].timestamp, &tmi);
+            localtime_r(&msg->timestamp, &tmi);
             strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
             buffer_appendf(output, sizeof(output), &pos,
-                           "[%s] %s: %s\n", ts, last_msgs[i].username, last_msgs[i].content);
+                           "[%s] %s: %s\n", ts, msg->username, msg->content);
         }
         free(last_msgs);
 
@@ -396,23 +439,38 @@ void commands_dispatch(client_t *client) {
                                  TNT_COMMAND_SEARCH, client->ui_lang);
         } else {
             message_t *found = NULL;
-            int found_count = message_search(query, &found, 15);
+            int search_limit = client->mute_joins ? MAX_MESSAGES : 15;
+            int found_count = message_search(query, &found, search_limit);
+            int visible_count = 0;
+            for (int i = 0; i < found_count; i++) {
+                if (message_visible_for_client(client, &found[i])) {
+                    found[visible_count++] = found[i];
+                }
+            }
+            int start = visible_count > 15 ? visible_count - 15 : 0;
+            int display_count = visible_count - start;
             buffer_appendf(output, sizeof(output), &pos,
                            i18n_text(client->ui_lang,
                                      I18N_SEARCH_HEADER_FORMAT),
-                           query, found_count);
-            for (int i = 0; i < found_count; i++) {
+                           query, display_count);
+            if (display_count == 0) {
+                buffer_appendf(output, sizeof(output), &pos, "%s",
+                               i18n_text(client->ui_lang,
+                                         I18N_SEARCH_EMPTY));
+            }
+            for (int i = 0; i < display_count; i++) {
+                message_t *msg = &found[start + i];
                 char ts[20];
                 struct tm tmi;
-                localtime_r(&found[i].timestamp, &tmi);
+                localtime_r(&msg->timestamp, &tmi);
                 strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
                 buffer_appendf(output, sizeof(output), &pos,
                                "[%s] ", ts);
                 append_highlighted(output, sizeof(output), &pos,
-                                   found[i].username, query);
+                                   msg->username, query);
                 buffer_appendf(output, sizeof(output), &pos, ": ");
                 append_highlighted(output, sizeof(output), &pos,
-                                   found[i].content, query);
+                                   msg->content, query);
                 buffer_appendf(output, sizeof(output), &pos, "\n");
             }
             free(found);

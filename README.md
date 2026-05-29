@@ -78,7 +78,7 @@ past the limit is ignored with a terminal bell.
 ```
 Opens at latest messages
 Stays pinned to latest until you scroll up
-i          - Return to INSERT mode
+i/a/o      - Return to INSERT mode
 :          - Enter COMMAND mode
 j/k        - Scroll down/up one line
 Ctrl+D/U   - Scroll half page down/up
@@ -109,8 +109,10 @@ ESC                  - Return to NORMAL mode
 ```
 
 Command output pages use `j/k`, `Ctrl+D/U`, and `g/G` for paging.  `:inbox`
-is live: press `r` to refresh it manually, and it refreshes when a new private
-message arrives while the inbox is open.
+shows incoming and sent private messages newest-first; press `r` to refresh it
+manually, and it refreshes when a new private message arrives while the inbox
+is open. Private messages are per-session only and are not written to
+`messages.log`.
 
 **Special messages (INSERT mode)**
 ```
@@ -223,7 +225,8 @@ tntctl -l operator chat.example.com post "service notice"
 ### Log Maintenance
 
 Persisted public history is stored as `messages.log` in the TNT state
-directory.  For manual maintenance, archive and compact it with:
+directory. Private messages and local inbox state are intentionally excluded.
+For manual maintenance, archive and compact it with:
 
 ```sh
 scripts/logrotate.sh /var/lib/tnt/messages.log 100 10000

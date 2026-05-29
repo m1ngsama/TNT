@@ -14,7 +14,9 @@
 typedef struct {
     time_t timestamp;
     char from[MAX_USERNAME_LEN];
+    char to[MAX_USERNAME_LEN];
     char content[MAX_MESSAGE_LEN];
+    bool outgoing;
 } whisper_t;
 
 typedef enum {
@@ -63,6 +65,8 @@ typedef struct client {
     size_t outbox_len;
     size_t outbox_pos;
     size_t outbox_capacity;
+    char *render_buffer;             /* Reused main-screen render buffer */
+    size_t render_buffer_capacity;
     /* Per-client whisper inbox.  Protected separately from SSH channel I/O
      * so slow writes do not block in-memory private-message delivery. */
     whisper_t whisper_inbox[WHISPER_INBOX_SIZE];

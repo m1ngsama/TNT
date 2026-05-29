@@ -30,7 +30,7 @@ COMMANDS (COMMAND mode, prefix with :)
   nick <name>            change nickname
   msg <user> <message>   send private message
   w <user> <text>        alias for msg
-  inbox                  show private messages
+  inbox                  show private messages, newest first
   last [N]               last N messages from log (default 10, max 50)
   search <keyword>       search full history (case-insensitive, 15 results)
   mute-joins             toggle join/leave notifications
@@ -45,6 +45,7 @@ INSERT MODE
   paste                  multi-line paste stays in the input buffer
   limit                  1023 bytes/message; over-limit input rings bell
   normal                 opens/follows latest; k/PgUp older, j/PgDn newer
+  insert aliases         i/a/o enter INSERT mode from NORMAL
 
 EXEC COMMANDS
   health                 print service health
@@ -94,7 +95,7 @@ LIMITS
   1024 bytes/message
 
 FILES
-  messages.log      chat log (RFC3339)
+  messages.log      public chat log (RFC3339; excludes private messages)
   host_key          SSH key (auto-generated)
   motd.txt          message of the day (optional)
   CHANGELOG.md      version history

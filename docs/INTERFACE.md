@@ -157,6 +157,17 @@ posted
 In anonymous-access mode, the SSH login name is not authenticated.  Operators
 should configure `TNT_ACCESS_TOKEN` before relying on exec-post identity.
 
+## Interactive Private Messages
+
+`:msg user message` and its `:w` alias deliver private messages only to online
+interactive clients.  They are not persisted to `messages.log` and are not
+included in exec `tail`, exec `dump`, `:last`, or `:search`.
+
+Each participant keeps a bounded in-memory `:inbox` for the current session.
+Recipients see incoming private messages; senders see local sent-message
+copies.  `:inbox` displays newest messages first, can be refreshed with `r`,
+and refreshes automatically while open when a new private message arrives.
+
 ### `help`
 
 Prints a localized human-readable command summary.  It is intended for people,

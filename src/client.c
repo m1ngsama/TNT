@@ -237,6 +237,7 @@ void client_release(client_t *client) {
             free(client->channel_cb);
         }
         free(client->outbox);
+        free(client->render_buffer);
         pthread_mutex_destroy(&client->io_lock);
         pthread_mutex_destroy(&client->whisper_lock);
         pthread_mutex_destroy(&client->ref_lock);

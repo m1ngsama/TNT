@@ -13,7 +13,7 @@ void manual_text_append_interactive(char *buffer, size_t buf_size,
         "\n"
         "\033[1;37mUse\033[0m\n"
         "  Type, Enter sends; Up/Down recalls; Tab completes @mentions\n"
-        "  Esc browses; / searches; G latest; i types; : commands; ? keys\n"
+        "  Esc browses; / searches; G latest; i/a/o types; : commands; ? keys\n"
         "\n"
         "\033[1;37mCommands\033[0m\n",
         "\033[1;36mTNT(1) 帮助\033[0m\n"
@@ -23,7 +23,7 @@ void manual_text_append_interactive(char *buffer, size_t buf_size,
         "\n"
         "\033[1;37m使用\033[0m\n"
         "  输入并 Enter 发送；Up/Down 调出消息；Tab 补全 @mention\n"
-        "  Esc 浏览；/ 搜索；G 最新；i 输入；: 命令；? 按键\n"
+        "  Esc 浏览；/ 搜索；G 最新；i/a/o 输入；: 命令；? 按键\n"
         "\n"
         "\033[1;37m命令\033[0m\n"
     );

@@ -21,6 +21,25 @@ static const char *username_color(const char *name) {
     return colors[h % 6];
 }
 
+static char *client_render_buffer(client_t *client, size_t min_size) {
+    if (!client || min_size == 0) {
+        return NULL;
+    }
+
+    if (client->render_buffer_capacity >= min_size) {
+        return client->render_buffer;
+    }
+
+    char *grown = realloc(client->render_buffer, min_size);
+    if (!grown) {
+        return NULL;
+    }
+
+    client->render_buffer = grown;
+    client->render_buffer_capacity = min_size;
+    return client->render_buffer;
+}
+
 static void format_message_colored(const message_t *msg, char *buffer,
                                    size_t buf_size, int width,
                                    const char *my_username) {
@@ -245,7 +264,7 @@ void tui_render_screen(client_t *client) {
     if (render_height < 4) render_height = 4;
 
     const size_t buf_size = (size_t)(render_height + 10) * (MAX_MESSAGE_LEN + 64) + 2048;
-    char *buffer = malloc(buf_size);
+    char *buffer = client_render_buffer(client, buf_size);
     if (!buffer) return;
     size_t pos = 0;
     buffer[0] = '\0';
@@ -255,6 +274,7 @@ void tui_render_screen(client_t *client) {
     int online = g_room->client_count;
     int msg_count = g_room->message_count;
     pthread_rwlock_unlock(&g_room->lock);
+    int raw_msg_count = msg_count;
 
     /* Calculate which messages to show.  The initial slice is capped by
      * message count; the lock-held copy below tightens "latest" slices so
@@ -280,47 +300,95 @@ void tui_render_screen(client_t *client) {
     int end = start + msg_height;
     if (end > msg_count) end = msg_count;
 
-    /* Allocate snapshot outside the lock to avoid blocking writers */
+    message_t *visible_messages = NULL;
     message_t *msg_snapshot = NULL;
-    int snapshot_capacity = msg_height;
-    int snapshot_count = end - start;
+    int snapshot_count = 0;
 
-    if (snapshot_count > 0 && snapshot_capacity > 0) {
-        msg_snapshot = calloc(snapshot_capacity, sizeof(message_t));
+    if (client->mute_joins && msg_count > 0) {
+        visible_messages = calloc(MAX_MESSAGES, sizeof(message_t));
+        if (visible_messages) {
+            int visible_count = 0;
+
+            pthread_rwlock_rdlock(&g_room->lock);
+            online = g_room->client_count;
+            raw_msg_count = g_room->message_count;
+            for (int i = 0; i < g_room->message_count; i++) {
+                if (!system_message_is_join_leave(&g_room->messages[i])) {
+                    visible_messages[visible_count++] = g_room->messages[i];
+                }
+            }
+            pthread_rwlock_unlock(&g_room->lock);
+
+            msg_count = visible_count;
+            latest_scroll_start = history_view_max_scroll(msg_count, msg_height);
+            anchor_latest = client->mode != MODE_NORMAL ||
+                            client->follow_tail ||
+                            client->scroll_pos >= latest_scroll_start;
+            if (client->mode == MODE_NORMAL) {
+                start = client->scroll_pos;
+                if (start > latest_scroll_start) {
+                    start = latest_scroll_start;
+                }
+                if (start < 0) start = 0;
+            } else {
+                start = latest_scroll_start;
+            }
+            end = start + msg_height;
+            if (end > msg_count) end = msg_count;
+            if (anchor_latest) {
+                start = history_view_latest_start_for_height(
+                    visible_messages, msg_count, msg_height);
+                end = msg_count;
+            }
+            snapshot_count = end - start;
+            if (snapshot_count > 0) {
+                msg_snapshot = visible_messages + start;
+            }
+        }
     }
 
-    /* Second pass under lock: copy messages */
-    if (msg_snapshot) {
-        pthread_rwlock_rdlock(&g_room->lock);
-        /* Re-clamp in case msg_count changed */
-        int actual_count = g_room->message_count;
-        int actual_start = start;
-        int actual_end = end;
-        if (anchor_latest) {
-            actual_end = actual_count;
-            actual_start = history_view_latest_start_for_height(
-                g_room->messages, actual_count, msg_height);
-        } else {
-            actual_end = (actual_end <= actual_count) ? actual_end : actual_count;
-            actual_start = (actual_start < actual_end) ? actual_start : actual_end;
+    if (!visible_messages) {
+        /* Allocate snapshot outside the lock to avoid blocking writers */
+        int snapshot_capacity = msg_height;
+        snapshot_count = end - start;
+
+        if (snapshot_count > 0 && snapshot_capacity > 0) {
+            msg_snapshot = calloc(snapshot_capacity, sizeof(message_t));
         }
-        int actual_snapshot = actual_end - actual_start;
-        if (actual_snapshot > 0 && actual_snapshot <= snapshot_capacity) {
-            memcpy(msg_snapshot, &g_room->messages[actual_start],
-                   actual_snapshot * sizeof(message_t));
-            start = actual_start;
-            end = actual_end;
-            snapshot_count = actual_snapshot;
-        } else {
-            snapshot_count = 0;
+
+        /* Second pass under lock: copy messages */
+        if (msg_snapshot) {
+            pthread_rwlock_rdlock(&g_room->lock);
+            /* Re-clamp in case msg_count changed */
+            int actual_count = g_room->message_count;
+            int actual_start = start;
+            int actual_end = end;
+            if (anchor_latest) {
+                actual_end = actual_count;
+                actual_start = history_view_latest_start_for_height(
+                    g_room->messages, actual_count, msg_height);
+            } else {
+                actual_end = (actual_end <= actual_count) ? actual_end : actual_count;
+                actual_start = (actual_start < actual_end) ? actual_start : actual_end;
+            }
+            int actual_snapshot = actual_end - actual_start;
+            if (actual_snapshot > 0 && actual_snapshot <= snapshot_capacity) {
+                memcpy(msg_snapshot, &g_room->messages[actual_start],
+                       actual_snapshot * sizeof(message_t));
+                start = actual_start;
+                end = actual_end;
+                snapshot_count = actual_snapshot;
+            } else {
+                snapshot_count = 0;
+            }
+            pthread_rwlock_unlock(&g_room->lock);
         }
-        pthread_rwlock_unlock(&g_room->lock);
     }
 
     /* Now render using snapshot (no lock held) */
 
     /* If mute_joins is set, remove join/leave messages from snapshot in place */
-    if (client->mute_joins && msg_snapshot) {
+    if (client->mute_joins && msg_snapshot && !anchor_latest) {
         int filtered = 0;
         for (int i = 0; i < snapshot_count; i++) {
             if (!system_message_is_join_leave(&msg_snapshot[i])) {
@@ -513,8 +581,25 @@ void tui_render_screen(client_t *client) {
             buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
             rows_written++;
         }
-        free(msg_snapshot);
     }
+
+    if (rows_written == 0) {
+        const char *empty_text =
+            client->mute_joins && raw_msg_count > 0
+                ? i18n_text(client->ui_lang, I18N_EMPTY_FILTERED)
+                : i18n_text(client->ui_lang, I18N_EMPTY_ROOM);
+        int empty_width = utf8_string_width(empty_text);
+        int empty_pad = (render_width - empty_width) / 2;
+        if (empty_pad < 0) empty_pad = 0;
+        for (int i = 0; i < empty_pad; i++) {
+            buffer_append_bytes(buffer, buf_size, &pos, " ", 1);
+        }
+        buffer_appendf(buffer, buf_size, &pos,
+                       "\033[2;37m%s\033[0m\033[K\r\n", empty_text);
+        rows_written++;
+    }
+
+    free(visible_messages ? visible_messages : msg_snapshot);
 
     /* Fill empty lines and clear them */
     for (int i = rows_written; i < msg_height; i++) {
@@ -531,7 +616,6 @@ void tui_render_screen(client_t *client) {
     tui_status_append(buffer, buf_size, &pos, client, msg_count, start, end);
 
     client_send(client, buffer, pos);
-    free(buffer);
 }
 
 /* Render the input line.
@@ -606,6 +690,23 @@ void tui_render_input(client_t *client, const char *input) {
     }
 
     client_send(client, buffer, strlen(buffer));
+}
+
+void tui_render_command_input(client_t *client) {
+    if (!client || !client->connected) return;
+
+    int rh = client->height;
+    if (rh < 4) rh = 4;
+
+    char buffer[sizeof(client->command_input) + 64];
+    size_t pos = 0;
+    buffer[0] = '\0';
+
+    buffer_appendf(buffer, sizeof(buffer), &pos,
+                   "\033[%d;1H" ANSI_CLEAR_LINE, rh);
+    tui_status_append(buffer, sizeof(buffer), &pos, client, 0, 0, 0);
+
+    client_send(client, buffer, pos);
 }
 
 /* Render the command output screen */

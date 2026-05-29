@@ -37,7 +37,10 @@ existing append-only logs remain readable.
 - `|`, `\n`, and `\r` in content become spaces.
 - Timestamps are written in UTC.
 
-Private messages are not written to `messages.log`.
+Private messages are not written to `messages.log`.  `:inbox` stores incoming
+and sent private-message copies only in each participant's live session memory,
+so inbox state is lost on disconnect and never appears in `tail`, `dump`,
+`:last`, or `:search`.
 
 ## Replay And Search
 

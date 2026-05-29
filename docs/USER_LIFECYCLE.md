@@ -32,8 +32,10 @@ The product path should stay short:
   parallel support commands for the same task.
 - Command syntax stays ASCII even in localized UI text. Translations explain;
   they do not change the command language.
-- Private messages are visible only in the recipient inbox and are not written
-  to `messages.log`.
+- Private messages are visible in each participant's in-memory `:inbox`:
+  recipients see incoming messages, senders see local sent-message copies,
+  newest first.  They are not written to `messages.log` and do not survive a
+  reconnect.
 - `:inbox` is live enough for normal chat use: it can be refreshed with `r`
   and refreshes automatically when a new private message arrives while the
   inbox is open.
@@ -47,10 +49,10 @@ The product path should stay short:
 - second user joins and is visible through `users --json`
 - first user opens `?`, checks `:users`, sends a public message, scrolls, uses
   `:last` and `:search`
-- first user toggles `:mute-joins`, sends `:msg`, changes nickname, sends
-  `/me`, and exits
-- second user opens `:inbox` before the private message arrives and sees it
-  auto-refresh after delivery
+- first user toggles `:mute-joins`, sends two `:msg` messages, confirms sent
+  copies in `:inbox`, changes nickname, sends `/me`, and exits
+- second user opens `:inbox` before the private messages arrive and sees it
+  auto-refresh after delivery, newest first
 - exec `tail` sees public messages
 - `messages.log` contains public history and excludes private-message content
 
