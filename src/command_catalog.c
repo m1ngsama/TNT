@@ -50,11 +50,11 @@ static const command_catalog_entry_t entries[] = {
     },
     {
         {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}},
+        I18N_STRING(":inbox, :inbox clear", ":inbox, :inbox clear"),
+        I18N_STRING("Show or clear private messages", "查看或清空私信"),
         I18N_STRING(":inbox", ":inbox"),
-        I18N_STRING("Show private messages", "查看私信"),
-        I18N_STRING(":inbox", ":inbox"),
-        I18N_STRING("Usage: inbox\n", "用法: inbox\n"),
-        2, true, false
+        I18N_STRING("Usage: inbox [clear]\n", "用法: inbox [clear]\n"),
+        2, false, false
     },
     {
         {TNT_COMMAND_NICK, "nick", {"nick", "name", NULL}},
@@ -238,6 +238,9 @@ bool command_catalog_args_valid(tnt_command_id_t id, const char *args) {
 
     if (!entry) {
         return false;
+    }
+    if (id == TNT_COMMAND_INBOX) {
+        return !args || args[0] == '\0' || strcmp(args, "clear") == 0;
     }
     if (entry->no_args) {
         return !args || args[0] == '\0';

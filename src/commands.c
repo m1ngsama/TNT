@@ -179,6 +179,15 @@ static void append_inbox_output(client_t *client, char *output,
     }
 }
 
+static void clear_inbox(client_t *client) {
+    pthread_mutex_lock(&client->whisper_lock);
+    memset(client->whisper_inbox, 0, sizeof(client->whisper_inbox));
+    client->whisper_inbox_count = 0;
+    client->unread_whispers = 0;
+    client->last_whisper_peer[0] = '\0';
+    pthread_mutex_unlock(&client->whisper_lock);
+}
+
 bool commands_refresh_active_output(client_t *client) {
     char output[MAX_COMMAND_OUTPUT_LEN] = {0};
     size_t pos = 0;
@@ -361,8 +370,17 @@ void commands_dispatch(client_t *client) {
         }
 
     } else if (command_id == TNT_COMMAND_INBOX) {
-        output_kind = TNT_COMMAND_OUTPUT_INBOX;
-        append_inbox_output(client, output, sizeof(output), &pos);
+        const char *inbox_arg = arg;
+        while (*inbox_arg == ' ') inbox_arg++;
+        if (strcmp(inbox_arg, "clear") == 0) {
+            clear_inbox(client);
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->ui_lang,
+                                     I18N_INBOX_CLEARED));
+        } else {
+            output_kind = TNT_COMMAND_OUTPUT_INBOX;
+            append_inbox_output(client, output, sizeof(output), &pos);
+        }
 
     } else if (command_id == TNT_COMMAND_NICK) {
         const char *new_name = arg;

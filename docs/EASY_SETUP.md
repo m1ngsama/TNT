@@ -82,6 +82,7 @@ Common commands:
 :msg <user> <message> send private message
 :reply <message>      reply to latest private message
 :inbox                show private messages
+:inbox clear          clear private messages
 :last [N]             recent messages
 :search <keyword>     search message history
 :lang en|zh           switch UI language

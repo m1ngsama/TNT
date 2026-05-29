@@ -137,6 +137,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "you -> %s",
         "你 -> %s"
     ),
+    [I18N_INBOX_CLEARED] = I18N_STRING(
+        "Private messages cleared\n",
+        "私信已清空\n"
+    ),
     [I18N_NICK_INVALID] = I18N_STRING(
         "Invalid username\n",
         "用户名无效\n"

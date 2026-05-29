@@ -33,6 +33,7 @@ COMMANDS (COMMAND mode, prefix with :)
   reply <text>           reply to latest private message
   r <text>               alias for reply
   inbox                  show private messages, newest first
+  inbox clear            clear private messages for this session
   last [N]               last N messages from log (default 10, max 50)
   search <keyword>       search full history (case-insensitive, 15 results)
   mute-joins             toggle join/leave notifications

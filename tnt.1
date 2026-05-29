@@ -223,6 +223,7 @@ l l.
 :reply \fItext\fR	Reply to latest private message
 :r \fItext\fR	Short alias for :reply
 :inbox	Show private messages, newest first
+:inbox clear	Clear private messages for this session
 :last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
 :search \fIkeyword\fR	Case\-insensitive search; shows the last 15 matches
 :mute\-joins	Toggle join/leave system notifications on/off
@@ -259,7 +260,10 @@ until the inbox renders them.  Use
 .B :reply
 or
 .B :r
-to answer the latest private-message peer.  Private messages are not written to
+to answer the latest private-message peer.
+.B :inbox clear
+removes private messages and the reply target for this session.  Private
+messages are not written to
 .IR messages.log .
 .SH EXEC INTERFACE
 Commands can be run non\-interactively for scripting:

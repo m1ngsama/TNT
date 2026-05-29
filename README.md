@@ -99,6 +99,7 @@ Ctrl+C     - Exit chat
 :reply <text>        - Reply to latest private message
 :r <text>            - Short alias for :reply
 :inbox               - Show private messages
+:inbox clear         - Clear private messages for this session
 :last [N]            - Show last N messages from history (max 50, default 10)
 :search <keyword>    - Search message history (shows last 15 matches)
 :mute-joins          - Toggle join/leave system notifications
@@ -115,6 +116,7 @@ shows incoming and sent private messages newest-first; press `r` to refresh it
 manually, and it refreshes when a new private message arrives while the inbox
 is open. `:reply text` and `:r text` send to the latest private-message peer.
 Unread incoming private messages are marked with `*` until `:inbox` renders.
+`:inbox clear` removes private messages and the reply target for this session.
 Private messages are per-session only and are not written to `messages.log`.
 
 **Special messages (INSERT mode)**

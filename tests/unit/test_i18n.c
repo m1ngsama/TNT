@@ -160,6 +160,10 @@ TEST(text_lookup_matches_language) {
                   "you ->") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_INBOX_SENT_TO_FORMAT),
                   "你 ->") != NULL);
+    assert(strstr(i18n_text(UI_LANG_EN, I18N_INBOX_CLEARED),
+                  "cleared") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH, I18N_INBOX_CLEARED),
+                  "清空") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_SEARCH_HEADER_FORMAT),
                   "Search") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_SEARCH_HEADER_FORMAT),
