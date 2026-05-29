@@ -138,9 +138,11 @@ static void append_inbox_output(client_t *client, char *output,
                                 size_t buf_size, size_t *pos) {
     whisper_t snapshot[WHISPER_INBOX_SIZE];
     int snap_count;
+    int unread_count;
 
     pthread_mutex_lock(&client->whisper_lock);
     snap_count = client->whisper_inbox_count;
+    unread_count = client->unread_whispers;
     memcpy(snapshot, client->whisper_inbox,
            snap_count * sizeof(whisper_t));
     for (int i = 0; i < snap_count; i++) {
@@ -150,9 +152,18 @@ static void append_inbox_output(client_t *client, char *output,
     pthread_mutex_unlock(&client->whisper_lock);
 
     buffer_appendf(output, buf_size, pos,
-                   "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
+                   "\033[1;36m%s\033[0m  \033[2;37m· %d",
                    i18n_text(client->ui_lang, I18N_INBOX_TITLE),
                    snap_count);
+    if (unread_count > 0) {
+        buffer_appendf(output, buf_size, pos,
+                       " · ");
+        buffer_appendf(output, buf_size, pos,
+                       i18n_text(client->ui_lang,
+                                 I18N_INBOX_UNREAD_FORMAT),
+                       unread_count);
+    }
+    buffer_appendf(output, buf_size, pos, "\033[0m\n");
     if (snap_count == 0) {
         buffer_appendf(output, buf_size, pos,
                        "  \033[2;37m%s\033[0m\n",

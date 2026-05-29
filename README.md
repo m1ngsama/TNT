@@ -116,6 +116,8 @@ shows incoming and sent private messages newest-first; press `r` to refresh it
 manually, and it refreshes when a new private message arrives while the inbox
 is open. `:reply text` and `:r text` send to the latest private-message peer.
 Unread incoming private messages are marked with `*` until `:inbox` renders.
+The inbox title shows a transient unread count when new private messages are
+present.
 `:inbox clear` removes private messages and the reply target for this session.
 Private messages are per-session only and are not written to `messages.log`.
 

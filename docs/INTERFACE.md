@@ -168,8 +168,9 @@ persisted to `messages.log` and are not included in exec `tail`, exec `dump`,
 Each participant keeps a bounded in-memory `:inbox` for the current session.
 Recipients see incoming private messages; senders see local sent-message
 copies.  Unread incoming messages are marked with `*` until `:inbox` renders.
-`:inbox` displays newest messages first, can be refreshed with `r`, and
-refreshes automatically while open when a new private message arrives.
+`:inbox` displays newest messages first, shows a transient unread count, can
+be refreshed with `r`, and refreshes automatically while open when a new
+private message arrives.
 `:inbox clear` removes the current session's private messages, unread count,
 and reply target.
 
