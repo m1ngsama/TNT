@@ -61,6 +61,7 @@ typedef struct client {
     _Atomic int pending_bells;       /* Bell nudges for this client's loop */
     _Atomic int unread_mentions;     /* @-mentions received since last reset */
     _Atomic int unread_whispers;     /* whispers received since last :inbox view */
+    char last_whisper_peer[MAX_USERNAME_LEN];  /* Most recent private-message peer */
     char *outbox;                    /* Bounded queued output for interactive writes */
     size_t outbox_len;
     size_t outbox_pos;

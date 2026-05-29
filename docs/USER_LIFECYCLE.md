@@ -12,8 +12,8 @@ The product path should stay short:
 5. User presses Esc to browse history with Vim-style movement.
 6. User uses `:help` for the concise manual or `?` for the full key reference.
 7. User searches from NORMAL with `/term`, or uses commands when needed:
-   `:users`, `:msg`, `:inbox`, `:last`, `:search`, `:nick`, `:mute-joins`,
-   and `:q`.
+   `:users`, `:msg`, `:reply`, `:inbox`, `:last`, `:search`, `:nick`,
+   `:mute-joins`, and `:q`.
 8. Scripts and operators use `tntctl` or SSH exec commands for `health`,
    `stats`, `users`, `tail`, `dump`, and `post`.
 
@@ -39,6 +39,9 @@ The product path should stay short:
 - `:inbox` is live enough for normal chat use: it can be refreshed with `r`
   and refreshes automatically when a new private message arrives while the
   inbox is open.
+- `:reply` / `:r` keeps the private-message path keyboard-short: it answers
+  the latest private-message peer in the current session without retyping a
+  username.
 - Long command output uses a small pager so `:last` and `:search` are readable
   on small terminals.
 
@@ -49,10 +52,12 @@ The product path should stay short:
 - second user joins and is visible through `users --json`
 - first user opens `?`, checks `:users`, sends a public message, scrolls, uses
   `:last` and `:search`
-- first user toggles `:mute-joins`, sends two `:msg` messages, confirms sent
-  copies in `:inbox`, changes nickname, sends `/me`, and exits
-- second user opens `:inbox` before the private messages arrive and sees it
-  auto-refresh after delivery, newest first
+- first user toggles `:mute-joins`, sends two `:msg` messages, receives a
+  `:reply`, confirms private-message copies in `:inbox`, changes nickname,
+  sends `/me`, and exits
+- second user opens `:inbox` before the private messages arrive, sees it
+  auto-refresh after delivery, newest first, and replies without retyping the
+  sender's username
 - exec `tail` sees public messages
 - `messages.log` contains public history and excludes private-message content
 

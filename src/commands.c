@@ -82,10 +82,55 @@ static void client_append_whisper(client_t *owner, const char *from,
     snprintf(owner->whisper_inbox[slot].content,
              sizeof(owner->whisper_inbox[slot].content), "%s", content);
     owner->whisper_inbox[slot].outgoing = outgoing;
+    snprintf(owner->last_whisper_peer, sizeof(owner->last_whisper_peer), "%s",
+             outgoing ? to : from);
     if (count_unread) {
         owner->unread_whispers++;
     }
     pthread_mutex_unlock(&owner->whisper_lock);
+}
+
+static void send_private_message(client_t *client, const char *target_name,
+                                 const char *content, char *output,
+                                 size_t buf_size, size_t *pos) {
+    bool found = false;
+    client_t *target = NULL;
+
+    pthread_rwlock_rdlock(&g_room->lock);
+    for (int i = 0; i < g_room->client_count; i++) {
+        if (strcmp(g_room->clients[i]->username, target_name) == 0) {
+            target = g_room->clients[i];
+            client_addref(target);
+            found = true;
+            break;
+        }
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+
+    if (target) {
+        client_append_whisper(target, client->username, target_name,
+                              content, false, true);
+        if (target != client) {
+            client_append_whisper(client, client->username, target_name,
+                                  content, true, false);
+        }
+
+        /* Audible nudge: the title bar whisper counter carries the
+         * persistent signal without cross-client SSH writes. */
+        client_queue_bell(target);
+        client_release(target);
+    }
+
+    if (found) {
+        buffer_appendf(output, buf_size, pos,
+                       i18n_text(client->ui_lang, I18N_MSG_SENT_FORMAT),
+                       target_name);
+    } else {
+        buffer_appendf(output, buf_size, pos,
+                       i18n_text(client->ui_lang,
+                                 I18N_MSG_USER_NOT_FOUND_FORMAT),
+                       target_name);
+    }
 }
 
 static void append_inbox_output(client_t *client, char *output,
@@ -282,43 +327,31 @@ void commands_dispatch(client_t *client) {
             append_command_usage(output, sizeof(output), &pos,
                                  TNT_COMMAND_MSG, client->ui_lang);
         } else {
-            bool found = false;
-            client_t *target = NULL;
-            pthread_rwlock_rdlock(&g_room->lock);
-            for (int i = 0; i < g_room->client_count; i++) {
-                if (strcmp(g_room->clients[i]->username, target_name) == 0) {
-                    target = g_room->clients[i];
-                    client_addref(target);
-                    found = true;
-                    break;
-                }
-            }
-            pthread_rwlock_unlock(&g_room->lock);
+            send_private_message(client, target_name, rest, output,
+                                 sizeof(output), &pos);
+        }
 
-            if (target) {
-                client_append_whisper(target, client->username, target_name,
-                                      rest, false, true);
-                if (target != client) {
-                    client_append_whisper(client, client->username,
-                                          target_name, rest, true, false);
-                }
+    } else if (command_id == TNT_COMMAND_REPLY) {
+        const char *message = arg;
+        char target_name[MAX_USERNAME_LEN] = {0};
 
-                /* Audible nudge — the title bar ✉ counter (UX-11 style)
-                 * carries the persistent signal. */
-                client_queue_bell(target);
-                client_release(target);
-            }
+        while (*message == ' ') message++;
+        if (message[0] == '\0') {
+            append_command_usage(output, sizeof(output), &pos,
+                                 TNT_COMMAND_REPLY, client->ui_lang);
+        } else {
+            pthread_mutex_lock(&client->whisper_lock);
+            snprintf(target_name, sizeof(target_name), "%s",
+                     client->last_whisper_peer);
+            pthread_mutex_unlock(&client->whisper_lock);
 
-            if (found) {
-                buffer_appendf(output, sizeof(output), &pos,
+            if (target_name[0] == '\0') {
+                buffer_appendf(output, sizeof(output), &pos, "%s",
                                i18n_text(client->ui_lang,
-                                         I18N_MSG_SENT_FORMAT),
-                               target_name);
+                                         I18N_REPLY_NO_TARGET));
             } else {
-                buffer_appendf(output, sizeof(output), &pos,
-                               i18n_text(client->ui_lang,
-                                         I18N_MSG_USER_NOT_FOUND_FORMAT),
-                               target_name);
+                send_private_message(client, target_name, message, output,
+                                     sizeof(output), &pos);
             }
         }
 

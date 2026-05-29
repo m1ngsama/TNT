@@ -80,6 +80,7 @@ Common commands:
 :users                online users
 :nick <name>          change nickname
 :msg <user> <message> send private message
+:reply <message>      reply to latest private message
 :inbox                show private messages
 :last [N]             recent messages
 :search <keyword>     search message history

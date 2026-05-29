@@ -121,6 +121,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "User '%s' not found\n",
         "未找到用户 '%s'\n"
     ),
+    [I18N_REPLY_NO_TARGET] = I18N_STRING(
+        "No private message to reply to\n",
+        "没有可回复的私信\n"
+    ),
     [I18N_INBOX_TITLE] = I18N_STRING(
         "Private messages",
         "私信"

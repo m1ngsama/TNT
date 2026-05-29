@@ -37,6 +37,18 @@ static const command_catalog_entry_t entries[] = {
         2, false, true
     },
     {
+        {TNT_COMMAND_REPLY, "reply", {"reply", "r", NULL}},
+        I18N_STRING(":reply <message>, :r <message>",
+                    ":reply <message>, :r <message>"),
+        I18N_STRING("Reply to latest private message", "回复最近私信"),
+        I18N_STRING(":reply <message>", ":reply <message>"),
+        I18N_STRING("Usage: reply <message>\n"
+                    "       r <message>\n",
+                    "用法: reply <message>\n"
+                    "      r <message>\n"),
+        2, false, true
+    },
+    {
         {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}},
         I18N_STRING(":inbox", ":inbox"),
         I18N_STRING("Show private messages", "查看私信"),

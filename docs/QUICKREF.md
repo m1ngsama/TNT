@@ -30,6 +30,8 @@ COMMANDS (COMMAND mode, prefix with :)
   nick <name>            change nickname
   msg <user> <message>   send private message
   w <user> <text>        alias for msg
+  reply <text>           reply to latest private message
+  r <text>               alias for reply
   inbox                  show private messages, newest first
   last [N]               last N messages from log (default 10, max 50)
   search <keyword>       search full history (case-insensitive, 15 results)

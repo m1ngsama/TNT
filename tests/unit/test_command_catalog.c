@@ -35,6 +35,14 @@ TEST(matches_canonical_names_and_aliases) {
     assert(id == TNT_COMMAND_MSG);
     assert(strcmp(args, "alice hello") == 0);
 
+    assert(command_catalog_match("reply hello back", &id, &args));
+    assert(id == TNT_COMMAND_REPLY);
+    assert(strcmp(args, "hello back") == 0);
+
+    assert(command_catalog_match("r hello back", &id, &args));
+    assert(id == TNT_COMMAND_REPLY);
+    assert(strcmp(args, "hello back") == 0);
+
     assert(command_catalog_match("language zh", &id, &args));
     assert(id == TNT_COMMAND_LANG);
     assert(strcmp(args, "zh") == 0);
@@ -65,6 +73,8 @@ TEST(validates_argument_shapes) {
 
     assert(!command_catalog_args_valid(TNT_COMMAND_MSG, NULL));
     assert(command_catalog_args_valid(TNT_COMMAND_MSG, "alice hello"));
+    assert(!command_catalog_args_valid(TNT_COMMAND_REPLY, ""));
+    assert(command_catalog_args_valid(TNT_COMMAND_REPLY, "hello back"));
     assert(!command_catalog_args_valid(TNT_COMMAND_SEARCH, ""));
     assert(command_catalog_args_valid(TNT_COMMAND_SEARCH, "needle"));
 
@@ -92,6 +102,7 @@ TEST(generates_localized_help_sections) {
     assert(strstr(en, ":users, :list, :who") != NULL);
     assert(strstr(en, "Show online users") != NULL);
     assert(strstr(en, ":msg <user> <message>") != NULL);
+    assert(strstr(en, ":reply <message>") != NULL);
     assert(strstr(en, "Show private messages") != NULL);
     assert(strstr(en, ":support") == NULL);
 
@@ -99,6 +110,7 @@ TEST(generates_localized_help_sections) {
     assert(strstr(zh, "显示在线用户") != NULL);
     assert(strstr(zh, "查看私信") != NULL);
     assert(strstr(zh, ":msg <user> <message>") != NULL);
+    assert(strstr(zh, ":reply <message>") != NULL);
     assert(strstr(zh, "<用户>") == NULL);
     assert(strstr(zh, "<消息>") == NULL);
     assert(strstr(zh, ":support") == NULL);
@@ -119,6 +131,13 @@ TEST(generates_localized_usage) {
     assert(strcmp(en, "Usage: last [N]  (N: 1-50, default 10)\n") == 0);
     assert(strcmp(zh, "用法: msg <user> <message>\n"
                       "      w <user> <message>\n") == 0);
+
+    en[0] = '\0';
+    en_pos = 0;
+    command_catalog_append_usage(en, sizeof(en), &en_pos,
+                                 TNT_COMMAND_REPLY, UI_LANG_EN);
+    assert(strcmp(en, "Usage: reply <message>\n"
+                      "       r <message>\n") == 0);
 
     en[0] = '\0';
     en_pos = 0;

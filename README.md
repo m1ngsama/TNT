@@ -96,6 +96,8 @@ Ctrl+C     - Exit chat
 :nick <name>         - Change nickname
 :msg <user> <message> - Send private message
 :w <user> <text>     - Short alias for :msg
+:reply <text>        - Reply to latest private message
+:r <text>            - Short alias for :reply
 :inbox               - Show private messages
 :last [N]            - Show last N messages from history (max 50, default 10)
 :search <keyword>    - Search message history (shows last 15 matches)
@@ -111,8 +113,8 @@ ESC                  - Return to NORMAL mode
 Command output pages use `j/k`, `Ctrl+D/U`, and `g/G` for paging.  `:inbox`
 shows incoming and sent private messages newest-first; press `r` to refresh it
 manually, and it refreshes when a new private message arrives while the inbox
-is open. Private messages are per-session only and are not written to
-`messages.log`.
+is open. `:reply text` and `:r text` send to the latest private-message peer.
+Private messages are per-session only and are not written to `messages.log`.
 
 **Special messages (INSERT mode)**
 ```

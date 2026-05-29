@@ -148,6 +148,10 @@ TEST(text_lookup_matches_language) {
                   "Private message sent") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_MSG_SENT_FORMAT),
                   "私信已发送") != NULL);
+    assert(strstr(i18n_text(UI_LANG_EN, I18N_REPLY_NO_TARGET),
+                  "No private message") != NULL);
+    assert(strstr(i18n_text(UI_LANG_ZH, I18N_REPLY_NO_TARGET),
+                  "可回复") != NULL);
     assert(strstr(i18n_text(UI_LANG_EN, I18N_INBOX_TITLE),
                   "Private messages") != NULL);
     assert(strstr(i18n_text(UI_LANG_ZH, I18N_INBOX_TITLE),
