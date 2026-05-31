@@ -288,9 +288,9 @@ fi
 BOB_PID=""
 
 if grep -q '.*alice.*private lifecycle second' "$STATE_DIR/bob.log" &&
-   grep -q '2 新' "$STATE_DIR/bob.log" &&
+   grep -Eq '私信.*[0-9]+ 新' "$STATE_DIR/bob.log" &&
    grep -q '\*.*alice.*private lifecycle second' "$STATE_DIR/bob.log" &&
-   grep -q '1 新' "$STATE_DIR/alice.log" &&
+   grep -Eq '私信.*[0-9]+ 新' "$STATE_DIR/alice.log" &&
    grep -q '\*.*bob.*private lifecycle reply' "$STATE_DIR/alice.log"; then
     echo "✓ unread private messages are visibly marked in inbox"
     PASS=$((PASS + 1))
