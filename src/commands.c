@@ -385,9 +385,12 @@ void commands_dispatch(client_t *client) {
         while (*inbox_arg == ' ') inbox_arg++;
         if (strcmp(inbox_arg, "clear") == 0) {
             clear_inbox(client);
+            output_kind = TNT_COMMAND_OUTPUT_INBOX;
             buffer_appendf(output, sizeof(output), &pos, "%s",
                            i18n_text(client->ui_lang,
                                      I18N_INBOX_CLEARED));
+            buffer_appendf(output, sizeof(output), &pos, "\n");
+            append_inbox_output(client, output, sizeof(output), &pos);
         } else {
             output_kind = TNT_COMMAND_OUTPUT_INBOX;
             append_inbox_output(client, output, sizeof(output), &pos);
