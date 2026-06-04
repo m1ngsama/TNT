@@ -80,6 +80,26 @@ Goal: keep the interface efficient for terminal users without sacrificing simpli
 - ✅ improve discoverability of NORMAL and COMMAND mode actions
 - ✅ make status lines and help output concise enough for small terminals
 
+## Stage 4.5: Module Foundation
+
+Goal: let community features plug into TNT without coupling every user request
+to the core server binary.
+
+- keep TNT core basic and broadly compatible; route personalized workflows,
+  rich visuals, and terminal-specific experience upgrades through modules
+- define the external-process module protocol before loading any third-party
+  code into production rooms
+- keep module messages compatible with plain terminal clients by requiring
+  plain-text fallbacks for rich content and attachments
+- treat terminal image protocols as optional renderer capabilities, not as the
+  core message format
+- prefer JSON Lines over stdin/stdout for early modules so TNT can supervise,
+  restart, rate-limit, and disable modules independently
+- keep module permissions explicit: message read/create, command registration,
+  private-message access, and future attachment access must be separate grants
+- publish official examples in a companion community repository that tracks
+  TNT protocol versions and license terms
+
 ## Stage 5: Operations and Security
 
 Goal: make public deployment manageable.

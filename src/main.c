@@ -5,6 +5,7 @@
 #include "i18n.h"
 #include "message.h"
 #include "message_log_tool.h"
+#include "module_runtime.h"
 #include "ssh_server.h"
 #include <signal.h>
 #include <unistd.h>
@@ -238,17 +239,23 @@ int main(int argc, char **argv) {
     }
 
     message_init();
+    if (tnt_module_runtime_init() < 0) {
+        fprintf(stderr, "Failed to initialize module runtime\n");
+        return TNT_EXIT_ERROR;
+    }
 
     /* Create chat room */
     g_room = room_create();
     if (!g_room) {
         fprintf(stderr, "Failed to create chat room\n");
+        tnt_module_runtime_shutdown();
         return TNT_EXIT_ERROR;
     }
 
     /* Initialize server */
     if (ssh_server_init(port) < 0) {
         fprintf(stderr, "Failed to initialize server\n");
+        tnt_module_runtime_shutdown();
         room_destroy(g_room);
         return TNT_EXIT_ERROR;
     }
@@ -256,6 +263,7 @@ int main(int argc, char **argv) {
     /* Start server (blocking) */
     int ret = ssh_server_start(0);
 
+    tnt_module_runtime_shutdown();
     room_destroy(g_room);
     return ret;
 }

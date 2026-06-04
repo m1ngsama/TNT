@@ -89,6 +89,37 @@ Recommended interpretation:
 - `TNT_MAX_CONN_RATE_PER_IP`: new connection attempts allowed per IP per 60 seconds
 - `TNT_RATE_LIMIT=0`: disables rate-based blocking and auth-failure IP blocking, but not the explicit capacity limits
 
+## Edge Module Production Profile
+
+Some deployments intentionally track the newest TNT builds and newest module
+integrations to exercise the full product surface. Treat these as edge
+production environments: user-facing, but optimized for fast integration and
+fast rollback.
+
+For that profile:
+
+- Deploy TNT and modules as separate artifacts so a module can be disabled
+  without replacing the core server.
+- Keep module permissions explicit and minimal. Do not grant private-message
+  access unless the module exists for that purpose.
+- Keep a known-good TNT binary and module manifest set on disk for immediate
+  rollback.
+- Log module startup failures, invalid JSONL, protocol errors, and timeouts
+  separately from chat history.
+- Prefer plain-text fallbacks for every module-created message, even when the
+  module also targets richer terminal renderers.
+- Before promoting a module, test its manifest and JSONL handshake against the
+  protocol in `docs/MODULE_PROTOCOL.md`.
+
+Enable modules explicitly with `TNT_MODULE_PATHS`, using a colon-separated
+list of module directories:
+
+```bash
+TNT_MODULE_PATHS=/opt/tnt-modules/echo-module:/opt/tnt-modules/other-module
+```
+
+Unset `TNT_MODULE_PATHS` and restart TNT to return to the plain core server.
+
 ## MOTD (Message of the Day)
 
 Place a `motd.txt` file in the state directory. TNT displays it to each user on connect; they press any key to enter the chat.

@@ -78,9 +78,13 @@ STRUCTURE
   src/commands.c      COMMAND-mode command dispatch
   src/exec_catalog.c  SSH exec command matching, usage, argument shape
   src/exec.c          SSH exec command dispatch
+  src/json_text.c     JSON string escape/extract helpers
+  src/input_buffer.c  validated INSERT/COMMAND/paste buffer helpers
   src/message.c       persistence, search
   src/message_log.c   messages.log v1 parsing and formatting
   src/message_log_tool.c offline messages.log check/recover CLI
+  src/module_protocol.c external module JSONL protocol helpers
+  src/module_runtime.c optional external module supervisor
   src/history_view.c  message viewport / scroll state
   src/help_text.c     full-screen key reference text
   src/manual.c        concise manual panel rendering

@@ -80,6 +80,10 @@ src/
 ├── command_catalog.c - COMMAND-mode names, aliases, and help summaries
 ├── exec_catalog.c   - SSH exec command matching and help metadata
 ├── exec.c           - SSH exec command dispatch
+├── json_text.c      - JSON string escaping and top-level string extraction
+├── input_buffer.c   - Validated INSERT/COMMAND/paste buffer helpers
+├── module_protocol.c - External module JSONL protocol helpers
+├── module_runtime.c - Optional external module supervisor
 ├── tntctl.c         - Local wrapper around the SSH exec interface
 ├── tntctl_text.c    - tntctl local help and diagnostics
 ├── chat_room.c      - Chat room state, message ring, and update sequence
@@ -112,6 +116,10 @@ include/
 ├── message_log_tool.h - Offline log check/recover interface
 ├── command_catalog.h - COMMAND-mode command metadata interface
 ├── exec_catalog.h   - SSH exec command metadata interface
+├── json_text.h      - JSON text helper interface
+├── input_buffer.h   - Terminal input buffer helper interface
+├── module_protocol.h - External module protocol helper interface
+├── module_runtime.h - External module supervisor interface
 ├── cli_text.h       - Server CLI text interface
 ├── tntctl_text.h    - tntctl text interface
 ├── history_view.h   - Scroll-state helpers

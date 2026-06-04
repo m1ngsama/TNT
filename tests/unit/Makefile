@@ -11,6 +11,10 @@ endif
 
 # Source files
 UTF8_SRC = ../../src/utf8.c
+INPUT_BUFFER_SRC = ../../src/input_buffer.c
+JSON_TEXT_SRC = ../../src/json_text.c
+MODULE_PROTOCOL_SRC = ../../src/module_protocol.c
+MODULE_RUNTIME_SRC = ../../src/module_runtime.c
 MESSAGE_SRC = ../../src/message.c
 MESSAGE_LOG_SRC = ../../src/message_log.c
 COMMON_SRC = ../../src/common.c
@@ -28,13 +32,25 @@ HELP_TEXT_SRC = ../../src/help_text.c
 MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
 
-TESTS = test_utf8 test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_config_defaults
+TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_config_defaults
 
 .PHONY: all clean run
 
 all: $(TESTS)
 
 test_utf8: test_utf8.c $(UTF8_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test_input_buffer: test_input_buffer.c $(INPUT_BUFFER_SRC) $(UTF8_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test_json_text: test_json_text.c $(JSON_TEXT_SRC) $(COMMON_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test_module_protocol: test_module_protocol.c $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test_module_runtime: test_module_runtime.c $(MODULE_RUNTIME_SRC) $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_message: test_message.c $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
@@ -79,6 +95,18 @@ test_config_defaults: test_config_defaults.c $(CONFIG_DEFAULTS_SRC) $(COMMON_SRC
 run: all
 	@echo "=== Running UTF-8 Tests ==="
 	./test_utf8
+	@echo ""
+	@echo "=== Running Input Buffer Tests ==="
+	./test_input_buffer
+	@echo ""
+	@echo "=== Running JSON Text Tests ==="
+	./test_json_text
+	@echo ""
+	@echo "=== Running Module Protocol Tests ==="
+	./test_module_protocol
+	@echo ""
+	@echo "=== Running Module Runtime Tests ==="
+	./test_module_runtime
 	@echo ""
 	@echo "=== Running Message Tests ==="
 	./test_message
