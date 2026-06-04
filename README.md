@@ -339,6 +339,10 @@ TNT/
 │   ├── bootstrap.c   # SSH authentication and session bootstrap
 │   ├── chat_room.c   # chat room logic
 │   ├── message.c     # message persistence
+│   ├── module_protocol.c # external module JSONL protocol helpers
+│   ├── module_runtime.c # optional external module supervisor
+│   ├── json_text.c   # small JSON string helpers
+│   ├── input_buffer.c # validated terminal input buffer helpers
 │   ├── history_view.c # message viewport and scroll state
 │   ├── help_text.c   # full-screen key reference content
 │   ├── manual.c      # concise manual panel rendering
@@ -428,7 +432,11 @@ tnt.service     - systemd service unit
 ```
 
 The persisted chat-history format is documented in
-[docs/MESSAGE_LOG.md](docs/MESSAGE_LOG.md).
+[docs/MESSAGE_LOG.md](docs/MESSAGE_LOG.md). Experimental community modules
+should follow the external-process protocol in
+[docs/MODULE_PROTOCOL.md](docs/MODULE_PROTOCOL.md). Module-generated content
+must always include a plain-text fallback so TNT can keep working on basic
+terminal clients and preserve the stable `messages.log` v1 history contract.
 
 ### MOTD (Message of the Day)
 
@@ -450,6 +458,7 @@ Delete `motd.txt` to disable the MOTD.
 - [Quick Setup](docs/EASY_SETUP.md) - 5-minute deployment guide
 - [Roadmap](docs/ROADMAP.md) - Long-term Unix/GNU direction and next stages
 - [Interface Contract](docs/INTERFACE.md) - Scriptable commands, exit statuses, and JSON fields
+- [Module Protocol](docs/MODULE_PROTOCOL.md) - External-process module contract
 - [Security Reference](docs/SECURITY_QUICKREF.md) - Security config quick reference
 - [Contributing](docs/CONTRIBUTING.md) - How to contribute
 - [Changelog](docs/CHANGELOG.md) - Version history

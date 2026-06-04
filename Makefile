@@ -35,7 +35,7 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test module-runtime-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
 
 all: $(TARGETS)
 
@@ -123,6 +123,7 @@ test-advisory: all unit-test
 	@cd tests && PORT=$${PORT:-2222} ./test_basic.sh || echo "(basic integration tests are advisory)"
 	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh || echo "(exec mode tests are advisory)"
 	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh || echo "(interactive input tests are advisory)"
+	@cd tests && PORT=$$(($${PORT:-2222} + 6)) ./test_module_runtime.sh || echo "(module runtime tests are advisory)"
 
 unit-test:
 	@echo "Running unit tests..."
@@ -145,7 +146,12 @@ integration-test: all
 	@cd tests && PORT=$$(($${PORT:-2222} + 3)) ./test_user_lifecycle.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 4)) ./test_mute_joins_view.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 5)) ./test_empty_view.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 6)) ./test_module_runtime.sh
 	@cd tests && ./test_tntctl_cli.sh
+
+module-runtime-test: all
+	@echo "Running module runtime tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_module_runtime.sh
 
 anonymous-access-test: all
 	@echo "Running anonymous access tests..."

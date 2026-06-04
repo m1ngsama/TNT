@@ -7,7 +7,9 @@
 #include "exec.h"
 #include "history_view.h"
 #include "i18n.h"
+#include "input_buffer.h"
 #include "message.h"
+#include "module_runtime.h"
 #include "ratelimit.h"
 #include "system_message.h"
 #include "tui.h"
@@ -194,24 +196,6 @@ static int read_channel_exact(client_t *client, char *buf, size_t len,
     }
 
     return (int)got;
-}
-
-static bool append_paste_byte(char *input, unsigned char b) {
-    if (b == '\r' || b == '\n' || b == '\t') {
-        b = ' ';
-    }
-    if (b < 32) {
-        return true;
-    }
-
-    size_t cur = strlen(input);
-    if (cur < MAX_MESSAGE_LEN - 1) {
-        input[cur] = (char)b;
-        input[cur + 1] = '\0';
-        return true;
-    }
-
-    return false;
 }
 
 static int normal_visible_message_count(const client_t *client) {
@@ -500,6 +484,8 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                                  * spaces so a multi-line paste stays a
                                  * single message instead of N sends. */
                                 bool overflow = false;
+                                bool invalid_utf8 = false;
+                                tnt_input_utf8_state_t paste_utf8 = {0};
                                 while (1) {
                                     char b;
                                     int k = ssh_channel_read_timeout(
@@ -520,21 +506,40 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                                          * but keep printable bytes that
                                          * followed it. */
                                         for (int i = 0; i < t; i++) {
-                                            if (!append_paste_byte(
-                                                    input,
-                                                    (unsigned char)tail[i])) {
+                                            int status =
+                                                tnt_input_append_stream_byte(
+                                                    input, MAX_MESSAGE_LEN,
+                                                    &paste_utf8,
+                                                    (unsigned char)tail[i],
+                                                    true);
+                                            if (status &
+                                                TNT_INPUT_APPEND_OVERFLOW) {
                                                 overflow = true;
+                                            }
+                                            if (status &
+                                                TNT_INPUT_APPEND_INVALID_UTF8) {
+                                                invalid_utf8 = true;
                                             }
                                         }
                                         continue;
                                     }
-                                    if (!append_paste_byte(input,
-                                                           (unsigned char)b)) {
+                                    int status = tnt_input_append_stream_byte(
+                                        input, MAX_MESSAGE_LEN, &paste_utf8,
+                                        (unsigned char)b, true);
+                                    if (status & TNT_INPUT_APPEND_OVERFLOW) {
                                         overflow = true;
                                     }
+                                    if (status & TNT_INPUT_APPEND_INVALID_UTF8) {
+                                        invalid_utf8 = true;
+                                    }
+                                }
+                                if (tnt_input_utf8_state_finish(
+                                        &paste_utf8) &
+                                    TNT_INPUT_APPEND_INVALID_UTF8) {
+                                    invalid_utf8 = true;
                                 }
                                 tui_render_input(client, input);
-                                if (overflow) {
+                                if (overflow || invalid_utf8) {
                                     client_send(client, "\a", 1);
                                 }
                             }
@@ -580,7 +585,11 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     }
                     room_broadcast(g_room, &msg);
                     notify_mentions(msg.content, client);
-                    message_save(&msg);
+                    if (message_save(&msg) == 0) {
+                        tnt_module_runtime_publish_message_created(&msg);
+                    } else {
+                        fprintf(stderr, "interactive: failed to persist message\n");
+                    }
                     input[0] = '\0';
                 }
                 tui_render_screen(client);
@@ -1011,10 +1020,9 @@ main_loop:
             if (client->mode == MODE_INSERT && !client->show_help &&
                 client->command_output[0] == '\0') {
                 if (b >= 32 && b < 127) {  /* ASCII printable */
-                    int len = strlen(input);
-                    if (len < MAX_MESSAGE_LEN - 1) {
-                        input[len] = b;
-                        input[len + 1] = '\0';
+                    int status = tnt_input_append_ascii(input,
+                                                        MAX_MESSAGE_LEN, b);
+                    if (status == TNT_INPUT_APPEND_OK) {
                         tui_render_input(client, input);
                     } else {
                         client_send(client, "\a", 1);
@@ -1038,10 +1046,9 @@ main_loop:
                         /* Invalid UTF-8 sequence */
                         continue;
                     }
-                    int len = strlen(input);
-                    if (len + char_len <= MAX_MESSAGE_LEN - 1) {
-                        memcpy(input + len, buf, char_len);
-                        input[len + char_len] = '\0';
+                    int status = tnt_input_append_utf8_sequence(
+                        input, MAX_MESSAGE_LEN, buf, char_len);
+                    if (status == TNT_INPUT_APPEND_OK) {
                         tui_render_input(client, input);
                     } else {
                         client_send(client, "\a", 1);
@@ -1050,10 +1057,10 @@ main_loop:
             } else if (client->mode == MODE_COMMAND && !client->show_help &&
                        client->command_output[0] == '\0') {
                 if (b >= 32 && b < 127) {  /* ASCII printable */
-                    size_t len = strlen(client->command_input);
-                    if (len < sizeof(client->command_input) - 1) {
-                        client->command_input[len] = b;
-                        client->command_input[len + 1] = '\0';
+                    int status = tnt_input_append_ascii(
+                        client->command_input, sizeof(client->command_input),
+                        b);
+                    if (status == TNT_INPUT_APPEND_OK) {
                         tui_render_command_input(client);
                     } else {
                         client_send(client, "\a", 1);
@@ -1068,10 +1075,10 @@ main_loop:
                         if (read_bytes != char_len - 1) continue;
                     }
                     if (!utf8_is_valid_sequence(buf, char_len)) continue;
-                    size_t len = strlen(client->command_input);
-                    if (len + (size_t)char_len <= sizeof(client->command_input) - 1) {
-                        memcpy(client->command_input + len, buf, char_len);
-                        client->command_input[len + char_len] = '\0';
+                    int status = tnt_input_append_utf8_sequence(
+                        client->command_input, sizeof(client->command_input),
+                        buf, char_len);
+                    if (status == TNT_INPUT_APPEND_OK) {
                         tui_render_command_input(client);
                     } else {
                         client_send(client, "\a", 1);

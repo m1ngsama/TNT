@@ -5,7 +5,9 @@
 #include "exec_catalog.h"
 #include "i18n.h"
 #include "input.h"
+#include "json_text.h"
 #include "message.h"
+#include "module_runtime.h"
 #include "ratelimit.h"
 #include "utf8.h"
 #include <ctype.h>
@@ -54,48 +56,6 @@ static void trim_ascii_whitespace(char *text) {
         *end = '\0';
         end--;
     }
-}
-
-static void json_append_string(char *buffer, size_t buf_size, size_t *pos,
-                               const char *text) {
-    const unsigned char *p = (const unsigned char *)(text ? text : "");
-
-    buffer_append_bytes(buffer, buf_size, pos, "\"", 1);
-
-    while (*p && *pos < buf_size - 1) {
-        char escaped[7];
-
-        switch (*p) {
-            case '\\':
-                buffer_append_bytes(buffer, buf_size, pos, "\\\\", 2);
-                break;
-            case '"':
-                buffer_append_bytes(buffer, buf_size, pos, "\\\"", 2);
-                break;
-            case '\n':
-                buffer_append_bytes(buffer, buf_size, pos, "\\n", 2);
-                break;
-            case '\r':
-                buffer_append_bytes(buffer, buf_size, pos, "\\r", 2);
-                break;
-            case '\t':
-                buffer_append_bytes(buffer, buf_size, pos, "\\t", 2);
-                break;
-            default:
-                if (*p < 0x20) {
-                    snprintf(escaped, sizeof(escaped), "\\u%04x", *p);
-                    buffer_append_bytes(buffer, buf_size, pos,
-                                        escaped, strlen(escaped));
-                } else {
-                    buffer_append_bytes(buffer, buf_size, pos,
-                                        (const char *)p, 1);
-                }
-                break;
-        }
-        p++;
-    }
-
-    buffer_append_bytes(buffer, buf_size, pos, "\"", 1);
 }
 
 static void resolve_exec_username(const client_t *client, char *buffer,
@@ -188,7 +148,7 @@ static int exec_command_users(client_t *client, bool json) {
             if (i > 0) {
                 buffer_append_bytes(output, output_size, &pos, ",", 1);
             }
-            json_append_string(output, output_size, &pos, usernames[i]);
+            tnt_json_append_string(output, output_size, &pos, usernames[i]);
         }
         buffer_append_bytes(output, output_size, &pos, "]\n", 2);
     } else {
@@ -467,6 +427,7 @@ static int exec_command_post(client_t *client, const char *args) {
 
     room_broadcast(g_room, &msg);
     notify_mentions(msg.content, client);
+    tnt_module_runtime_publish_message_created(&msg);
 
     if (client_send(client, "posted\n", 7) != 0) {
         return TNT_EXIT_ERROR;
