@@ -143,6 +143,8 @@ integration-test: all
 	@cd tests && PORT=$$(($${PORT:-2222} + 1)) ./test_exec_mode.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 2)) ./test_interactive_input.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 3)) ./test_user_lifecycle.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 4)) ./test_mute_joins_view.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 5)) ./test_empty_view.sh
 	@cd tests && ./test_tntctl_cli.sh
 
 anonymous-access-test: all

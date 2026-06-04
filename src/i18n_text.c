@@ -81,6 +81,14 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "? keys",
         "? 按键"
     ),
+    [I18N_EMPTY_ROOM] = I18N_STRING(
+        "No messages yet",
+        "暂无消息"
+    ),
+    [I18N_EMPTY_FILTERED] = I18N_STRING(
+        "No visible messages",
+        "暂无可见消息"
+    ),
     [I18N_IDLE_TIMEOUT_FORMAT] = I18N_STRING(
         "\r\n\033[33mDisconnected: idle timeout (%d min)\033[0m\r\n",
         "\r\n\033[33m已断开: 空闲超时 (%d 分钟)\033[0m\r\n"
@@ -113,6 +121,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "User '%s' not found\n",
         "未找到用户 '%s'\n"
     ),
+    [I18N_REPLY_NO_TARGET] = I18N_STRING(
+        "No private message to reply to\n",
+        "没有可回复的私信\n"
+    ),
     [I18N_INBOX_TITLE] = I18N_STRING(
         "Private messages",
         "私信"
@@ -120,6 +132,18 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
     [I18N_INBOX_EMPTY] = I18N_STRING(
         "(empty)",
         "(空)"
+    ),
+    [I18N_INBOX_SENT_TO_FORMAT] = I18N_STRING(
+        "you -> %s",
+        "你 -> %s"
+    ),
+    [I18N_INBOX_CLEARED] = I18N_STRING(
+        "Private messages cleared\n",
+        "私信已清空\n"
+    ),
+    [I18N_INBOX_UNREAD_FORMAT] = I18N_STRING(
+        "%d new",
+        "%d 新"
     ),
     [I18N_NICK_INVALID] = I18N_STRING(
         "Invalid username\n",
@@ -141,9 +165,17 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "--- Last %d message(s) ---\n",
         "--- 最近 %d 条消息 ---\n"
     ),
+    [I18N_LAST_EMPTY] = I18N_STRING(
+        "No messages to show\n",
+        "没有可显示的消息\n"
+    ),
     [I18N_SEARCH_HEADER_FORMAT] = I18N_STRING(
         "--- Search: \"%s\" (showing last %d match(es)) ---\n",
         "--- 搜索: \"%s\" (显示最近 %d 条匹配) ---\n"
+    ),
+    [I18N_SEARCH_EMPTY] = I18N_STRING(
+        "No matches\n",
+        "没有匹配结果\n"
     ),
     [I18N_MUTE_JOINS_FORMAT] = I18N_STRING(
         "Join/leave notifications: %s\n",

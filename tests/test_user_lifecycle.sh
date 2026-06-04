@@ -37,6 +37,7 @@ SSH_OPTS="-e none -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/nul
 SSH_EXEC_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
 BOB_READY="$STATE_DIR/bob.ready"
 PRIVATE_SENT="$STATE_DIR/private.sent"
+REPLY_SENT="$STATE_DIR/reply.sent"
 
 wait_for_health() {
     out=""
@@ -92,7 +93,16 @@ exec touch "$BOB_READY"
 exec sh -c "while \[ ! -f '$PRIVATE_SENT' \]; do sleep 1; done"
 expect "私信"
 expect "alice"
-expect "private lifecycle ping"
+expect "private lifecycle second"
+expect "private lifecycle first"
+expect "q:关闭"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "reply private lifecycle reply\r"
+expect "私信已发送给 alice"
+exec touch "$REPLY_SENT"
 expect "q:关闭"
 send -- "q"
 expect "NORMAL"
@@ -201,9 +211,43 @@ send -- "q"
 expect "NORMAL"
 send -- ":"
 expect ":"
-send -- "msg bob private lifecycle ping\r"
+send -- "msg bob private lifecycle first\r"
+expect "私信已发送给 bob"
+expect "q:关闭"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "msg bob private lifecycle second\r"
 expect "私信已发送给 bob"
 exec touch "$PRIVATE_SENT"
+expect "q:关闭"
+send -- "q"
+expect "NORMAL"
+exec sh -c "while \[ ! -f '$REPLY_SENT' \]; do sleep 1; done"
+send -- ":"
+expect ":"
+send -- "inbox\r"
+expect "bob"
+expect "private lifecycle reply"
+expect "你 -> bob"
+expect "private lifecycle second"
+expect "private lifecycle first"
+expect "q:关闭"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "inbox clear\r"
+expect "私信已清空"
+expect "(空)"
+expect "q:关闭"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "reply should not send after clear\r"
+expect "没有可回复的私信"
 expect "q:关闭"
 send -- "q"
 expect "NORMAL"
@@ -243,6 +287,20 @@ else
     FAIL=$((FAIL + 1))
 fi
 BOB_PID=""
+
+if grep -q '.*alice.*private lifecycle second' "$STATE_DIR/bob.log" &&
+   grep -Eq '私信.*[0-9]+ 新' "$STATE_DIR/bob.log" &&
+   grep -q '\*.*alice.*private lifecycle second' "$STATE_DIR/bob.log" &&
+   grep -Eq '私信.*[0-9]+ 新' "$STATE_DIR/alice.log" &&
+   grep -q '\*.*bob.*private lifecycle reply' "$STATE_DIR/alice.log"; then
+    echo "✓ unread private messages are visibly marked in inbox"
+    PASS=$((PASS + 1))
+else
+    echo "✗ inbox unread marker missing"
+    sed -n '1,220p' "$STATE_DIR/bob.log"
+    sed -n '1,260p' "$STATE_DIR/alice.log"
+    FAIL=$((FAIL + 1))
+fi
 
 TAIL_OUTPUT=$(ssh $SSH_EXEC_OPTS localhost "tail -n 10" 2>/dev/null || true)
 printf '%s\n' "$TAIL_OUTPUT" | grep -q 'hello lifecycle alpha' &&

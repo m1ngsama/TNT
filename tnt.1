@@ -203,7 +203,7 @@ PageDown/PageUp	Scroll full page down/up
 End/Home	Jump to bottom/top
 g/G	Jump to top/bottom
 /	Search message history
-i	Switch to INSERT
+i/a/o	Switch to INSERT
 :	Enter COMMAND mode
 ?	Open full key reference
 Ctrl+C	Disconnect
@@ -220,7 +220,10 @@ l l.
 :name \fIname\fR	Alias for :nick
 :msg \fIuser message\fR	Send private message
 :w \fIuser text\fR	Short alias for :msg
-:inbox	Show private messages
+:reply \fItext\fR	Reply to latest private message
+:r \fItext\fR	Short alias for :reply
+:inbox	Show private messages, newest first
+:inbox clear	Clear private messages for this session
 :last [\fIN\fR]	Show last N messages from history (1\-50, default 10)
 :search \fIkeyword\fR	Case\-insensitive search; shows the last 15 matches
 :mute\-joins	Toggle join/leave system notifications on/off
@@ -249,8 +252,19 @@ r	Refresh live output (:inbox)
 .PP
 The
 .B :inbox
-page refreshes automatically when a new private message arrives while it is
-open.
+page shows incoming messages and local sent-message copies for the current
+session.  It refreshes automatically when a new private message arrives while
+it is open.  Incoming unread messages are marked with
+.B *
+and counted in the inbox title until the inbox renders them.  Use
+.B :reply
+or
+.B :r
+to answer the latest private-message peer.
+.B :inbox clear
+removes private messages and the reply target for this session.  Private
+messages are not written to
+.IR messages.log .
 .SH EXEC INTERFACE
 Commands can be run non\-interactively for scripting:
 .PP
@@ -340,10 +354,11 @@ libssh log verbosity from 0 to 4 (default: 1).
 .SH FILES
 .TP
 .I messages.log
-Chat history in the TNT message log v1 format:
+Public chat history in the TNT message log v1 format:
 RFC\ 3339 UTC pipe\-delimited records
 .RI ( timestamp | username | content ).
-Stored in the state directory.
+Stored in the state directory.  Private messages and in-memory inbox state are
+excluded.
 See
 .I docs/MESSAGE_LOG.md
 in the source distribution for parser and recovery rules.

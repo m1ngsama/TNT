@@ -24,6 +24,9 @@ void tui_render_motd(struct client *client);
 /* Render the input line */
 void tui_render_input(struct client *client, const char *input);
 
+/* Render only the command input/status line */
+void tui_render_command_input(struct client *client);
+
 /* Clear the screen */
 void tui_clear_screen(struct client *client);
 

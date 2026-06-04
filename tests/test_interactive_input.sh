@@ -591,6 +591,38 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+VIM_INSERT_ALIASES_SCRIPT="$STATE_DIR/vim-insert-aliases.expect"
+cat >"$VIM_INSERT_ALIASES_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "vimalias\r"
+expect "Esc NORMAL"
+send -- "\033"
+expect "NORMAL"
+send -- "a"
+expect "INSERT"
+send -- "\033"
+expect "NORMAL"
+send -- "o"
+expect "INSERT"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$VIM_INSERT_ALIASES_SCRIPT" >"$STATE_DIR/vim-insert-aliases.log" 2>&1; then
+    echo "✓ Vim insert aliases enter INSERT mode"
+    PASS=$((PASS + 1))
+else
+    echo "x Vim insert aliases failed"
+    sed -n '1,200p' "$STATE_DIR/vim-insert-aliases.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "PASSED: $PASS"
 echo "FAILED: $FAIL"

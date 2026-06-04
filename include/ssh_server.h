@@ -14,7 +14,10 @@
 typedef struct {
     time_t timestamp;
     char from[MAX_USERNAME_LEN];
+    char to[MAX_USERNAME_LEN];
     char content[MAX_MESSAGE_LEN];
+    bool outgoing;
+    bool unread;
 } whisper_t;
 
 typedef enum {
@@ -59,10 +62,13 @@ typedef struct client {
     _Atomic int pending_bells;       /* Bell nudges for this client's loop */
     _Atomic int unread_mentions;     /* @-mentions received since last reset */
     _Atomic int unread_whispers;     /* whispers received since last :inbox view */
+    char last_whisper_peer[MAX_USERNAME_LEN];  /* Most recent private-message peer */
     char *outbox;                    /* Bounded queued output for interactive writes */
     size_t outbox_len;
     size_t outbox_pos;
     size_t outbox_capacity;
+    char *render_buffer;             /* Reused main-screen render buffer */
+    size_t render_buffer_capacity;
     /* Per-client whisper inbox.  Protected separately from SSH channel I/O
      * so slow writes do not block in-memory private-message delivery. */
     whisper_t whisper_inbox[WHISPER_INBOX_SIZE];
