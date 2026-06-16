@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Changed
+- `dump` now defaults to the last 100 persisted records; use `dump -n N` for an
+  explicit bounded export or `dump --all` for a full persisted-log export.
+- Interactive sends now persist before broadcasting, matching the SSH exec
+  `post` path and avoiding visible-but-unpersisted messages when storage fails.
+
+### Security
+- Hardened module child process startup by closing inherited file descriptors,
+  disabling common dynamic-loader injection variables, and applying conservative
+  core and file-descriptor limits before exec.
+- Hardened module shutdown by escalating from SIGTERM to SIGKILL after a grace
+  period and reaping the child process.
+- Reduced per-session thread stack size to lower high-connection memory pressure.
+- Added additional systemd service hardening for devices, kernel interfaces,
+  realtime scheduling, SUID/SGID transitions, personality changes, and
+  capabilities.
+
 ## 1.1.0 - 2026-06-16
 
 ### Added

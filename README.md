@@ -234,6 +234,9 @@ ssh -p 2222 chat.example.com post "/me deploys v2.0"
 
 **`post` identity**: the message is attributed to the SSH login name (the `user@` part of the URL, falling back to `anonymous`). In the default anonymous-access configuration there is no identity check, so any client can post as any name. Set `TNT_ACCESS_TOKEN` if you need authenticated posting.
 
+**`dump` limits**: plain `dump` returns the last 100 persisted records.  Use
+`dump -n N` for an explicit bounded export or `dump --all` for a full log export.
+
 See [docs/INTERFACE.md](docs/INTERFACE.md) for the stable exec command
 contract, exit statuses, and JSON field definitions.
 

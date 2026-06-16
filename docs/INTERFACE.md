@@ -130,7 +130,7 @@ Prints recent in-memory messages as tab-separated lines:
 The current upper bound is `MAX_MESSAGES`.  This command reads the live
 in-memory room buffer, not the full persisted log.
 
-### `dump [N]` / `dump -n N`
+### `dump [N]` / `dump -n N` / `dump --all`
 
 Exports valid persisted `messages.log` v1 records in chronological order:
 
@@ -138,8 +138,9 @@ Exports valid persisted `messages.log` v1 records in chronological order:
 2026-05-25T12:00:00Z|alice|hello
 ```
 
-Without `N`, `dump` exports all valid persisted records.  With `N`, it exports
-the last `N` valid persisted records.  Malformed, invalid UTF-8, oversized, or
+Without `N`, `dump` exports the last 100 valid persisted records.  With `N`,
+it exports the last `N` valid persisted records.  Use `dump --all` to export
+all valid persisted records.  Malformed, invalid UTF-8, oversized, or
 truncated records are skipped by the same strict parser used for replay and
 search.
 

@@ -58,10 +58,11 @@ line is treated as a partial append and ignored rather than replayed.
 
 ## Export
 
-`dump [N]` and `dump -n N` export valid persisted records through the SSH exec
-interface and `tntctl`.  The output format is exactly the v1 record format
-above.  Without `N`, `dump` exports all valid records; with `N`, it exports the
-last `N` valid records.
+`dump [N]`, `dump -n N`, and `dump --all` export valid persisted records
+through the SSH exec interface and `tntctl`.  The output format is exactly the
+v1 record format above.  Without `N`, `dump` exports the last 100 valid records;
+with `N`, it exports the last `N` valid records.  Use `dump --all` to export all
+valid records.
 
 ## Maintenance
 

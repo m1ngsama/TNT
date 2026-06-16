@@ -71,6 +71,10 @@ TEST(matches_exec_commands_and_args) {
     assert(id == TNT_EXEC_COMMAND_DUMP);
     assert(strcmp(args, "-n 20") == 0);
 
+    assert(exec_catalog_match("dump --all", &id, &args));
+    assert(id == TNT_EXEC_COMMAND_DUMP);
+    assert(strcmp(args, "--all") == 0);
+
     assert(exec_catalog_match("post hello world", &id, &args));
     assert(id == TNT_EXEC_COMMAND_POST);
     assert(strcmp(args, "hello world") == 0);
@@ -98,6 +102,7 @@ TEST(validates_argument_shapes) {
 
     assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_DUMP, NULL));
     assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_DUMP, "-n 20"));
+    assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_DUMP, "--all"));
 
     assert(!exec_catalog_args_valid(TNT_EXEC_COMMAND_POST, NULL));
     assert(exec_catalog_args_valid(TNT_EXEC_COMMAND_POST, "hello"));
@@ -121,7 +126,7 @@ TEST(generates_localized_usage) {
     en_pos = 0;
     exec_catalog_append_usage(en, sizeof(en), &en_pos,
                               TNT_EXEC_COMMAND_DUMP, (ui_lang_t)99);
-    assert(strcmp(en, "dump: usage: dump [N] | dump -n N\n") == 0);
+    assert(strcmp(en, "dump: usage: dump [N] | dump -n N | dump --all\n") == 0);
 }
 
 TEST(generates_unique_command_list) {

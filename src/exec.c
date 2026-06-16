@@ -16,6 +16,9 @@
 #include <string.h>
 #include <time.h>
 
+#define TNT_DUMP_DEFAULT_RECORDS 100
+#define TNT_DUMP_MAX_RECORDS 10000
+
 /* `notify_mentions` is shared with the interactive INSERT-mode send path.
  * Declared in input.h. */
 
@@ -259,8 +262,17 @@ static int parse_dump_count(const char *args, int *count) {
         return -1;
     }
 
-    *count = 0;
+    *count = TNT_DUMP_DEFAULT_RECORDS;
     if (!args || args[0] == '\0') {
+        return 0;
+    }
+
+    while (*args && isspace((unsigned char)*args)) {
+        args++;
+    }
+
+    if (strcmp(args, "--all") == 0) {
+        *count = 0;
         return 0;
     }
 
@@ -282,7 +294,7 @@ static int parse_dump_count(const char *args, int *count) {
         end++;
     }
 
-    if (value < 1 || value > 10000) {
+    if (value < 1 || value > TNT_DUMP_MAX_RECORDS) {
         return -1;
     }
 

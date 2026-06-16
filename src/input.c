@@ -583,9 +583,9 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                         snprintf(msg.username, sizeof(msg.username), "%s", client->username);
                         snprintf(msg.content, sizeof(msg.content), "%s", input);
                     }
-                    room_broadcast(g_room, &msg);
-                    notify_mentions(msg.content, client);
                     if (message_save(&msg) == 0) {
+                        room_broadcast(g_room, &msg);
+                        notify_mentions(msg.content, client);
                         tnt_module_runtime_publish_message_created(&msg);
                     } else {
                         fprintf(stderr, "interactive: failed to persist message\n");
