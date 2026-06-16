@@ -13,6 +13,10 @@ demos/*.gif
 demos/*.mp4
 demos/*.webm
 tests/unit/test_utf8
+tests/unit/test_input_buffer
+tests/unit/test_json_text
+tests/unit/test_module_protocol
+tests/unit/test_module_runtime
 tests/unit/test_message
 tests/unit/test_chat_room
 tests/unit/test_history_view
@@ -26,3 +30,4 @@ tests/unit/test_support_text
 tests/unit/test_cli_text
 tests/unit/test_tntctl_text
 tests/unit/test_ratelimit
+tests/unit/test_config_defaults
