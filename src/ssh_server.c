@@ -21,6 +21,9 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <sys/stat.h>
+#include <limits.h>
+
+#define TNT_SESSION_THREAD_STACK_SIZE ((size_t)1024 * 1024)
 
 /* Global SSH bind instance */
 static ssh_bind g_sshbind = NULL;
@@ -211,6 +214,17 @@ int ssh_server_start(int unused) {
 
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    {
+        size_t stack_size = TNT_SESSION_THREAD_STACK_SIZE;
+#ifdef PTHREAD_STACK_MIN
+        if (stack_size < PTHREAD_STACK_MIN) {
+            stack_size = PTHREAD_STACK_MIN;
+        }
+#endif
+        if (pthread_attr_setstacksize(&attr, stack_size) != 0) {
+            fprintf(stderr, "Warning: could not set session thread stack size\n");
+        }
+    }
 
     while (1) {
         ssh_session session = ssh_new();

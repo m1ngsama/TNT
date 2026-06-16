@@ -9,8 +9,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <sys/select.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #define TNT_MODULE_LINE_MAX 4096
@@ -18,6 +21,8 @@
 #define TNT_MODULE_RESPONSE_TIMEOUT_MS 100
 #define TNT_MODULE_MAX_RESPONSES_PER_EVENT 8
 #define TNT_MODULE_MAX_INVALID_RESPONSES 3
+#define TNT_MODULE_STOP_GRACE_MS 500
+#define TNT_MODULE_MAX_OPEN_FILES 64
 
 struct client;
 void notify_mentions(const char *content, const struct client *sender);
@@ -241,13 +246,89 @@ static int read_line_timeout(int fd, char *line, size_t line_size,
     return pos > 0 ? (int)pos : 0;
 }
 
+static void set_module_rlimit(int resource, rlim_t value) {
+    struct rlimit limit;
+
+    limit.rlim_cur = value;
+    limit.rlim_max = value;
+    (void)setrlimit(resource, &limit);
+}
+
+static void close_inherited_fds(void) {
+    long open_max = sysconf(_SC_OPEN_MAX);
+
+    if (open_max < 0 || open_max > 65536) {
+        open_max = 1024;
+    }
+
+    for (int fd = 3; fd < open_max; fd++) {
+        close(fd);
+    }
+}
+
+static void prepare_module_child(void) {
+    close_inherited_fds();
+
+#ifdef RLIMIT_CORE
+    set_module_rlimit(RLIMIT_CORE, 0);
+#endif
+#ifdef RLIMIT_NOFILE
+    set_module_rlimit(RLIMIT_NOFILE, TNT_MODULE_MAX_OPEN_FILES);
+#endif
+    unsetenv("LD_PRELOAD");
+    unsetenv("LD_LIBRARY_PATH");
+#ifdef __APPLE__
+    unsetenv("DYLD_INSERT_LIBRARIES");
+    unsetenv("DYLD_LIBRARY_PATH");
+#endif
+}
+
+static void sleep_millis(int millis) {
+    struct timespec ts;
+
+    ts.tv_sec = millis / 1000;
+    ts.tv_nsec = (long)(millis % 1000) * 1000000L;
+    while (nanosleep(&ts, &ts) < 0 && errno == EINTR) {
+    }
+}
+
+static void reap_module_process(pid_t pid) {
+    int status;
+    int waited_ms = 0;
+
+    if (pid <= 0) {
+        return;
+    }
+
+    while (waitpid(pid, &status, WNOHANG) == 0) {
+        if (waited_ms >= TNT_MODULE_STOP_GRACE_MS) {
+            kill(pid, SIGKILL);
+            break;
+        }
+        sleep_millis(10);
+        waited_ms += 10;
+    }
+
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+}
+
 static void close_module_process(module_process_t *module) {
     if (!module || !module->active) return;
 
-    close(module->stdin_fd);
-    close(module->stdout_fd);
-    kill(module->pid, SIGTERM);
-    waitpid(module->pid, NULL, WNOHANG);
+    if (module->stdin_fd >= 0) {
+        close(module->stdin_fd);
+        module->stdin_fd = -1;
+    }
+    if (module->stdout_fd >= 0) {
+        close(module->stdout_fd);
+        module->stdout_fd = -1;
+    }
+    if (module->pid > 0) {
+        kill(module->pid, SIGTERM);
+        reap_module_process(module->pid);
+        module->pid = -1;
+    }
     module->active = false;
 }
 
@@ -301,6 +382,7 @@ static int start_module_process(const char *module_dir,
         }
         close(in_pipe[0]);
         close(out_pipe[1]);
+        prepare_module_child();
         execl(module->manifest.entrypoint, module->manifest.entrypoint,
               (char *)NULL);
         _exit(127);

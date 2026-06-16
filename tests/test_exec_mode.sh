@@ -142,7 +142,7 @@ fi
 
 DUMP_USAGE=$(ssh $SSH_OPTS localhost "dump -n nope" 2>/dev/null)
 DUMP_USAGE_STATUS=$?
-printf '%s\n' "$DUMP_USAGE" | grep -q '^dump: 用法: dump \[N\] | dump -n N$'
+printf '%s\n' "$DUMP_USAGE" | grep -q '^dump: 用法: dump \[N\] | dump -n N | dump --all$'
 if [ $? -eq 0 ] && [ "$DUMP_USAGE_STATUS" -eq 64 ]; then
     echo "✓ dump usage follows TNT_LANG and exits 64"
     PASS=$((PASS + 1))
@@ -185,6 +185,17 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+DUMP_ALL_OUTPUT=$(ssh $SSH_OPTS localhost "dump --all" 2>/dev/null || true)
+printf '%s\n' "$DUMP_ALL_OUTPUT" | grep -q '|execposter|hello from exec$'
+if [ $? -eq 0 ]; then
+    echo "✓ dump --all explicitly exports persisted records"
+    PASS=$((PASS + 1))
+else
+    echo "✗ dump --all output unexpected"
+    printf '%s\n' "$DUMP_ALL_OUTPUT"
+    FAIL=$((FAIL + 1))
+fi
+
 PERSIST_FAIL_MARKER="persist-fail-marker"
 rm -f "$STATE_DIR/messages.log"
 mkdir "$STATE_DIR/messages.log"
@@ -193,11 +204,14 @@ PERSIST_FAIL_STATUS=$?
 rmdir "$STATE_DIR/messages.log"
 printf '%s\n' "$PERSIST_FAIL_OUTPUT" | grep -q 'posted'
 PERSIST_FAIL_POSTED=$?
+printf '%s\n' "$PERSIST_FAIL_OUTPUT" | grep -q '持久化失败'
+PERSIST_FAIL_ERROR=$?
 PERSIST_FAIL_TAIL=$(ssh $SSH_OPTS localhost "tail -n 5" 2>/dev/null || true)
 printf '%s\n' "$PERSIST_FAIL_TAIL" | grep -q "$PERSIST_FAIL_MARKER"
 PERSIST_FAIL_VISIBLE=$?
-if [ "$PERSIST_FAIL_STATUS" -eq 1 ] &&
+if [ "$PERSIST_FAIL_STATUS" -ne 0 ] &&
    [ "$PERSIST_FAIL_POSTED" -ne 0 ] &&
+   [ "$PERSIST_FAIL_ERROR" -eq 0 ] &&
    [ "$PERSIST_FAIL_VISIBLE" -ne 0 ]; then
     echo "✓ post persistence failure is not broadcast or acknowledged"
     PASS=$((PASS + 1))

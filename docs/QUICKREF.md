@@ -55,7 +55,8 @@ EXEC COMMANDS
   stats [--json]         print room statistics
   users [--json]         list online users
   tail [N] / tail -n N   recent in-memory room messages
-  dump [N] / dump -n N   persisted messages.log v1 records
+  dump [N] / dump -n N / dump --all
+                         persisted messages.log v1 records
   post <message>         post as the SSH login name
 
 MAINTENANCE
