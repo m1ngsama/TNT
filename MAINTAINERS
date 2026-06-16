@@ -1,0 +1,93 @@
+PROJECT METADATA
+S: Maintained
+F: .github/**
+F: .gitignore
+F: LICENSE
+F: MAINTAINERS
+F: demos/**
+F: include/.gitkeep
+F: scripts/check_maintainers.sh
+F: scripts/get_maintainer.sh
+F: src/.gitkeep
+
+TNT CORE
+S: Maintained
+F: Makefile
+F: install.sh
+F: tnt.service
+F: include/*.h
+F: src/*.c
+F: include/common.h
+F: include/config_defaults.h
+F: src/main.c
+F: src/common.c
+F: src/config_defaults.c
+
+SSH SERVER AND EXEC INTERFACE
+S: Maintained
+F: include/bootstrap.h
+F: include/ssh_server.h
+F: include/exec*.h
+F: include/tntctl_text.h
+F: src/bootstrap.c
+F: src/ssh_server.c
+F: src/exec*.c
+F: src/tntctl*.c
+F: tests/test_exec_mode.sh
+F: tests/test_tntctl_cli.sh
+
+INTERACTIVE TUI
+S: Maintained
+F: include/input*.h
+F: include/tui*.h
+F: include/history_view.h
+F: src/input*.c
+F: src/tui*.c
+F: src/history_view.c
+F: tests/test_interactive_input.sh
+F: tests/test_user_lifecycle.sh
+
+MESSAGE STORAGE
+S: Maintained
+F: include/message*.h
+F: src/message*.c
+F: scripts/logrotate.sh
+F: tests/test_message_log_tool.sh
+F: tests/test_logrotate.sh
+F: docs/MESSAGE_LOG.md
+
+MODULE CORE INTERFACE
+S: Maintained
+F: include/module_*.h
+F: src/module_*.c
+F: scripts/module_check.sh
+F: scripts/install_wizard.sh
+F: tests/test_module_*.sh
+F: tests/test_install_wizard.sh
+F: docs/MODULE_PROTOCOL.md
+F: docs/INSTALL_LIFECYCLE.md
+
+PACKAGING AND RELEASE
+S: Maintained
+F: packaging/**
+F: scripts/healthcheck.sh
+F: scripts/package_*.sh
+F: scripts/check_release_ref.sh
+F: scripts/release_check.sh
+F: scripts/setup_cron.sh
+F: tests/test_release_artifact_gate.sh
+F: tests/test_source_archive.sh
+F: docs/DEPLOYMENT.md
+F: docs/CICD.md
+
+TESTING
+S: Maintained
+F: tests/**
+
+DOCUMENTATION
+S: Maintained
+F: README.md
+F: SECURITY.md
+F: docs/**
+F: tnt.1
+F: tntctl.1

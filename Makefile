@@ -133,6 +133,10 @@ script-test: all
 	@echo "Running script tests..."
 	@cd tests && ./test_cli_options.sh
 	@cd tests && ./test_docs_help_surface.sh
+	@cd tests && ./test_get_maintainer.sh
+	@cd tests && ./test_check_maintainers.sh
+	@cd tests && ./test_module_check.sh
+	@cd tests && ./test_install_wizard.sh
 	@cd tests && ./test_logrotate.sh
 	@cd tests && ./test_message_log_tool.sh
 	@cd tests && ./test_source_archive.sh

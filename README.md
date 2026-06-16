@@ -17,13 +17,19 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 
 ### Installation
 
-**One-liner:**
+**Pinned release installer:**
 ```sh
-curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.1.0/install.sh | VERSION=v1.1.0 sh
 ```
 The installer verifies downloaded release binaries against `checksums.txt`
 before installing them. Older releases may provide only `tnt`; newer releases
 also install `tntctl`.
+
+For convenience during testing, the moving `main` installer is also available:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+```
 
 **From source:**
 ```sh
@@ -35,6 +41,18 @@ sudo make install
 
 **Binary releases:**
 https://github.com/m1ngsama/TNT/releases
+
+**Interactive setup guide:**
+
+After installing the binary, operators can generate a reviewable environment
+file and choose a module profile with the terminal setup wizard:
+
+```sh
+scripts/install_wizard.sh --output tnt.env
+```
+
+The wizard does not restart services or install modules. Review the generated
+file, then install it manually as your systemd environment file.
 
 ### Running
 
@@ -422,6 +440,33 @@ replace placeholder checksums, and run:
 SOURCE_TARBALL=dist/tnt-chat-vX.Y.Z-source.tar.gz make package-publish-check
 ```
 
+## Module Development
+
+TNT modules are external processes that speak the `tnt.module.v1` JSON Lines
+protocol over stdin/stdout. TNT core stays minimal, Unix-like, text-first, and
+reliable; modules are the optional layer for richer modern-terminal interaction,
+visual presentation, workflow automation, and future community features.
+
+The core server owns the protocol contract and the runtime supervisor;
+community module examples and module packages live in the public companion
+repository:
+
+https://github.com/m1ngsama/tnt-modules
+
+Before enabling a third-party module, check its manifest and handshake:
+
+```sh
+scripts/module_check.sh /path/to/module
+```
+
+Enable reviewed modules explicitly:
+
+```sh
+TNT_MODULE_PATHS=/opt/tnt-modules/echo-module:/opt/tnt-modules/other-module tnt
+```
+
+Unset `TNT_MODULE_PATHS` and restart TNT to return to the plain core server.
+
 ## Files
 
 ```
@@ -432,11 +477,11 @@ tnt.service     - systemd service unit
 ```
 
 The persisted chat-history format is documented in
-[docs/MESSAGE_LOG.md](docs/MESSAGE_LOG.md). Experimental community modules
-should follow the external-process protocol in
-[docs/MODULE_PROTOCOL.md](docs/MODULE_PROTOCOL.md). Module-generated content
-must always include a plain-text fallback so TNT can keep working on basic
-terminal clients and preserve the stable `messages.log` v1 history contract.
+[docs/MESSAGE_LOG.md](docs/MESSAGE_LOG.md). The core module protocol is
+documented in [docs/MODULE_PROTOCOL.md](docs/MODULE_PROTOCOL.md).
+Module-generated content must always include a plain-text fallback so TNT can
+keep working on basic terminal clients and preserve the stable `messages.log`
+v1 history contract.
 
 ### MOTD (Message of the Day)
 
@@ -457,6 +502,7 @@ Delete `motd.txt` to disable the MOTD.
 - [Development Guide](https://github.com/m1ngsama/TNT/wiki/Development-Guide) - Complete development manual
 - [Quick Setup](docs/EASY_SETUP.md) - 5-minute deployment guide
 - [Roadmap](docs/ROADMAP.md) - Long-term Unix/GNU direction and next stages
+- [Installation Lifecycle](docs/INSTALL_LIFECYCLE.md) - Setup wizard, module selection, and rollback model
 - [Interface Contract](docs/INTERFACE.md) - Scriptable commands, exit statuses, and JSON fields
 - [Module Protocol](docs/MODULE_PROTOCOL.md) - External-process module contract
 - [Security Reference](docs/SECURITY_QUICKREF.md) - Security config quick reference
