@@ -5,6 +5,9 @@
 
 #define TNT_MAX_MODULES 8
 #define TNT_MODULE_QUEUE_LIMIT 128
+/* Module-created messages use "module:<name>" as the public sender. Keep the
+ * module id short enough to fit message_t.username including the NUL byte. */
+#define TNT_MODULE_NAME_MAX (MAX_USERNAME_LEN - 8)
 
 typedef struct {
     char name[64];

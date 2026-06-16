@@ -2,14 +2,14 @@
 
 ## Quick Install
 
-One-line install (latest release):
+Pinned release install:
 ```bash
-curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.1.0/install.sh | VERSION=v1.1.0 sh
 ```
 
-Specific version:
+Moving latest-release installer, convenient for test deployments:
 ```bash
-VERSION=vX.Y.Z curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
 ```
 
 ## Manual Install
@@ -82,6 +82,20 @@ sudo systemctl restart tnt
 The service uses `StateDirectory=tnt`, so systemd creates `/var/lib/tnt` automatically.
 Use `TNT_STATE_DIR` or `tnt -d DIR` when running outside systemd to avoid depending on the current working directory.
 
+To generate a reviewable environment file with an interactive terminal setup
+wizard:
+
+```bash
+scripts/install_wizard.sh --output tnt.env
+sudo install -m 600 tnt.env /etc/default/tnt
+sudo systemctl restart tnt
+```
+
+The wizard can choose a core-only deployment, scan a module root, select
+individual modules, or validate a manually entered module path list. It never
+downloads modules, edits systemd units, or restarts TNT by itself. See
+`docs/INSTALL_LIFECYCLE.md` for the full operator lifecycle.
+
 Recommended interpretation:
 
 - `TNT_MAX_CONNECTIONS`: global connection ceiling
@@ -109,7 +123,9 @@ For that profile:
 - Prefer plain-text fallbacks for every module-created message, even when the
   module also targets richer terminal renderers.
 - Before promoting a module, test its manifest and JSONL handshake against the
-  protocol in `docs/MODULE_PROTOCOL.md`.
+  protocol in `docs/MODULE_PROTOCOL.md` with `scripts/module_check.sh`.
+- Develop and publish community modules in the public companion repository:
+  `https://github.com/m1ngsama/tnt-modules`.
 
 Enable modules explicitly with `TNT_MODULE_PATHS`, using a colon-separated
 list of module directories:
@@ -183,8 +199,8 @@ sudo firewall-cmd --reload
 # Stop service
 sudo systemctl stop tnt
 
-# Re-run install script
-curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/main/install.sh | sh
+# Re-run the pinned installer for the version you want
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.1.0/install.sh | VERSION=v1.1.0 sh
 
 # Start service
 sudo systemctl start tnt

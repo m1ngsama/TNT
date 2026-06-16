@@ -1,7 +1,7 @@
 # Maintainer: M1ng <contact@m1ng.space>
 
 pkgname=tnt-chat
-pkgver=1.0.1
+pkgver=1.1.0
 pkgrel=1
 pkgdesc='SSH-native terminal chat server with a Vim-style interface'
 arch=('x86_64' 'aarch64')

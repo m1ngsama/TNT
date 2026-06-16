@@ -16,6 +16,8 @@
 #define TNT_MODULE_LINE_MAX 4096
 #define TNT_MODULE_HANDSHAKE_TIMEOUT_MS 2000
 #define TNT_MODULE_RESPONSE_TIMEOUT_MS 100
+#define TNT_MODULE_MAX_RESPONSES_PER_EVENT 8
+#define TNT_MODULE_MAX_INVALID_RESPONSES 3
 
 struct client;
 void notify_mentions(const char *content, const struct client *sender);
@@ -25,6 +27,7 @@ typedef struct module_process {
     pid_t pid;
     int stdin_fd;
     int stdout_fd;
+    int invalid_responses;
     bool active;
 } module_process_t;
 
@@ -32,6 +35,12 @@ typedef struct module_event_node {
     message_t msg;
     struct module_event_node *next;
 } module_event_node_t;
+
+typedef enum module_response_action {
+    MODULE_RESPONSE_CONTINUE,
+    MODULE_RESPONSE_DONE,
+    MODULE_RESPONSE_INVALID
+} module_response_action_t;
 
 static module_process_t g_modules[TNT_MAX_MODULES];
 static int g_module_count = 0;
@@ -58,6 +67,31 @@ static bool is_safe_relative_entrypoint(const char *entrypoint) {
             return false;
         }
     }
+    return true;
+}
+
+static bool is_valid_module_name(const char *name) {
+    size_t len;
+
+    if (!name || name[0] == '\0') {
+        return false;
+    }
+
+    len = strlen(name);
+    if (len > TNT_MODULE_NAME_MAX ||
+        len >= sizeof(((tnt_module_manifest_t *)0)->name) ||
+        name[0] == '-' || name[len - 1] == '-') {
+        return false;
+    }
+
+    for (const unsigned char *p = (const unsigned char *)name; *p; p++) {
+        if ((*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') ||
+            *p == '-') {
+            continue;
+        }
+        return false;
+    }
+
     return true;
 }
 
@@ -144,7 +178,7 @@ int tnt_module_manifest_load(const char *module_dir,
                                    sizeof(out->name)) ||
         !tnt_json_get_string_field(manifest, "entrypoint", out->entrypoint,
                                    sizeof(out->entrypoint)) ||
-        !is_valid_username(out->name) ||
+        !is_valid_module_name(out->name) ||
         !is_safe_relative_entrypoint(out->entrypoint)) {
         return -1;
     }
@@ -351,8 +385,8 @@ static void publish_module_message(const module_process_t *module,
 
     if (!module || !plain_text || plain_text[0] == '\0') return;
 
-    snprintf(msg.username, sizeof(msg.username), "module:%s",
-             module->manifest.name);
+    snprintf(msg.username, sizeof(msg.username), "module:%.*s",
+             TNT_MODULE_NAME_MAX, module->manifest.name);
     snprintf(msg.content, sizeof(msg.content), "%s", plain_text);
 
     if (message_save(&msg) < 0) {
@@ -364,23 +398,27 @@ static void publish_module_message(const module_process_t *module,
     notify_mentions(msg.content, NULL);
 }
 
-static void handle_module_response(module_process_t *module, const char *line) {
+static module_response_action_t handle_module_response(module_process_t *module,
+                                                       const char *line) {
     tnt_module_message_create_t create;
     char type[64];
 
-    if (!module || !line || line[0] == '\0') return;
+    if (!module || !line || line[0] == '\0') {
+        return MODULE_RESPONSE_INVALID;
+    }
 
     if (tnt_module_parse_message_create(line, &create)) {
         publish_module_message(module, create.plain_text);
-        return;
+        return MODULE_RESPONSE_CONTINUE;
     }
     if (tnt_json_get_string_field(line, "type", type, sizeof(type)) &&
         strcmp(type, "event.ok") == 0) {
-        return;
+        return MODULE_RESPONSE_DONE;
     }
 
     fprintf(stderr, "module runtime: ignored invalid response from %s\n",
             module->manifest.name);
+    return MODULE_RESPONSE_INVALID;
 }
 
 static void deliver_message_to_module(module_process_t *module,
@@ -390,6 +428,7 @@ static void deliver_message_to_module(module_process_t *module,
     char line[TNT_MODULE_LINE_MAX];
     char message_id[64];
     size_t pos = 0;
+    int responses = 0;
 
     if (!module || !module->active || !msg) return;
 
@@ -417,7 +456,31 @@ static void deliver_message_to_module(module_process_t *module,
             close_module_process(module);
             return;
         }
-        handle_module_response(module, line);
+        responses++;
+        if (responses > TNT_MODULE_MAX_RESPONSES_PER_EVENT) {
+            fprintf(stderr,
+                    "module runtime: disabling %s after too many responses\n",
+                    module->manifest.name);
+            close_module_process(module);
+            return;
+        }
+
+        module_response_action_t action = handle_module_response(module, line);
+        if (action == MODULE_RESPONSE_DONE) {
+            module->invalid_responses = 0;
+            return;
+        }
+        if (action == MODULE_RESPONSE_INVALID) {
+            module->invalid_responses++;
+            if (module->invalid_responses >= TNT_MODULE_MAX_INVALID_RESPONSES) {
+                fprintf(stderr,
+                        "module runtime: disabling %s after invalid responses\n",
+                        module->manifest.name);
+                close_module_process(module);
+            }
+            return;
+        }
+        module->invalid_responses = 0;
     }
 }
 

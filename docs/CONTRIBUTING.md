@@ -97,6 +97,20 @@ utf8.c           → UTF-8 string handling
 4. Put shared localized strings in `src/i18n_text.c`.
 5. Add or update the narrowest unit/integration test for the behavior.
 
+## Adding Modules
+
+TNT core owns the module protocol, runtime supervisor, and compatibility tests.
+Community modules and module examples live in the companion repository:
+
+```text
+https://github.com/m1ngsama/tnt-modules
+```
+
+For core protocol or runtime changes, update `docs/MODULE_PROTOCOL.md`, add or
+update tests in this repository, and keep `scripts/module_check.sh` aligned with
+the manifest and handshake rules. For new module implementations, contribute to
+the companion module repository instead of adding them to TNT core.
+
 ## Debugging Tips
 
 ```sh

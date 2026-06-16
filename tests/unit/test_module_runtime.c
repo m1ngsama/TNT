@@ -142,6 +142,54 @@ TEST(rejects_unsafe_entrypoint) {
     cleanup_module_dir();
 }
 
+TEST(rejects_invalid_module_names) {
+    tnt_module_manifest_t manifest;
+    char long_name[TNT_MODULE_NAME_MAX + 2];
+    char body[512];
+
+    setup_module_dir();
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"Echo\","
+        "\"entrypoint\":\"./echo.sh\","
+        "\"permissions\":[\"message:read\",\"message:create\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) < 0);
+
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"echo_module\","
+        "\"entrypoint\":\"./echo.sh\","
+        "\"permissions\":[\"message:read\",\"message:create\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) < 0);
+
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"-echo\","
+        "\"entrypoint\":\"./echo.sh\","
+        "\"permissions\":[\"message:read\",\"message:create\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) < 0);
+
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"echo-\","
+        "\"entrypoint\":\"./echo.sh\","
+        "\"permissions\":[\"message:read\",\"message:create\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) < 0);
+
+    memset(long_name, 'a', sizeof(long_name) - 1);
+    long_name[sizeof(long_name) - 1] = '\0';
+    snprintf(body, sizeof(body),
+             "{\"protocol\":\"tnt.module.v1\",\"name\":\"%s\","
+             "\"entrypoint\":\"./echo.sh\","
+             "\"permissions\":[\"message:read\",\"message:create\"],"
+             "\"events\":[\"message.created\"]}",
+             long_name);
+    write_manifest(body);
+    assert(tnt_module_manifest_load(module_dir, &manifest) < 0);
+
+    cleanup_module_dir();
+}
+
 int main(void) {
     printf("Running module runtime unit tests...\n\n");
 
@@ -149,6 +197,7 @@ int main(void) {
     RUN_TEST(rejects_wrong_protocol);
     RUN_TEST(rejects_missing_permissions_or_events);
     RUN_TEST(rejects_unsafe_entrypoint);
+    RUN_TEST(rejects_invalid_module_names);
 
     printf("\nAll %d module runtime tests passed.\n", tests_passed);
     return 0;

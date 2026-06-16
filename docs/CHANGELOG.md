@@ -2,7 +2,20 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-06-16
+
 ### Added
+- Added `scripts/module_check.sh` for validating third-party module manifests,
+  entrypoints, protocol handshakes, permissions, events, and TNT minimum
+  version compatibility before deployment.
+- Added `scripts/install_wizard.sh`, a non-mutating installer guide that writes
+  reviewable environment files for core-only, all-compatible, selected, and
+  manually supplied module deployments.
+- Added `MAINTAINERS` plus maintainer lookup and coverage checks, giving the
+  core runtime, module interface, packaging, tests, and documentation explicit
+  ownership patterns.
+- Added regression tests for module manifest compatibility, install wizard
+  selection behavior, maintainer lookup, and maintainer coverage.
 - Added a release tag/version guard used by the GitHub release workflow, so a
   `vX.Y.Z` tag must match `TNT_VERSION` before release assets are built.
 - Added `make package-publish-check` for verifying Arch/Homebrew source
@@ -51,6 +64,15 @@
   and server survival stay responsive.
 
 ### Changed
+- Module names are now restricted to lowercase ASCII letters, digits, and
+  hyphens, with a length cap that keeps generated `module:<name>` senders
+  within the public message username limit.
+- The module runtime now disables modules that flood a single event with too
+  many responses or repeatedly emit invalid response records, keeping bad
+  downstream modules isolated from the core server.
+- Module documentation now treats the public companion module repository as
+  downstream of the TNT core protocol and keeps TNT's core Unix surface
+  minimal, text-first, and robust.
 - INSERT-mode chrome now only advertises message sending and `Esc` to NORMAL;
   `? keys` appears only in NORMAL mode, matching where help keys work.
 - Dismissing MOTD now returns first-time users to INSERT mode, and `Ctrl+C`
