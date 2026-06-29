@@ -13,6 +13,7 @@
 #include "manual.h"
 #include "message.h"
 #include "system_message.h"
+#include "theme.h"
 #include "tui.h"
 #include "utf8.h"
 #include <stdio.h>
@@ -152,7 +153,8 @@ static void append_inbox_output(client_t *client, char *output,
     pthread_mutex_unlock(&client->whisper_lock);
 
     buffer_appendf(output, buf_size, pos,
-                   "\033[1;36m%s\033[0m  \033[2;37m· %d",
+                   "%s%s\033[0m  \033[2;37m· %d",
+                   theme_resolve(client->theme_index)->accent_bold,
                    i18n_text(client->ui_lang, I18N_INBOX_TITLE),
                    snap_count);
     if (unread_count > 0) {
@@ -286,10 +288,15 @@ void commands_dispatch(client_t *client) {
     }
 
     if (command_id == TNT_COMMAND_USERS) {
+        const theme_t *theme = theme_resolve(client->theme_index);
+        char self_gutter[32];
+        snprintf(self_gutter, sizeof(self_gutter), "%s▎\033[0m", theme->accent);
+
         pthread_rwlock_rdlock(&g_room->lock);
         int total = g_room->client_count;
         buffer_appendf(output, sizeof(output), &pos,
-                       "\033[1;36m%s\033[0m  \033[2;37m· %d\033[0m\n",
+                       "%s%s\033[0m  \033[2;37m· %d\033[0m\n",
+                       theme->accent_bold,
                        i18n_text(client->ui_lang, I18N_USERS_TITLE), total);
 
         time_t now = time(NULL);
@@ -308,7 +315,7 @@ void commands_dispatch(client_t *client) {
             /* 1-column gutter: ▎ for you, blank for others */
             buffer_appendf(output, sizeof(output), &pos,
                            "%s  \033[37m%s\033[0m  \033[2;37m· %s\033[0m\n",
-                           is_self ? "\033[36m▎\033[0m" : " ",
+                           is_self ? self_gutter : " ",
                            g_room->clients[i]->username, dur_str);
         }
         pthread_rwlock_unlock(&g_room->lock);
@@ -554,6 +561,37 @@ void commands_dispatch(client_t *client) {
                                  client->mute_joins ?
                                  I18N_MUTE_JOINS_MUTED :
                                  I18N_MUTE_JOINS_UNMUTED));
+
+    } else if (command_id == TNT_COMMAND_THEME) {
+        const char *name = arg;
+        while (*name == ' ') name++;
+
+        if (name[0] == '\0') {
+            char names[256] = {0};
+            size_t npos = 0;
+            theme_append_names(names, sizeof(names), &npos);
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->ui_lang,
+                                     I18N_THEME_CURRENT_FORMAT),
+                           theme_resolve(client->theme_index)->name, names);
+        } else {
+            const theme_t *chosen = theme_find(name);
+            if (chosen) {
+                client->theme_index = (int)(chosen - theme_at(0));
+                buffer_appendf(output, sizeof(output), &pos,
+                               i18n_text(client->ui_lang,
+                                         I18N_THEME_SET_FORMAT),
+                               chosen->name);
+            } else {
+                char names[256] = {0};
+                size_t npos = 0;
+                theme_append_names(names, sizeof(names), &npos);
+                buffer_appendf(output, sizeof(output), &pos,
+                               i18n_text(client->ui_lang,
+                                         I18N_THEME_UNSUPPORTED_FORMAT),
+                               name, names);
+            }
+        }
 
     } else if (command_id == TNT_COMMAND_QUIT) {
         client->connected = false;

@@ -3,6 +3,7 @@
 #include "common.h"
 #include "input.h"
 #include "ratelimit.h"
+#include "theme.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <libssh/callbacks.h>
@@ -456,6 +457,7 @@ void *bootstrap_run(void *arg) {
     client->width = init_w;
     client->height = init_h;
     client->ref_count = 1;
+    client->theme_index = (int)theme_default_index();
     pthread_mutex_init(&client->ref_lock, NULL);
     pthread_mutex_init(&client->io_lock, NULL);
     pthread_mutex_init(&client->whisper_lock, NULL);

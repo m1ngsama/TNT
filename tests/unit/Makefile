@@ -31,8 +31,9 @@ SYSTEM_MESSAGE_SRC = ../../src/system_message.c
 HELP_TEXT_SRC = ../../src/help_text.c
 MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
+THEME_SRC = ../../src/theme.c
 
-TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_config_defaults
+TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_config_defaults test_theme
 
 .PHONY: all clean run
 
@@ -92,6 +93,9 @@ test_ratelimit: test_ratelimit.c $(RATELIMIT_SRC) $(COMMON_SRC) $(CONFIG_DEFAULT
 test_config_defaults: test_config_defaults.c $(CONFIG_DEFAULTS_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_theme: test_theme.c $(THEME_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 run: all
 	@echo "=== Running UTF-8 Tests ==="
 	./test_utf8
@@ -146,6 +150,9 @@ run: all
 	@echo ""
 	@echo "=== Running Config Defaults Tests ==="
 	./test_config_defaults
+	@echo ""
+	@echo "=== Running Theme Tests ==="
+	./test_theme
 
 clean:
 	rm -f $(TESTS) *.o test_messages.log

@@ -6,6 +6,7 @@
 #include "history_view.h"
 #include "i18n.h"
 #include "system_message.h"
+#include "theme.h"
 #include "tui_status.h"
 #include "utf8.h"
 #include <unistd.h>
@@ -42,7 +43,8 @@ static char *client_render_buffer(client_t *client, size_t min_size) {
 
 static void format_message_colored(const message_t *msg, char *buffer,
                                    size_t buf_size, int width,
-                                   const char *my_username) {
+                                   const char *my_username,
+                                   const theme_t *theme) {
     struct tm tm_info;
     localtime_r(&msg->timestamp, &tm_info);
     char time_str[32];
@@ -64,8 +66,16 @@ static void format_message_colored(const message_t *msg, char *buffer,
             is_self = true;
         }
     }
-    /* Always 1 column wide so all messages align vertically. */
-    const char *gutter = is_self ? "\033[36m▎\033[0m" : " ";
+    /* Always 1 column wide so all messages align vertically.  The self-marker
+     * uses the viewer's accent theme. */
+    char gutter_buf[32];
+    const char *gutter;
+    if (is_self) {
+        snprintf(gutter_buf, sizeof(gutter_buf), "%s▎\033[0m", theme->accent);
+        gutter = gutter_buf;
+    } else {
+        gutter = " ";
+    }
 
     bool mentioned = false;
     if (my_username && my_username[0] != '\0' &&
@@ -84,8 +94,8 @@ static void format_message_colored(const message_t *msg, char *buffer,
                  "%s\033[90m--> %s\033[0m", gutter, msg->content);
     } else if (strcmp(msg->username, "*") == 0) {
         snprintf(buffer, buf_size,
-                 "%s\033[90m%s\033[0m \033[3;36m* %s\033[0m",
-                 gutter, time_str, msg->content);
+                 "%s\033[90m%s\033[0m %s* %s\033[0m",
+                 gutter, time_str, theme->accent_italic, msg->content);
     } else {
         snprintf(buffer, buf_size,
                  "%s\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
@@ -138,8 +148,8 @@ static void format_message_colored(const message_t *msg, char *buffer,
                      "%s\033[90m--> %s\033[0m", gutter, truncated_content);
         } else if (strcmp(msg->username, "*") == 0) {
             snprintf(buffer, buf_size,
-                     "%s\033[90m%s\033[0m \033[3;36m%s\033[0m",
-                     gutter, time_str, truncated_content);
+                     "%s\033[90m%s\033[0m %s%s\033[0m",
+                     gutter, time_str, theme->accent_italic, truncated_content);
         } else {
             snprintf(buffer, buf_size,
                      "%s\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
@@ -262,6 +272,8 @@ void tui_render_screen(client_t *client) {
     int render_height = client->height;
     if (render_width < 10) render_width = 10;
     if (render_height < 4) render_height = 4;
+
+    const theme_t *theme = theme_resolve(client->theme_index);
 
     const size_t buf_size = (size_t)(render_height + 10) * (MAX_MESSAGE_LEN + 64) + 2048;
     char *buffer = client_render_buffer(client, buf_size);
@@ -432,7 +444,7 @@ void tui_render_screen(client_t *client) {
     const char *mode_str;
     const char *mode_color;
     switch (client->mode) {
-        case MODE_INSERT:  mode_str = "INSERT";  mode_color = "\033[36m"; break;
+        case MODE_INSERT:  mode_str = "INSERT";  mode_color = theme->accent; break;
         case MODE_NORMAL:  mode_str = "NORMAL";  mode_color = "\033[33m"; break;
         case MODE_COMMAND: mode_str = "COMMAND"; mode_color = "\033[35m"; break;
         default:           mode_str = "HELP";    mode_color = "\033[34m"; break;
@@ -577,7 +589,7 @@ void tui_render_screen(client_t *client) {
 
             char msg_line[2048];
             format_message_colored(&msg_snapshot[i], msg_line, sizeof(msg_line),
-                                   render_width, client->username);
+                                   render_width, client->username, theme);
             buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
             rows_written++;
         }
@@ -807,6 +819,8 @@ void tui_render_motd(client_t *client) {
     if (rw < 10) rw = 10;
     if (rh < 4) rh = 4;
 
+    const theme_t *theme = theme_resolve(client->theme_index);
+
     char buffer[4096];
     size_t pos = 0;
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_CLEAR ANSI_HOME);
@@ -817,8 +831,9 @@ void tui_render_motd(client_t *client) {
     int top_dash_fill = rw - 2 - title_w - 1;  /* 2 corners, 1 leading ─ */
     if (top_dash_fill < 0) top_dash_fill = 0;
 
-    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[2;36m╭─");
-    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[0;1;36m%s\033[2;36m", title);
+    buffer_appendf(buffer, sizeof(buffer), &pos, "%s╭─", theme->accent_dim);
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[0m%s%s%s", theme->accent_bold,
+                   title, theme->accent_dim);
     for (int i = 0; i < top_dash_fill; i++) {
         buffer_append_bytes(buffer, sizeof(buffer), &pos, "─", strlen("─"));
     }
@@ -870,8 +885,9 @@ void tui_render_motd(client_t *client) {
     int bot_dash_fill = rw - 2 - footer_w - 1;
     if (bot_dash_fill < 0) bot_dash_fill = 0;
 
-    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[2;36m╰─");
-    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[0;2;37m%s\033[2;36m", footer);
+    buffer_appendf(buffer, sizeof(buffer), &pos, "%s╰─", theme->accent_dim);
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[0;2;37m%s%s", footer,
+                   theme->accent_dim);
     for (int i = 0; i < bot_dash_fill; i++) {
         buffer_append_bytes(buffer, sizeof(buffer), &pos, "─", strlen("─"));
     }

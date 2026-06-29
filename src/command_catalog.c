@@ -92,6 +92,14 @@ static const command_catalog_entry_t entries[] = {
         3, true, false
     },
     {
+        {TNT_COMMAND_THEME, "theme", {"theme", "color", NULL}},
+        I18N_STRING(":theme, :theme <name>", ":theme, :theme <name>"),
+        I18N_STRING("Switch colour theme", "切换配色主题"),
+        I18N_STRING(":theme", ":theme"),
+        I18N_STRING("Usage: theme [name]\n", "用法: theme [name]\n"),
+        3, false, false
+    },
+    {
         {TNT_COMMAND_HELP, "help", {"help", NULL}},
         I18N_STRING(":help", ":help"),
         I18N_STRING("Show concise manual", "显示简明手册"),

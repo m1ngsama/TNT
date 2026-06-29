@@ -37,6 +37,7 @@ COMMANDS (COMMAND mode, prefix with :)
   last [N]               last N messages from log (default 10, max 50)
   search <keyword>       search full history (case-insensitive, 15 results)
   mute-joins             toggle join/leave notifications
+  theme [name]           switch colour theme (cyan/green/magenta/blue/amber/red/mono)
   help                   concise manual
   lang [en|zh]           show or switch UI language
   clear                  clear output

@@ -353,6 +353,59 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+THEME_SCRIPT="$STATE_DIR/theme.expect"
+cat >"$THEME_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "themer\r"
+expect "Esc NORMAL"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "lang en\r"
+expect "Language set to: en"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "theme\r"
+expect "Current theme: cyan"
+expect "Available:"
+expect "q:close"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "theme green\r"
+expect "Theme set to: green"
+expect "q:close"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "theme bogus\r"
+expect "Unsupported theme: bogus"
+expect "q:close"
+send -- "q"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$THEME_SCRIPT" >"$STATE_DIR/theme.log" 2>&1; then
+    echo "✓ :theme switches colour theme and reports state"
+    PASS=$((PASS + 1))
+else
+    echo "x theme command failed"
+    sed -n '1,200p' "$STATE_DIR/theme.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 COMMAND_USAGE_SCRIPT="$STATE_DIR/command-usage.expect"
 cat >"$COMMAND_USAGE_SCRIPT" <<EOF
 set timeout 10
