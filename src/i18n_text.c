@@ -209,6 +209,24 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "不支持的语言: %s\n"
         "用法: lang <en|zh>\n"
     ),
+    [I18N_THEME_CURRENT_FORMAT] = I18N_STRING(
+        "Current theme: %s\n"
+        "Available: %s\n"
+        "Usage: theme <name>\n",
+        "当前主题: %s\n"
+        "可用: %s\n"
+        "用法: theme <name>\n"
+    ),
+    [I18N_THEME_SET_FORMAT] = I18N_STRING(
+        "Theme set to: %s\n",
+        "主题已切换为: %s\n"
+    ),
+    [I18N_THEME_UNSUPPORTED_FORMAT] = I18N_STRING(
+        "Unsupported theme: %s\n"
+        "Available: %s\n",
+        "不支持的主题: %s\n"
+        "可用: %s\n"
+    ),
     [I18N_UNKNOWN_COMMAND_FORMAT] = I18N_STRING(
         "Unknown command: %s\n",
         "未知命令: %s\n"

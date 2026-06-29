@@ -121,6 +121,7 @@ Ctrl+C     - Exit chat
 :last [N]            - Show last N messages from history (max 50, default 10)
 :search <keyword>    - Search message history (shows last 15 matches)
 :mute-joins          - Toggle join/leave system notifications
+:theme [name]        - Switch colour theme for this session (cyan, green, magenta, blue, amber, red, mono)
 :lang <en|zh>        - Switch UI language for this session
 :help                - Show concise manual
 :clear               - Clear command output

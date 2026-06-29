@@ -43,7 +43,7 @@ TEST(interactive_manual_matches_language) {
     assert(strstr(en, "Commands") != NULL);
     assert(strstr(en, ":lang en|zh") != NULL);
     assert(strstr(en, ":mute-joins") != NULL);
-    assert(strstr(en, ":mute-joins, :clear, :q") != NULL);
+    assert(strstr(en, ":mute-joins, :theme, :clear, :q") != NULL);
     assert(strstr(en, ":support") == NULL);
     assert(strstr(en, ":commands") == NULL);
     assert(count_lines(en) <= 20);
@@ -60,7 +60,7 @@ TEST(interactive_manual_matches_language) {
     assert(strstr(zh, ":mute-joins") != NULL);
     assert(strstr(zh, ":msg <user> <message>") != NULL);
     assert(strstr(zh, "<用户>") == NULL);
-    assert(strstr(zh, ":mute-joins, :clear, :q") != NULL);
+    assert(strstr(zh, ":mute-joins, :theme, :clear, :q") != NULL);
     assert(strstr(zh, ":support") == NULL);
     assert(strstr(zh, ":commands") == NULL);
     assert(count_lines(zh) <= 20);

@@ -31,3 +31,4 @@ tests/unit/test_cli_text
 tests/unit/test_tntctl_text
 tests/unit/test_ratelimit
 tests/unit/test_config_defaults
+tests/unit/test_theme
