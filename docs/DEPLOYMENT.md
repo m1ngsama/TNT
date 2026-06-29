@@ -4,7 +4,7 @@
 
 Pinned release install:
 ```bash
-curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.1.0/install.sh | VERSION=v1.1.0 sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.2.0/install.sh | VERSION=v1.2.0 sh
 ```
 
 Moving latest-release installer, convenient for test deployments:
@@ -200,7 +200,7 @@ sudo firewall-cmd --reload
 sudo systemctl stop tnt
 
 # Re-run the pinned installer for the version you want
-curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.1.0/install.sh | VERSION=v1.1.0 sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.2.0/install.sh | VERSION=v1.2.0 sh
 
 # Start service
 sudo systemctl start tnt
