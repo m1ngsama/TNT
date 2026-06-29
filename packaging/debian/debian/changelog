@@ -1,3 +1,11 @@
+tnt-chat (1.2.0-1) unstable; urgency=medium
+
+  * Add per-session :theme colour command.
+  * Add COMMAND-mode Tab completion and newcomer onboarding guidance.
+  * Add tntctl shell completion scripts.
+
+ -- M1ng <contact@m1ng.space>  Mon, 29 Jun 2026 00:00:00 +0800
+
 tnt-chat (1.1.0-1) unstable; urgency=medium
 
   * Initial package draft.

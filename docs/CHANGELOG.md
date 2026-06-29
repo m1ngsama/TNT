@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 1.2.0 - 2026-06-29
+
+### Added
+- Per-session `:theme` colour command (`:theme`, alias `:color`) with seven
+  portable 16-colour accent themes: cyan (default), green, magenta, blue,
+  amber, red, and mono. Themes are per-session personalization and never
+  affect other users or server state.
+- COMMAND-mode Tab completion: completes command names (filling the longest
+  common prefix and listing candidates inline when ambiguous) and the first
+  argument for `:theme`/`:lang` values and online usernames for `:msg`/`:w`.
+- Newcomer onboarding: a dim "getting started" line on the welcome screen and
+  a richer always-visible INSERT hint that points to `:` commands and `:help`.
+- `packaging/completions/` shell completion for `tntctl` (bash, zsh, fish).
+
 ### Changed
 - `dump` now defaults to the last 100 persisted records; use `dump -n N` for an
   explicit bounded export or `dump --all` for a full persisted-log export.

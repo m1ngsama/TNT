@@ -19,7 +19,7 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 
 **Pinned release installer:**
 ```sh
-curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.1.0/install.sh | VERSION=v1.1.0 sh
+curl -sSL https://raw.githubusercontent.com/m1ngsama/TNT/v1.2.0/install.sh | VERSION=v1.2.0 sh
 ```
 The installer verifies downloaded release binaries against `checksums.txt`
 before installing them. Older releases may provide only `tnt`; newer releases
