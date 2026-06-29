@@ -259,6 +259,23 @@ void tui_render_welcome(client_t *client) {
     for (int i = 0; i < inner_w; i++) buffer_append_bytes(buf, sizeof(buf), &pos, "─", strlen("─"));
     buffer_append_bytes(buf, sizeof(buf), &pos, "╯", strlen("╯"));
     buffer_append_bytes(buf, sizeof(buf), &pos, "\033[0m", 4);
+    buffer_appendf(buf, sizeof(buf), &pos, "\r\n");
+
+    /* Newcomer guide: a single dim, centered "getting started" line below the
+     * banner, shown to everyone before the name prompt. */
+    {
+        const char *guide = i18n_text(client->ui_lang, I18N_WELCOME_GUIDE);
+        int guide_width = utf8_string_width(guide);
+        if (guide_width <= rw) {
+            int guide_pad = (rw - guide_width) / 2;
+            if (guide_pad < 0) guide_pad = 0;
+            buffer_appendf(buf, sizeof(buf), &pos, "\r\n");
+            for (int i = 0; i < guide_pad; i++) {
+                buffer_append_bytes(buf, sizeof(buf), &pos, " ", 1);
+            }
+            buffer_appendf(buf, sizeof(buf), &pos, "\033[2;37m%s\033[0m", guide);
+        }
+    }
     buffer_appendf(buf, sizeof(buf), &pos, "\r\n\r\n");
 
     client_send(client, buf, pos);
@@ -717,6 +734,41 @@ void tui_render_command_input(client_t *client) {
     buffer_appendf(buffer, sizeof(buffer), &pos,
                    "\033[%d;1H" ANSI_CLEAR_LINE, rh);
     tui_status_append(buffer, sizeof(buffer), &pos, client, 0, 0, 0);
+
+    client_send(client, buffer, pos);
+}
+
+void tui_render_command_hint(client_t *client, const char *hint) {
+    if (!client || !client->connected) return;
+
+    int rw = client->width;
+    int rh = client->height;
+    if (rw < 10) rw = 10;
+    if (rh < 4) rh = 4;
+
+    char buffer[sizeof(client->command_input) + 512];
+    size_t pos = 0;
+    buffer[0] = '\0';
+
+    buffer_appendf(buffer, sizeof(buffer), &pos,
+                   "\033[%d;1H" ANSI_CLEAR_LINE, rh);
+    tui_status_append(buffer, sizeof(buffer), &pos, client, 0, 0, 0);
+
+    if (hint && hint[0] != '\0') {
+        /* The status line shows ":<command_input>".  Reserve that width plus a
+         * two-column gap, then truncate the hint to whatever space remains. */
+        int used = 1 + utf8_string_width(client->command_input) + 2;
+        int avail = rw - used;
+        if (avail >= 4) {
+            char hint_copy[512];
+            snprintf(hint_copy, sizeof(hint_copy), "%s", hint);
+            if (utf8_string_width(hint_copy) > avail) {
+                utf8_truncate(hint_copy, avail);
+            }
+            buffer_appendf(buffer, sizeof(buffer), &pos,
+                           "  \033[2;37m%s\033[0m", hint_copy);
+        }
+    }
 
     client_send(client, buffer, pos);
 }

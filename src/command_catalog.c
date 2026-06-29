@@ -3,6 +3,7 @@
 #include "i18n.h"
 
 #include <string.h>
+#include <strings.h>
 
 typedef struct {
     tnt_command_spec_t spec;
@@ -283,6 +284,51 @@ const char *command_catalog_suggest(const char *name) {
     }
 
     return best_distance <= 2 ? best : NULL;
+}
+
+size_t command_catalog_complete(const char *prefix, const char **out,
+                                size_t max, char *lcp, size_t lcp_size) {
+    size_t count = 0;
+    size_t plen;
+
+    if (lcp && lcp_size > 0) {
+        lcp[0] = '\0';
+    }
+    if (!prefix) {
+        prefix = "";
+    }
+    plen = strlen(prefix);
+
+    for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); i++) {
+        const char *name = entries[i].spec.canonical;
+
+        if (!name) {
+            continue;
+        }
+        if (plen > 0 && strncasecmp(name, prefix, plen) != 0) {
+            continue;
+        }
+
+        if (out && count < max) {
+            out[count] = name;
+        }
+
+        if (lcp && lcp_size > 0) {
+            if (count == 0) {
+                snprintf(lcp, lcp_size, "%s", name);
+            } else {
+                size_t k = 0;
+                while (lcp[k] && name[k] && lcp[k] == name[k]) {
+                    k++;
+                }
+                lcp[k] = '\0';
+            }
+        }
+
+        count++;
+    }
+
+    return count;
 }
 
 void command_catalog_append_full(char *buffer, size_t buf_size, size_t *pos,

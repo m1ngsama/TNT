@@ -406,6 +406,60 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+COMPLETION_SCRIPT="$STATE_DIR/completion.expect"
+cat >"$COMPLETION_SCRIPT" <<EOF
+set timeout 10
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+sleep 1
+send -- "completer\r"
+expect "Esc NORMAL"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "lang en\r"
+expect "Language set to: en"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "the\t"
+expect "theme"
+send -- "\r"
+expect "Current theme: cyan"
+send -- "q"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "m\t"
+expect "msg  mute-joins"
+send -- "\025"
+send -- "\033"
+expect "NORMAL"
+send -- ":"
+expect ":"
+send -- "theme gr\t"
+expect "theme green"
+send -- "\r"
+expect "Theme set to: green"
+send -- "q"
+sleep 0.2
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$COMPLETION_SCRIPT" >"$STATE_DIR/completion.log" 2>&1; then
+    echo "✓ Tab completes command names and arguments"
+    PASS=$((PASS + 1))
+else
+    echo "x command completion failed"
+    sed -n '1,200p' "$STATE_DIR/completion.log"
+    sed -n '1,120p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
 COMMAND_USAGE_SCRIPT="$STATE_DIR/command-usage.expect"
 cat >"$COMMAND_USAGE_SCRIPT" <<EOF
 set timeout 10
