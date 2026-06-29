@@ -42,6 +42,7 @@ COMMANDS (COMMAND mode, prefix with :)
   lang [en|zh]           show or switch UI language
   clear                  clear output
   q / quit / exit        disconnect
+  Tab                    complete command / argument (lists candidates if ambiguous)
 
 INSERT MODE
   /me <action>           action message

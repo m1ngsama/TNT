@@ -126,6 +126,8 @@ Ctrl+C     - Exit chat
 :help                - Show concise manual
 :clear               - Clear command output
 :q, :quit, :exit     - Disconnect
+Tab                  - Complete command name; ambiguous prefixes list candidates
+                       (also completes :theme/:lang values and :msg usernames)
 Up/Down              - Browse command history
 ESC                  - Return to NORMAL mode
 ```
