@@ -721,6 +721,41 @@ void tui_render_command_input(client_t *client) {
     client_send(client, buffer, pos);
 }
 
+void tui_render_command_hint(client_t *client, const char *hint) {
+    if (!client || !client->connected) return;
+
+    int rw = client->width;
+    int rh = client->height;
+    if (rw < 10) rw = 10;
+    if (rh < 4) rh = 4;
+
+    char buffer[sizeof(client->command_input) + 512];
+    size_t pos = 0;
+    buffer[0] = '\0';
+
+    buffer_appendf(buffer, sizeof(buffer), &pos,
+                   "\033[%d;1H" ANSI_CLEAR_LINE, rh);
+    tui_status_append(buffer, sizeof(buffer), &pos, client, 0, 0, 0);
+
+    if (hint && hint[0] != '\0') {
+        /* The status line shows ":<command_input>".  Reserve that width plus a
+         * two-column gap, then truncate the hint to whatever space remains. */
+        int used = 1 + utf8_string_width(client->command_input) + 2;
+        int avail = rw - used;
+        if (avail >= 4) {
+            char hint_copy[512];
+            snprintf(hint_copy, sizeof(hint_copy), "%s", hint);
+            if (utf8_string_width(hint_copy) > avail) {
+                utf8_truncate(hint_copy, avail);
+            }
+            buffer_appendf(buffer, sizeof(buffer), &pos,
+                           "  \033[2;37m%s\033[0m", hint_copy);
+        }
+    }
+
+    client_send(client, buffer, pos);
+}
+
 /* Render the command output screen */
 void tui_render_command_output(client_t *client) {
     if (!client || !client->connected) return;

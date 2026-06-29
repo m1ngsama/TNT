@@ -27,6 +27,12 @@ void tui_render_input(struct client *client, const char *input);
 /* Render only the command input/status line */
 void tui_render_command_input(struct client *client);
 
+/* Render the command input/status line followed by a dim completion hint
+ * (e.g. a space-separated list of candidate commands).  The hint is
+ * truncated to the remaining terminal width.  A NULL or empty hint behaves
+ * like tui_render_command_input(). */
+void tui_render_command_hint(struct client *client, const char *hint);
+
 /* Clear the screen */
 void tui_clear_screen(struct client *client);
 

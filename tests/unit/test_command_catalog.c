@@ -159,9 +159,70 @@ TEST(generates_localized_usage) {
     assert(strcmp(en, "Usage: users\n") == 0);
 }
 
+TEST(completes_unique_prefix) {
+    const char *out[8];
+    char lcp[32];
+    size_t n = command_catalog_complete("the", out, 8, lcp, sizeof(lcp));
+    assert(n == 1);
+    assert(strcmp(out[0], "theme") == 0);
+    assert(strcmp(lcp, "theme") == 0);
+}
+
+TEST(completes_ambiguous_prefix_to_common_prefix) {
+    const char *out[8];
+    char lcp[32];
+    size_t n = command_catalog_complete("m", out, 8, lcp, sizeof(lcp));
+    /* msg and mute-joins both start with m */
+    assert(n >= 2);
+    assert(strcmp(lcp, "m") == 0);
+    bool saw_msg = false, saw_mute = false;
+    for (size_t i = 0; i < n && i < 8; i++) {
+        if (strcmp(out[i], "msg") == 0) saw_msg = true;
+        if (strcmp(out[i], "mute-joins") == 0) saw_mute = true;
+    }
+    assert(saw_msg && saw_mute);
+}
+
+TEST(completes_is_case_insensitive_but_returns_canonical) {
+    const char *out[4];
+    char lcp[32];
+    size_t n = command_catalog_complete("THE", out, 4, lcp, sizeof(lcp));
+    assert(n == 1);
+    assert(strcmp(out[0], "theme") == 0);
+    assert(strcmp(lcp, "theme") == 0);
+}
+
+TEST(empty_prefix_matches_all) {
+    const char *out[32];
+    char lcp[32];
+    size_t n = command_catalog_complete("", out, 32, lcp, sizeof(lcp));
+    assert(n >= 10);
+    assert(lcp[0] == '\0');
+}
+
+TEST(no_match_returns_zero) {
+    const char *out[4];
+    char lcp[32];
+    size_t n = command_catalog_complete("zzz", out, 4, lcp, sizeof(lcp));
+    assert(n == 0);
+}
+
+TEST(complete_respects_max_but_reports_total) {
+    const char *out[2];
+    char lcp[32];
+    size_t n = command_catalog_complete("", out, 2, lcp, sizeof(lcp));
+    assert(n >= 10);  /* total reported even though only 2 written */
+}
+
 int main(void) {
     printf("Running command catalog unit tests...\n\n");
 
+    RUN_TEST(completes_unique_prefix);
+    RUN_TEST(completes_ambiguous_prefix_to_common_prefix);
+    RUN_TEST(completes_is_case_insensitive_but_returns_canonical);
+    RUN_TEST(empty_prefix_matches_all);
+    RUN_TEST(no_match_returns_zero);
+    RUN_TEST(complete_respects_max_but_reports_total);
     RUN_TEST(matches_canonical_names_and_aliases);
     RUN_TEST(matches_known_commands_before_argument_validation);
     RUN_TEST(validates_argument_shapes);

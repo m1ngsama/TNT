@@ -1,6 +1,7 @@
 #include "input.h"
 #include "chat_room.h"
 #include "client.h"
+#include "command_catalog.h"
 #include "commands.h"
 #include "config_defaults.h"
 #include "common.h"
@@ -12,6 +13,7 @@
 #include "module_runtime.h"
 #include "ratelimit.h"
 #include "system_message.h"
+#include "theme.h"
 #include "tui.h"
 #include "utf8.h"
 #include <libssh/callbacks.h>
@@ -359,6 +361,156 @@ static pager_action_t pager_apply_key(client_t *client, unsigned char key,
     }
 
     return PAGER_ACTION_NONE;
+}
+
+/* Join up to `shown` candidate strings into `out` as "a  b  c", adding a
+ * "(+K)" suffix when more candidates exist than are shown. */
+static void build_candidate_hint(char *out, size_t out_size,
+                                 const char **cands, size_t n, size_t shown) {
+    size_t pos = 0;
+    out[0] = '\0';
+    for (size_t i = 0; i < n && i < shown; i++) {
+        buffer_appendf(out, out_size, &pos, "%s%s", i ? "  " : "", cands[i]);
+    }
+    if (n > shown) {
+        buffer_appendf(out, out_size, &pos, "  (+%u)", (unsigned)(n - shown));
+    }
+}
+
+/* Case-insensitive prefix filter over an ad-hoc candidate array, mirroring
+ * command_catalog_complete() for argument completion.  Returns the total match
+ * count; writes up to `maxm` matches into `matches` and the longest common
+ * prefix of all matches into `lcp`. */
+static size_t prefix_filter(const char **cands, size_t ncand,
+                            const char *prefix, const char **matches,
+                            size_t maxm, char *lcp, size_t lcp_size) {
+    size_t count = 0;
+    size_t plen = prefix ? strlen(prefix) : 0;
+
+    if (lcp && lcp_size > 0) {
+        lcp[0] = '\0';
+    }
+    for (size_t i = 0; i < ncand; i++) {
+        const char *name = cands[i];
+        if (!name) {
+            continue;
+        }
+        if (plen > 0 && strncasecmp(name, prefix, plen) != 0) {
+            continue;
+        }
+        if (matches && count < maxm) {
+            matches[count] = name;
+        }
+        if (lcp && lcp_size > 0) {
+            if (count == 0) {
+                snprintf(lcp, lcp_size, "%s", name);
+            } else {
+                size_t k = 0;
+                while (lcp[k] && name[k] && lcp[k] == name[k]) {
+                    k++;
+                }
+                lcp[k] = '\0';
+            }
+        }
+        count++;
+    }
+    return count;
+}
+
+/* Tab completion for COMMAND mode.  Completes the command name when no
+ * argument has been started, otherwise completes the first argument for the
+ * handful of commands with a closed/known candidate set (theme, lang, and
+ * online usernames for msg).  Mutates client->command_input and renders. */
+static void command_tab_complete(client_t *client) {
+    char *buf = client->command_input;
+    size_t cap = sizeof(client->command_input);
+    char *sp = strchr(buf, ' ');
+
+    if (sp == NULL) {
+        /* Command name completion. */
+        const char *out[16];
+        char lcp[64];
+        size_t n = command_catalog_complete(buf, out, 16, lcp, sizeof(lcp));
+        if (n == 0) {
+            client_send(client, "\a", 1);
+            return;
+        }
+        if (n == 1) {
+            snprintf(buf, cap, "%s ", out[0]);
+            tui_render_command_input(client);
+            return;
+        }
+        if (strlen(lcp) > strlen(buf)) {
+            snprintf(buf, cap, "%s", lcp);
+        }
+        char hint[512];
+        build_candidate_hint(hint, sizeof(hint), out, n, 12);
+        tui_render_command_hint(client, hint);
+        return;
+    }
+
+    /* Argument completion (first argument only). */
+    char cmd[32];
+    size_t cmdlen = (size_t)(sp - buf);
+    if (cmdlen == 0 || cmdlen >= sizeof(cmd)) {
+        return;
+    }
+    memcpy(cmd, buf, cmdlen);
+    cmd[cmdlen] = '\0';
+
+    const char *argregion = sp;
+    while (*argregion == ' ') {
+        argregion++;
+    }
+    if (strchr(argregion, ' ') != NULL) {
+        return;  /* past the first argument: nothing to complete */
+    }
+
+    const char *cands[64];
+    char namebufs[64][MAX_USERNAME_LEN];
+    size_t ncand = 0;
+
+    if (strcasecmp(cmd, "theme") == 0 || strcasecmp(cmd, "color") == 0) {
+        size_t tc = theme_count();
+        for (size_t i = 0; i < tc && ncand < 64; i++) {
+            cands[ncand++] = theme_at(i)->name;
+        }
+    } else if (strcasecmp(cmd, "lang") == 0 ||
+               strcasecmp(cmd, "language") == 0) {
+        cands[ncand++] = "en";
+        cands[ncand++] = "zh";
+    } else if (strcasecmp(cmd, "msg") == 0 || strcasecmp(cmd, "w") == 0) {
+        pthread_rwlock_rdlock(&g_room->lock);
+        for (int i = 0; i < g_room->client_count && ncand < 64; i++) {
+            snprintf(namebufs[ncand], MAX_USERNAME_LEN, "%s",
+                     g_room->clients[i]->username);
+            cands[ncand] = namebufs[ncand];
+            ncand++;
+        }
+        pthread_rwlock_unlock(&g_room->lock);
+    } else {
+        return;
+    }
+
+    const char *out[64];
+    char lcp[MAX_USERNAME_LEN];
+    size_t n = prefix_filter(cands, ncand, argregion, out, 64, lcp,
+                             sizeof(lcp));
+    if (n == 0) {
+        client_send(client, "\a", 1);
+        return;
+    }
+    if (n == 1) {
+        snprintf(buf, cap, "%s %s ", cmd, out[0]);
+        tui_render_command_input(client);
+        return;
+    }
+    if (strlen(lcp) > strlen(argregion)) {
+        snprintf(buf, cap, "%s %s", cmd, lcp);
+    }
+    char hint[512];
+    build_candidate_hint(hint, sizeof(hint), out, n, 12);
+    tui_render_command_hint(client, hint);
 }
 
 /* Handle a single key press.  Returns true if the key was fully consumed
@@ -820,6 +972,9 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     client->command_input[0] = '\0';
                     tui_render_command_input(client);
                 }
+                return true;
+            } else if (key == 9) { /* Tab: complete command name or argument */
+                command_tab_complete(client);
                 return true;
             }
             break;
