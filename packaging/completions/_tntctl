@@ -1,0 +1,37 @@
+#compdef tntctl
+# zsh completion for tntctl
+#
+# Install: place this file (named _tntctl) in a directory on your $fpath,
+# e.g. ~/.zsh/completions, and ensure `autoload -U compinit && compinit`
+# runs in ~/.zshrc.
+
+_tntctl() {
+    local -a opts commands
+    local prev
+    opts=(-p --port -l --login --host-key-checking --known-hosts -h --help -V --version)
+    commands=(health stats users tail dump post help exit)
+
+    prev=${words[CURRENT-1]}
+    case $prev in
+        --host-key-checking)
+            compadd yes accept-new no
+            return ;;
+        --known-hosts)
+            _files
+            return ;;
+        -p|--port|-l|--login)
+            return ;;
+    esac
+
+    if [[ ${words[CURRENT]} == -* ]]; then
+        if (( ${words[(I)users]} || ${words[(I)stats]} )); then
+            compadd -- $opts --json
+        else
+            compadd -- $opts
+        fi
+    else
+        compadd -- $commands
+    fi
+}
+
+_tntctl "$@"
