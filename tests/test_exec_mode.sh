@@ -25,12 +25,20 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-SSH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
+# ConnectionAttempts/ConnectTimeout make each exec connection resilient to the
+# transient "connection closed during identification" races seen on slow CI
+# runners (notably macOS).
+SSH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
 TNTCTL_OPTS="--host-key-checking no --known-hosts /dev/null"
 
 echo "=== TNT Exec Mode Tests ==="
 
-TNT_LANG=zh TNT_RATE_LIMIT=0 $BIN -p "$PORT" -d "$STATE_DIR" >"${STATE_DIR}/server.log" 2>&1 &
+# This suite opens many short-lived exec connections in quick succession. On
+# macOS the closed sockets linger, so the default per-IP concurrency cap (5)
+# can be transiently exceeded and a connection refused mid-suite. Raise the
+# caps well above the number of in-flight connections this test can produce.
+TNT_LANG=zh TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 \
+    $BIN -p "$PORT" -d "$STATE_DIR" >"${STATE_DIR}/server.log" 2>&1 &
 SERVER_PID=$!
 
 HEALTH_OUTPUT=""
