@@ -26,8 +26,8 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "TNT %s - SSH 匿名聊天室\r\n\r\n"
     ),
     [I18N_INSERT_HINT_WIDE] = I18N_STRING(
-        "Enter send · Esc NORMAL",
-        "Enter 发送 · Esc NORMAL"
+        "Enter send · : commands · :help guide · Esc NORMAL",
+        "Enter 发送 · : 命令 · :help 指引 · Esc NORMAL"
     ),
     [I18N_INSERT_HINT_NARROW] = I18N_STRING(
         "Enter · Esc",
@@ -84,6 +84,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
     [I18N_EMPTY_ROOM] = I18N_STRING(
         "No messages yet",
         "暂无消息"
+    ),
+    [I18N_WELCOME_GUIDE] = I18N_STRING(
+        "i type · Enter send · : commands · :help guide",
+        "i 输入 · Enter 发送 · : 命令 · :help 指引"
     ),
     [I18N_EMPTY_FILTERED] = I18N_STRING(
         "No visible messages",
