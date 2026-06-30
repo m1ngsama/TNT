@@ -31,7 +31,7 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-SSH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
+SSH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
 
 mkdir -p "$MODULE_DIR"
 cat >"$MODULE_DIR/tnt-module.json" <<'JSON'
@@ -142,7 +142,7 @@ chmod +x "$INVALID_MODULE_DIR/invalid-module.sh"
 echo "=== TNT Module Runtime Tests ==="
 
 TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MODULE_PATHS="$MODULE_DIR" \
-    "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
+    TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
 HEALTH_OUTPUT=""
@@ -198,7 +198,7 @@ fi
 stop_server
 
 TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MODULE_PATHS="$FLOOD_MODULE_DIR" \
-    "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/flood-server.log" 2>&1 &
+    TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/flood-server.log" 2>&1 &
 SERVER_PID=$!
 
 HEALTH_OUTPUT=""
@@ -268,7 +268,7 @@ fi
 stop_server
 
 TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MODULE_PATHS="$INVALID_MODULE_DIR" \
-    "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/invalid-server.log" 2>&1 &
+    TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/invalid-server.log" 2>&1 &
 SERVER_PID=$!
 
 HEALTH_OUTPUT=""

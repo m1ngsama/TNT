@@ -8,7 +8,7 @@ FAIL=0
 BIN="../tnt"
 SERVER_PID=""
 STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-basic-test.XXXXXX")
-SSH_HEALTH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
+SSH_HEALTH_OPTS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
 
 cleanup() {
     if [ -n "$SERVER_PID" ]; then
@@ -45,8 +45,10 @@ if ! command -v expect >/dev/null 2>&1; then
     exit 0
 fi
 
-# Start server
-"$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
+# Start server. High per-IP/global caps so the suite's rapid SSH connections
+# do not transiently exceed the default per-IP limit on slow CI runners.
+TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 \
+    "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
 # Test 1: Server started and accepts exec health checks

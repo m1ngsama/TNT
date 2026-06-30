@@ -89,7 +89,7 @@ Optional compatibility fields:
 TNT starts a module process and writes a handshake event:
 
 ```json
-{"type":"handshake","protocol":"tnt.module.v1","server":{"name":"tnt","version":"1.1.0"}}
+{"type":"handshake","protocol":"tnt.module.v1","server":{"name":"tnt","version":"1.2.0"}}
 ```
 
 The module should answer:
