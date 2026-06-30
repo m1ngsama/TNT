@@ -23,7 +23,7 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-SSH_BASE="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -p $PORT"
+SSH_BASE="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
 
 wait_for_health() {
     local out
@@ -76,7 +76,7 @@ EOF
 
 echo "=== TNT Anonymous Access Tests ==="
 
-TNT_LANG=zh TNT_RATE_LIMIT=0 "$BIN" -p "$PORT" -d "$STATE_DIR" \
+TNT_LANG=zh TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" \
     >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
