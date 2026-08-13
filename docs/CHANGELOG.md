@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.0 - 2026-08-13
+
 ### Added
 - Added `make perf`, `make perf-smoke`, `make perf-check`, and `make perf-full`
   around a dependency-free Python benchmark that drives real OpenSSH clients

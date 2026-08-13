@@ -1,3 +1,12 @@
+tnt-chat (1.3.0-1) unstable; urgency=medium
+
+  * Add reproducible performance contracts and a 64-session release gate.
+  * Add event-driven redraws, constant-time message history, and burst ingest.
+  * Add graceful shutdown and bounded, cancellable module I/O.
+  * Harden identity uniqueness, rate accounting, and SSH session teardown.
+
+ -- M1ng <contact@m1ng.space>  Thu, 13 Aug 2026 00:00:00 +0800
+
 tnt-chat (1.2.0-1) unstable; urgency=medium
 
   * Add per-session :theme colour command.
