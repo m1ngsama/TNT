@@ -98,6 +98,8 @@ start_server "$STATE_DIR/normal-quit.log" env
 if wait_for_health; then
     quit_status=0
     eof_status=0
+    repeated_quit_status=0
+    repeated_quit_attempt=0
     python3 -c 'import sys,time; sys.stdout.write("normal-user"+chr(13)); sys.stdout.flush(); time.sleep(1); sys.stdout.write(chr(27)+":quit"+chr(13)); sys.stdout.flush(); time.sleep(1)' | \
         ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes -o ConnectTimeout=3 -p "$PORT" localhost \
@@ -106,11 +108,31 @@ if wait_for_health; then
         ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes -o ConnectTimeout=3 -p "$PORT" localhost \
             >"$STATE_DIR/normal-eof.out" 2>/dev/null || eof_status=$?
+    while [ "$repeated_quit_attempt" -lt 16 ]; do
+        python3 -c 'import sys,time; sys.stdout.write(sys.argv[1]+chr(13)); sys.stdout.flush(); time.sleep(.3); sys.stdout.write(chr(27)+":quit"+chr(13)); sys.stdout.flush(); time.sleep(.3)' \
+            "repeat-quit-$repeated_quit_attempt" | \
+            ssh -tt -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null -o BatchMode=yes \
+                -o ConnectTimeout=3 -p "$PORT" localhost \
+                >/dev/null 2>&1 || repeated_quit_status=$?
+        if [ "$repeated_quit_status" -ne 0 ]; then
+            break
+        fi
+        repeated_quit_attempt=$((repeated_quit_attempt + 1))
+    done
     if [ "$quit_status" -eq 0 ] && [ "$eof_status" -eq 0 ]; then
         echo "✓ normal :quit and stdin EOF return SSH status 0"
         PASS=$((PASS + 1))
     else
         echo "✗ normal exits returned :quit=$quit_status EOF=$eof_status"
+        FAIL=$((FAIL + 1))
+    fi
+    if [ "$repeated_quit_status" -eq 0 ] &&
+       [ "$repeated_quit_attempt" -eq 16 ]; then
+        echo "✓ repeated :quit teardown preserves SSH status 0"
+        PASS=$((PASS + 1))
+    else
+        echo "✗ repeated :quit failed on attempt $repeated_quit_attempt with status $repeated_quit_status"
         FAIL=$((FAIL + 1))
     fi
     kill -TERM "$SERVER_PID" 2>/dev/null || true

@@ -34,9 +34,9 @@
   workers, then reaps module children before destroying shared room state.
 
 ### Fixed
-- Preserved SSH exec exit statuses during normal session teardown instead of
-  racing them with a transport-level disconnect, and added repeated real-SSH
-  regression coverage for the close path.
+- Preserved SSH exec and interactive exit statuses during normal session
+  teardown instead of racing them with a transport-level disconnect, and
+  added repeated real-SSH regression coverage for both close paths.
 - Removed scheduler timing from the module drip-feed deadline test and avoided
   a secondary missing-artifact failure when extended CI stops before the
   performance step.

@@ -438,6 +438,7 @@ static void client_channel_close(ssh_session session, ssh_channel channel,
 
     client_t *client = (client_t *)userdata;
     if (client) {
+        atomic_store(&client->channel_closed, true);
         client->connected = false;
         client_wake(client);
     }

@@ -490,6 +490,7 @@ void *bootstrap_run(void *arg) {
 
     atomic_init(&client->wake_ready, false);
     atomic_init(&client->wake_pending, false);
+    atomic_init(&client->channel_closed, false);
 
     client->session = session;
     client->channel = channel;

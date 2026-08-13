@@ -78,6 +78,7 @@ typedef struct client {
     bool mute_joins;
     pthread_t thread;
     atomic_bool connected;
+    atomic_bool channel_closed;      /* Peer CHANNEL_CLOSE callback observed */
     int ref_count;                   /* Reference count for safe cleanup */
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */
