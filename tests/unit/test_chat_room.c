@@ -8,6 +8,8 @@
 struct client {
     char username[MAX_USERNAME_LEN];
     int wake_count;
+    uint64_t expected_seq;
+    uint64_t rendered_seq;
 };
 typedef struct client client_t;
 
@@ -33,12 +35,20 @@ static message_t make_msg(const char *user, const char *content) {
     return m;
 }
 
-static void count_client_wake(struct client *client) {
+static void count_client_wake(struct client *client, uint64_t seq) {
     client->wake_count++;
+    client->expected_seq = seq;
 }
 
 static const char *test_client_name(const struct client *client) {
     return client ? client->username : NULL;
+}
+
+static bool record_client_render(struct client *client, uint64_t seq) {
+    if (client->expected_seq != seq) return false;
+    if (client->rendered_seq == seq) return false;
+    client->rendered_seq = seq;
+    return true;
 }
 
 static void assert_message_content(chat_room_t *room, int index,
@@ -285,6 +295,45 @@ TEST(room_broadcast_notifies_current_clients) {
     room_destroy(room);
 }
 
+TEST(room_distribution_completion_is_deduplicated) {
+    chat_room_t *room = room_create();
+    client_t c1 = {0};
+    client_t c2 = {0};
+    message_t msg = make_msg("alice", "measure distribution");
+    room_distribution_stats_t stats;
+
+    room_set_client_notifier(room, count_client_wake);
+    room_set_client_render_ack(room, record_client_render);
+    assert(room_add_client(room, &c1) == 0);
+    assert(room_add_client(room, &c2) == 0);
+    room_broadcast(room, &msg);
+    room_get_distribution_stats(room, &stats);
+    assert(stats.current_seq > 0);
+    assert(stats.expected_clients == 2);
+    assert(stats.completed_clients == 0);
+
+    room_record_client_rendered(room, &c1, stats.current_seq);
+    room_record_client_rendered(room, &c1, stats.current_seq);
+    room_get_distribution_stats(room, &stats);
+    assert(stats.completed_clients == 1);
+    assert(stats.last_complete_seq == 0);
+
+    /* A client that joined after this generation was published cannot
+     * substitute for one of the two clients counted at broadcast time. */
+    client_t late = {0};
+    assert(room_add_client(room, &late) == 0);
+    room_record_client_rendered(room, &late, stats.current_seq);
+    room_get_distribution_stats(room, &stats);
+    assert(stats.completed_clients == 1);
+
+    room_record_client_rendered(room, &c2, stats.current_seq);
+    room_get_distribution_stats(room, &stats);
+    assert(stats.completed_clients == 2);
+    assert(stats.last_complete_seq == stats.current_seq);
+
+    room_destroy(room);
+}
+
 TEST(room_get_message_valid) {
     chat_room_t *room = room_create();
     message_t msg = make_msg("carol", "test");
@@ -439,6 +488,7 @@ int main(void) {
     RUN_TEST(room_concurrent_snapshots_stay_ordered);
     RUN_TEST(room_broadcast_increments_seq);
     RUN_TEST(room_broadcast_notifies_current_clients);
+    RUN_TEST(room_distribution_completion_is_deduplicated);
     RUN_TEST(room_get_message_valid);
     RUN_TEST(room_get_message_invalid_index);
     RUN_TEST(room_get_message_null_args);

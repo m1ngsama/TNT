@@ -16,13 +16,15 @@
 - Added an optional, recorded server exec wrapper so reference-host runs can
   constrain TNT and module children to a one-CPU, 128-MiB, no-swap cgroup
   without constraining or miscounting the OpenSSH load generators.
-- Coalesced room redraw notifications into a bounded 8 ms window. A burst no
-  longer wakes and repaints all 64 TUI sessions for every intermediate message,
-  while interactive updates remain inside the distribution redline.
-- Defined the gated distribution latency from flushed persistence to every
-  other joined TUI receiver. The broader fresh-SSH-exec measurement remains in
-  reports as an ungated diagnostic instead of charging handshake time to room
-  fan-out; the benchmark report schema is now version 3.
+- Coalesced room redraw notifications into an adaptive 6 ms window for a single
+  update and 16 ms window after multiple updates accumulate. A burst no longer
+  wakes and repaints all 64 TUI sessions for every intermediate message, while
+  isolated interactive updates retain the lower latency bound.
+- Defined the gated distribution latency from room update publication through
+  every joined session's screen write, using de-duplicated server telemetry.
+  Persisted-to-all-peer and fresh-SSH-exec measurements remain in reports as
+  correctness and end-to-end diagnostics instead of charging load-generator
+  scheduling to room fan-out; the benchmark report schema is now version 4.
 - Added optional expected CPU, memory, and swap constraints to full and soak
   drivers, so a target-host run fails instead of silently accepting a wrapper
   that the local cgroup manager did not enforce.

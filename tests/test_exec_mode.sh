@@ -116,7 +116,8 @@ fi
 
 STATS_JSON=$(ssh $SSH_OPTS localhost stats --json 2>/dev/null || true)
 printf '%s\n' "$STATS_JSON" | grep -q '"status":"ok"' &&
-printf '%s\n' "$STATS_JSON" | grep -q '"online_users":0'
+printf '%s\n' "$STATS_JSON" | grep -q '"online_users":0' &&
+printf '%s\n' "$STATS_JSON" | grep -q '"distribution_last_complete_latency_us":'
 if [ $? -eq 0 ]; then
     echo "✓ stats --json returns JSON"
     PASS=$((PASS + 1))

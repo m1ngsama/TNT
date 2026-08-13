@@ -10,8 +10,17 @@ struct client;
 /* Optional, process-local nudge used to wake interactive client loops after a
  * room update.  The callback runs while the room lock protects client
  * lifetime, so it must never block or call back into chat_room APIs. */
-typedef void (*room_client_notifier_fn)(struct client *client);
+typedef void (*room_client_notifier_fn)(struct client *client, uint64_t seq);
 typedef const char *(*room_client_name_fn)(const struct client *client);
+typedef bool (*room_client_render_ack_fn)(struct client *client, uint64_t seq);
+
+typedef struct {
+    uint64_t current_seq;
+    int expected_clients;
+    int completed_clients;
+    uint64_t last_complete_seq;
+    uint64_t last_complete_latency_us;
+} room_distribution_stats_t;
 
 /* Fixed-capacity message history.  Entries may wrap physically; callers must
  * use the room message accessors below to observe chronological order. */
@@ -31,6 +40,14 @@ typedef struct {
     uint64_t update_seq;
     room_client_notifier_fn client_notifier;
     room_client_name_fn client_name;
+    room_client_render_ack_fn client_render_ack;
+    pthread_mutex_t distribution_lock;
+    uint64_t distribution_started_ns;
+    uint64_t distribution_seq;
+    int distribution_expected;
+    int distribution_completed;
+    uint64_t distribution_last_complete_seq;
+    uint64_t distribution_last_complete_latency_us;
 } chat_room_t;
 
 /* Global chat room instance */
@@ -53,13 +70,26 @@ void room_remove_client(chat_room_t *room, struct client *client);
 void room_broadcast(chat_room_t *room, const message_t *msg);
 
 /* Install the non-blocking client notifier used by room_broadcast().  Rooms
- * default to no notifier so chat_room remains independently unit-testable. */
+ * default to no notifier so chat_room remains independently unit-testable.
+ * `seq` is assigned while the room lock fixes the recipient set. */
 void room_set_client_notifier(chat_room_t *room,
                               room_client_notifier_fn notifier);
 
 /* Install the client display-name accessor used for atomic duplicate checks. */
 void room_set_client_name_accessor(chat_room_t *room,
                                    room_client_name_fn accessor);
+
+/* Install the per-client de-duplication hook for render completion telemetry. */
+void room_set_client_render_ack(chat_room_t *room,
+                                room_client_render_ack_fn ack);
+
+/* Record that one joined session wrote a screen containing `seq`. */
+void room_record_client_rendered(chat_room_t *room, struct client *client,
+                                 uint64_t seq);
+
+/* Snapshot the latest server-side distribution completion telemetry. */
+void room_get_distribution_stats(chat_room_t *room,
+                                 room_distribution_stats_t *out);
 
 /* Get message by index (thread-safe value copy) */
 bool room_get_message(chat_room_t *room, int index, message_t *out);

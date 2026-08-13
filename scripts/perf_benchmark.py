@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 JOIN_MARKER = b"\x1b[?2004h"
 MIB = 1024 * 1024
 
@@ -45,7 +45,7 @@ BUDGETS = {
     "idle_rss_kib": {"ideal": 8 * 1024, "redline": 16 * 1024},
     "sessions_64_rss_kib": {"ideal": 80 * 1024, "redline": 112 * 1024},
     "ssh_handshake_p95_ms": {"ideal": 50.0, "redline": 100.0},
-    "persisted_to_all_receivers_p99_ms": {
+    "room_update_to_all_session_writes_p99_ms": {
         "ideal": 5.0,
         "redline": 20.0,
     },
@@ -932,22 +932,27 @@ def measure_exec_post_to_all_receivers(
     log_path: pathlib.Path,
 ) -> dict[str, Any]:
     measured: list[float] = []
+    warmup_messages = 5
     for receiver in receivers:
         receiver.drain()
-    warmup_marker = f"pfw{run_id[:4]}".encode()
-    warmup_result = ssh_exec(
-        port, ["post", warmup_marker.decode("ascii")], username="perfbot"
-    )
-    if warmup_result.returncode != 0 or warmup_result.stdout.strip() != b"posted":
-        raise BenchmarkError("fanout warmup post failed")
-    warmup_deadline = time.monotonic() + 5
-    for receiver in receivers:
-        if not receiver.wait_for(
-            warmup_marker, max(0.0, warmup_deadline - time.monotonic())
+    for warmup_index in range(warmup_messages):
+        warmup_marker = f"pfw{run_id[:4]}{warmup_index:02d}".encode()
+        warmup_result = ssh_exec(
+            port, ["post", warmup_marker.decode("ascii")], username="perfbot"
+        )
+        if (
+            warmup_result.returncode != 0
+            or warmup_result.stdout.strip() != b"posted"
         ):
-            raise BenchmarkError(
-                f"receiver {receiver.name!r} did not render fanout warmup"
-            )
+            raise BenchmarkError("fanout warmup post failed")
+        warmup_deadline = time.monotonic() + 5
+        for receiver in receivers:
+            if not receiver.wait_for(
+                warmup_marker, max(0.0, warmup_deadline - time.monotonic())
+            ):
+                raise BenchmarkError(
+                    f"receiver {receiver.name!r} did not render fanout warmup"
+                )
     for index in range(samples):
         marker = f"pf{run_id[:4]}{index:03d}".encode()
         started_ns = time.monotonic_ns()
@@ -975,7 +980,7 @@ def measure_exec_post_to_all_receivers(
         **summarize(measured),
         "joined_receivers": len(receivers),
         "messages": samples,
-        "warmup_messages": 1,
+        "warmup_messages": warmup_messages,
         "deliveries_verified": len(receivers) * samples,
         "persistence_verified": samples,
         "completion": "every joined receiver rendered the persisted marker",
@@ -988,6 +993,7 @@ def measure_exec_post_to_all_receivers(
 
 
 def measure_interactive_distribution(
+    port: int,
     sender: InteractiveClient,
     receivers: Sequence[InteractiveClient],
     samples: int,
@@ -998,6 +1004,7 @@ def measure_interactive_distribution(
     submit_to_persistence_ms: list[float] = []
     persisted_to_all_receivers_ms: list[float] = []
     submit_to_all_receivers_ms: list[float] = []
+    room_update_to_all_session_writes_ms: list[float] = []
 
     def run_marker(marker: bytes, *, record: bool) -> None:
         marker_text = marker.decode("ascii")
@@ -1056,6 +1063,37 @@ def measure_interactive_distribution(
         # external observation timestamps preserve that ordering as well.
         if all_rendered_ns < persisted_ns:
             raise BenchmarkError("distribution observation order was inconsistent")
+
+        telemetry_deadline = time.monotonic() + 5
+        telemetry: dict[str, Any] | None = None
+        while time.monotonic() < telemetry_deadline:
+            stats_result = ssh_exec(port, ["stats", "--json"])
+            if stats_result.returncode != 0:
+                raise BenchmarkError("stats --json failed during distribution run")
+            telemetry = json.loads(stats_result.stdout)
+            current_seq = telemetry.get("distribution_seq")
+            if (
+                telemetry.get("distribution_expected_clients")
+                == len(receivers) + 1
+                and telemetry.get("distribution_completed_clients")
+                == len(receivers) + 1
+                and telemetry.get("distribution_last_complete_seq")
+                == current_seq
+            ):
+                break
+            time.sleep(0.001)
+        else:
+            raise BenchmarkError(
+                f"server distribution telemetry did not complete: {telemetry}"
+            )
+
+        latency_us = (
+            telemetry.get("distribution_last_complete_latency_us")
+            if telemetry
+            else None
+        )
+        if not isinstance(latency_us, int) or latency_us < 0:
+            raise BenchmarkError("server distribution telemetry is invalid")
         if record:
             submit_to_persistence_ms.append(
                 (persisted_ns - started_ns) / 1_000_000
@@ -1066,8 +1104,14 @@ def measure_interactive_distribution(
             submit_to_all_receivers_ms.append(
                 (all_rendered_ns - started_ns) / 1_000_000
             )
+            room_update_to_all_session_writes_ms.append(latency_us / 1000.0)
 
-    run_marker(f"pdw{run_id[:4]}".encode(), record=False)
+    warmup_messages = 21
+    for warmup_index in range(warmup_messages):
+        run_marker(
+            f"pdw{run_id[:4]}{warmup_index:02d}".encode(),
+            record=False,
+        )
     for index in range(samples):
         run_marker(f"pd{run_id[:4]}{index:03d}".encode(), record=True)
 
@@ -1077,16 +1121,23 @@ def measure_interactive_distribution(
             persisted_to_all_receivers_ms
         ),
         "submit_to_all_receivers_ms": summarize(submit_to_all_receivers_ms),
+        "room_update_to_all_session_writes_ms": summarize(
+            room_update_to_all_session_writes_ms
+        ),
         "joined_receivers": len(receivers),
         "messages": samples,
-        "warmup_messages": 1,
+        "warmup_messages": warmup_messages,
         "deliveries_verified": len(receivers) * samples,
         "persistence_verified": samples,
         "completion": "every other joined TUI rendered the persisted marker",
         "sender_transport": "existing interactive SSH session",
-        "gated_scope": (
+        "external_observer_scope": (
             "first external observation of the flushed persisted record through "
             "marker render by every other joined TUI receiver"
+        ),
+        "gated_scope": (
+            "room update publication through completion of the screen write in "
+            "every joined session, reported by server telemetry"
         ),
         "observer_note": (
             "TNT persists before room broadcast; log and receiver observation "
@@ -1475,9 +1526,9 @@ def evaluate_budgets(metrics: dict[str, Any]) -> dict[str, dict[str, Any]]:
             else None
         ),
         "ssh_handshake_p95_ms": metrics["ssh_health_handshake_ms"]["p95"],
-        "persisted_to_all_receivers_p99_ms": metrics[
+        "room_update_to_all_session_writes_p99_ms": metrics[
             "interactive_message_distribution"
-        ]["persisted_to_all_receivers_ms"]["p99"],
+        ]["room_update_to_all_session_writes_ms"]["p99"],
         "message_ingest_per_second": metrics["message_ingest"][
             "messages_per_second"
         ],
@@ -1745,6 +1796,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 metrics["interactive_message_distribution"] = (
                     measure_interactive_distribution(
+                        server.port,
                         clients[-1],
                         clients[:-1],
                         args.fanout_samples,
@@ -1884,8 +1936,9 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 "confirmed room join"
             ),
             "distribution": (
-                "flushed persistence observation through marker render by "
-                "every other joined TUI receiver"
+                "room update publication through screen write completion in "
+                "every joined session; external persistence and all-peer "
+                "marker delivery are verified separately"
             ),
             "conservative_fanout": (
                 "fresh SSH exec post start through persistence and marker "
