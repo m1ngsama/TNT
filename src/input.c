@@ -38,6 +38,7 @@ static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 
 #define KEEPALIVE_INTERVAL_MS 15000
 #define DARWIN_HIGH_FD_POLL_MS 10
+#define EXEC_CLOSE_ACK_TIMEOUT_MS 1000
 
 static const char *input_client_name(const struct client *client) {
     return client ? ((const client_t *)client)->username : NULL;
@@ -1014,6 +1015,57 @@ static int64_t input_monotonic_millis(void) {
     return (int64_t)time(NULL) * 1000;
 }
 
+/* Complete an exec channel before releasing its SSH transport.  Flushing the
+ * exit-status/CLOSE packets only proves they reached the kernel; immediately
+ * freeing the session can still race OpenSSH before it consumes them and turn
+ * a valid remote status into ssh(1)'s transport-error status 255.  Exec EOF
+ * deliberately leaves client->connected true, while the channel-close
+ * callback clears it, so use that callback as the bounded acknowledgement. */
+static void input_finish_exec(client_t *client, int exit_status) {
+    ssh_event event = NULL;
+    bool event_added = false;
+
+    if (!client || !client->channel || !client->session) {
+        return;
+    }
+
+    (void)ssh_channel_request_send_exit_status(client->channel, exit_status);
+    (void)ssh_blocking_flush(client->session, 1000);
+    (void)ssh_channel_send_eof(client->channel);
+    (void)ssh_blocking_flush(client->session, 1000);
+    (void)ssh_channel_close(client->channel);
+    (void)ssh_blocking_flush(client->session, 1000);
+
+    if (!atomic_load(&client->connected) ||
+        !ssh_is_connected(client->session)) {
+        return;
+    }
+
+    event = ssh_event_new();
+    if (event && ssh_event_add_session(event, client->session) == SSH_OK) {
+        int64_t deadline = input_monotonic_millis() +
+                           EXEC_CLOSE_ACK_TIMEOUT_MS;
+        event_added = true;
+
+        while (atomic_load(&client->connected)) {
+            int64_t remaining = deadline - input_monotonic_millis();
+            if (remaining <= 0) {
+                break;
+            }
+            if (ssh_event_dopoll(event, (int)remaining) == SSH_ERROR) {
+                break;
+            }
+        }
+    }
+
+    if (event_added) {
+        (void)ssh_event_remove_session(event, client->session);
+    }
+    if (event) {
+        ssh_event_free(event);
+    }
+}
+
 static int input_poll_timeout_ms(int64_t now_ms, int64_t last_keepalive_ms,
                                  int64_t last_activity_ms,
                                  bool idle_timeout_enabled) {
@@ -1074,12 +1126,7 @@ void input_run_session(client_t *client) {
     /* Check for exec command */
     if (client->exec_command[0] != '\0' || client->exec_command_too_long) {
         int exit_status = exec_dispatch(client);
-        ssh_channel_request_send_exit_status(client->channel, exit_status);
-        ssh_blocking_flush(client->session, 1000);
-        ssh_channel_send_eof(client->channel);
-        ssh_blocking_flush(client->session, 1000);
-        ssh_channel_close(client->channel);
-        ssh_blocking_flush(client->session, 1000);
+        input_finish_exec(client, exit_status);
         goto cleanup;
     }
 

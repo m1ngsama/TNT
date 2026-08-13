@@ -367,6 +367,10 @@ TEST(module_stdout_drip_feed_cannot_extend_deadline) {
      * second here and fails the bound below deterministically. */
     writer.writes = 50;
     writer.delay_ms = 20;
+    /* Seed one partial-frame byte synchronously.  The assertion is about an
+     * absolute read deadline, not whether the scheduler starts the helper
+     * thread before an 80 ms timer expires on a busy macOS runner. */
+    assert(write(fds[1], "x", 1) == 1);
     assert(pthread_create(&thread, NULL, run_drip_writer, &writer) == 0);
 
     started = monotonic_seconds();

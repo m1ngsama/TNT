@@ -84,8 +84,8 @@ typedef struct client {
     pthread_mutex_t whisper_lock;    /* Serialize whisper inbox access */
     atomic_bool wake_ready;          /* Session thread accepts directed wake signals */
     atomic_bool wake_pending;        /* State check closes unblock/poll wake races */
-    /* Server-worker lifetime hook.  Called after the socket is non-blocking
-     * and immediately before ssh_disconnect() closes it, so the shutdown
+    /* Server-worker lifetime hook.  Called after channel teardown and
+     * immediately before ssh_free() closes the socket, so the shutdown
      * registry cannot retain a stale, reusable descriptor number. */
     void (*socket_closing)(void *userdata);
     void *socket_closing_userdata;

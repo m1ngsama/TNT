@@ -73,6 +73,35 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# Exercise normal exec teardown repeatedly.  Output can arrive before a
+# transport-level disconnect, so a single request may look correct while ssh
+# still returns 255 instead of the channel's exit status.
+REPEATED_EXIT_OK=1
+REPEATED_EXIT_ATTEMPT=0
+REPEATED_EXIT_OUTPUT=""
+REPEATED_EXIT_STATUS=0
+while [ "$REPEATED_EXIT_ATTEMPT" -lt 32 ]; do
+    REPEATED_EXIT_OUTPUT=$(ssh $SSH_OPTS localhost health extra 2>/dev/null)
+    REPEATED_EXIT_STATUS=$?
+    if [ "$REPEATED_EXIT_STATUS" -ne 64 ] ||
+       ! printf '%s\n' "$REPEATED_EXIT_OUTPUT" |
+           grep -q '^health: 用法: health$'; then
+        REPEATED_EXIT_OK=0
+        break
+    fi
+    REPEATED_EXIT_ATTEMPT=$((REPEATED_EXIT_ATTEMPT + 1))
+done
+if [ "$REPEATED_EXIT_OK" -eq 1 ]; then
+    echo "✓ repeated exec teardown preserves remote exit status"
+    PASS=$((PASS + 1))
+else
+    echo "✗ repeated exec teardown lost remote exit status"
+    printf '%s\n' "$REPEATED_EXIT_OUTPUT"
+    echo "attempt: $REPEATED_EXIT_ATTEMPT"
+    echo "exit status: $REPEATED_EXIT_STATUS"
+    FAIL=$((FAIL + 1))
+fi
+
 STATS_OUTPUT=$(ssh $SSH_OPTS localhost stats 2>/dev/null || true)
 printf '%s\n' "$STATS_OUTPUT" | grep -q '^status ok$' &&
 printf '%s\n' "$STATS_OUTPUT" | grep -q '^online_users 0$'

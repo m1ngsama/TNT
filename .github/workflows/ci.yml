@@ -128,10 +128,11 @@ jobs:
         fi
 
     - name: Run stable performance budget gate
+      id: performance_gate
       run: make perf-smoke PERF_OUTPUT="$RUNNER_TEMP/perf-report.json"
 
     - name: Preserve performance report
-      if: always()
+      if: ${{ always() && steps.performance_gate.outcome != 'skipped' }}
       uses: actions/upload-artifact@v7
       with:
         name: tnt-performance-${{ runner.os }}-${{ runner.arch }}

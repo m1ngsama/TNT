@@ -4,7 +4,6 @@
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -357,21 +356,17 @@ void client_release_session(client_t *client) {
         client->channel = NULL;
     }
     if (client->session) {
-        int session_fd = ssh_get_fd(client->session);
-        int flags = session_fd >= 0 ? fcntl(session_fd, F_GETFL, 0) : -1;
-        ssh_set_blocking(client->session, 0);
-        if (flags >= 0) {
-            (void)fcntl(session_fd, F_SETFL, flags | O_NONBLOCK);
-        }
-        /* Mark the registry invalid immediately before ssh_disconnect closes
-         * the fd.  Non-blocking mode avoids a blind shutdown wait without
-         * resetting normally departing clients. */
+        /* The channel close above is the last operation that may block on the
+         * peer, so the shutdown registry must retain the descriptor through
+         * that point.  From here ssh_free() only tears down local state and
+         * closes the socket.  Do not send a transport-level ssh_disconnect:
+         * OpenSSH can treat it as an error before consuming the channel exit
+         * status that was just flushed by the exec or interactive path. */
         if (client->socket_closing) {
             client->socket_closing(client->socket_closing_userdata);
             client->socket_closing = NULL;
             client->socket_closing_userdata = NULL;
         }
-        ssh_disconnect(client->session);
         ssh_free(client->session);
         client->session = NULL;
     }
