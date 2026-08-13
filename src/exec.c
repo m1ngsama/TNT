@@ -171,10 +171,9 @@ static int exec_command_stats(client_t *client, bool json) {
     int message_count;
     int client_capacity;
     int active_connections;
-    room_distribution_stats_t distribution;
     time_t now = time(NULL);
     long uptime_seconds;
-    char buffer[1024];
+    char buffer[512];
     int len;
 
     pthread_rwlock_rdlock(&g_room->lock);
@@ -182,7 +181,6 @@ static int exec_command_stats(client_t *client, bool json) {
     client_capacity = g_room->client_capacity;
     pthread_rwlock_unlock(&g_room->lock);
     message_count = room_get_message_count(g_room);
-    room_get_distribution_stats(g_room, &distribution);
 
     active_connections = ratelimit_get_active_total();
 
@@ -193,20 +191,9 @@ static int exec_command_stats(client_t *client, bool json) {
         len = snprintf(buffer, sizeof(buffer),
                        "{\"status\":\"ok\",\"online_users\":%d,"
                        "\"message_count\":%d,\"client_capacity\":%d,"
-                       "\"active_connections\":%d,\"uptime_seconds\":%ld,"
-                       "\"distribution_seq\":%llu,"
-                       "\"distribution_expected_clients\":%d,"
-                       "\"distribution_completed_clients\":%d,"
-                       "\"distribution_last_complete_seq\":%llu,"
-                       "\"distribution_last_complete_latency_us\":%llu}\n",
+                       "\"active_connections\":%d,\"uptime_seconds\":%ld}\n",
                        online_users, message_count, client_capacity,
-                       active_connections, uptime_seconds,
-                       (unsigned long long)distribution.current_seq,
-                       distribution.expected_clients,
-                       distribution.completed_clients,
-                       (unsigned long long)distribution.last_complete_seq,
-                       (unsigned long long)
-                           distribution.last_complete_latency_us);
+                       active_connections, uptime_seconds);
     } else {
         len = snprintf(buffer, sizeof(buffer),
                        "status ok\n"
@@ -214,20 +201,9 @@ static int exec_command_stats(client_t *client, bool json) {
                        "message_count %d\n"
                        "client_capacity %d\n"
                        "active_connections %d\n"
-                       "uptime_seconds %ld\n"
-                       "distribution_seq %llu\n"
-                       "distribution_expected_clients %d\n"
-                       "distribution_completed_clients %d\n"
-                       "distribution_last_complete_seq %llu\n"
-                       "distribution_last_complete_latency_us %llu\n",
+                       "uptime_seconds %ld\n",
                        online_users, message_count, client_capacity,
-                       active_connections, uptime_seconds,
-                       (unsigned long long)distribution.current_seq,
-                       distribution.expected_clients,
-                       distribution.completed_clients,
-                       (unsigned long long)distribution.last_complete_seq,
-                       (unsigned long long)
-                           distribution.last_complete_latency_us);
+                       active_connections, uptime_seconds);
     }
 
     if (len < 0 || len >= (int)sizeof(buffer)) {

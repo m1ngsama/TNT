@@ -91,11 +91,6 @@ message_count 0
 client_capacity 64
 active_connections 1
 uptime_seconds 12
-distribution_seq 0
-distribution_expected_clients 0
-distribution_completed_clients 0
-distribution_last_complete_seq 0
-distribution_last_complete_latency_us 0
 ```
 
 JSON output:
@@ -107,26 +102,12 @@ JSON output:
   "message_count": 0,
   "client_capacity": 64,
   "active_connections": 1,
-  "uptime_seconds": 12,
-  "distribution_seq": 0,
-  "distribution_expected_clients": 0,
-  "distribution_completed_clients": 0,
-  "distribution_last_complete_seq": 0,
-  "distribution_last_complete_latency_us": 0
+  "uptime_seconds": 12
 }
 ```
 
 Field names and scalar types are stable.  New fields may be added in a minor
 release.
-
-The distribution fields describe the latest room generation and the most
-recent generation written by every session that was joined when it was
-published. Latency is measured inside TNT from room publication through the
-last session's screen write, in microseconds. `completed_clients` can remain
-below `expected_clients` when a session is showing an overlay, backpressured,
-or disconnects before rendering; consumers must require
-`distribution_last_complete_seq == distribution_seq` before using the latest
-latency as a complete observation.
 
 ### `users [--json]`
 

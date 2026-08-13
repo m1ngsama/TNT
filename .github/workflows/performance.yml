@@ -1,14 +1,22 @@
 name: Performance charter
 
 on:
-  schedule:
-    - cron: '17 3 * * 0'
   workflow_dispatch:
     inputs:
+      durability:
+        description: Also run the long durability profile
+        required: false
+        type: boolean
+        default: false
       durability_seconds:
-        description: Functional durability duration in seconds
+        description: Durability seconds when enabled
         required: false
         default: '1800'
+      retain_report:
+        description: Retain JSON for review (failures are always retained)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,9 +30,9 @@ concurrency:
 
 jobs:
   target-profile:
-    name: 64-session budget and durability
+    name: 64-session core budget
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 45
 
     steps:
     - name: Check out TNT
@@ -32,51 +40,31 @@ jobs:
       with:
         path: tnt
 
-    - name: Check out reference modules
-      uses: actions/checkout@v6
-      with:
-        repository: m1ngsama/tnt-modules
-        ref: v0.3.0
-        path: tnt-modules
-
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libssh-dev
 
-    - name: Run full 64-session performance contract
-      id: full_performance
-      working-directory: tnt
-      run: |
-        set -eu
-        MODULE_PATHS=$(find "$GITHUB_WORKSPACE/tnt-modules/modules" \
-          -mindepth 1 -maxdepth 1 -type d -name '*-module' -print | \
-          sort | paste -sd: -)
-        test -n "$MODULE_PATHS"
-        make perf-full \
-          PERF_MODULE_PATHS="$MODULE_PATHS" \
-          PERF_OUTPUT="$RUNNER_TEMP/perf-full.json"
-
-    - name: Run 64-session functional durability contract
-      id: durability
-      if: ${{ always() && steps.full_performance.outcome == 'success' }}
+    - name: Run requested 64-session contract
       working-directory: tnt
       env:
+        RUN_DURABILITY: ${{ inputs.durability }}
         REQUESTED_DURATION: ${{ inputs.durability_seconds }}
       run: |
         set -eu
-        DURATION=${REQUESTED_DURATION:-1800}
-        make perf-soak \
-          PERF_SOAK_DURATION="$DURATION" \
-          PERF_SOAK_OUTPUT="$RUNNER_TEMP/perf-soak.json"
+        if [ "$RUN_DURABILITY" = "true" ]; then
+          make perf-soak \
+            PERF_DURABILITY_SECONDS="${REQUESTED_DURATION:-1800}" \
+            PERF_OUTPUT="$RUNNER_TEMP/performance.json"
+        else
+          make perf-full PERF_OUTPUT="$RUNNER_TEMP/performance.json"
+        fi
 
-    - name: Preserve performance evidence
-      if: ${{ always() }}
+    - name: Preserve requested or failed evidence
+      if: ${{ failure() || inputs.retain_report }}
       uses: actions/upload-artifact@v7
       with:
         name: performance-charter-${{ github.run_id }}
-        path: |
-          ${{ runner.temp }}/perf-full.json
-          ${{ runner.temp }}/perf-soak.json
-        if-no-files-found: error
-        retention-days: 90
+        path: ${{ runner.temp }}/performance.json
+        if-no-files-found: warn
+        retention-days: 3

@@ -24,7 +24,7 @@ and environment metadata.
 | Opt-in concurrency | `make stress-test` | Concurrent-client connection and messaging behavior | Configure `CLIENTS` and `DURATION`; command must exit zero |
 | Opt-in durability | `make soak-test` | Idle, reconnect, and control-plane durability | Configure `DURATION` and `RECONNECTS`; command must exit zero |
 | Opt-in backpressure | `make slow-client-test` | Progress and bounded behavior with an unread interactive client | Configure `DURATION` and `BURST_CHARS`; command must exit zero |
-| Target performance | `make perf-full` | 64 joins/storm, all-receiver delivery, ordered ingest, memory, slow-client, capacity, and optional module comparison | Every correctness check and performance redline must pass |
+| Target performance | `make perf-full` | 64 joins/storm, all-receiver delivery, ordered ingest, memory, slow-client, and capacity | Every correctness check and performance redline must pass |
 | Functional durability | `make perf-soak` | 64 real sessions for 30 minutes with rotating senders, all-peer delivery, ordered persistence, survival, and memory sampling | Every acceptance field in the JSON report must be true |
 
 `test_utf8` is built and run automatically by `make unit-test`; UTF-8 validation
@@ -68,7 +68,7 @@ make security-test PORT=14220
 CLIENTS=20 DURATION=60 make stress-test PORT=14230
 DURATION=1800 RECONNECTS=20 make soak-test PORT=14240
 DURATION=30 BURST_CHARS=3200 make slow-client-test PORT=14250
-make perf-soak PERF_SOAK_OUTPUT=/tmp/tnt-perf-soak.json
+make perf-soak PERF_OUTPUT=/tmp/tnt-perf-soak.json
 ```
 
 AddressSanitizer and static-analysis entry points are separate from the normal
@@ -87,7 +87,7 @@ a temporary server under Valgrind and requires an error-free summary.
 ## Performance Benchmark
 
 The performance driver uses real OpenSSH clients and writes a versioned JSON
-report containing workload settings, raw samples, summary statistics, budget
+report containing workload settings, sample counts, summary statistics, budget
 outcomes, Git metadata, and host/toolchain metadata. It requires no third-party
 Python packages.
 
@@ -101,19 +101,19 @@ The available profiles have different purposes:
 | Profile | Command | Purpose |
 |---|---|---|
 | Benchmark | `make perf` | Normal real-client workload; records measurements without enforcing a budget by default |
-| CI smoke gate | `make perf-smoke PERF_OUTPUT=/tmp/tnt-perf-smoke.json` | Short profile that enforces the stable startup, idle RSS, and main-binary redlines while recording broader metrics |
+| Local smoke gate | `make perf-smoke PERF_OUTPUT=/tmp/tnt-perf-smoke.json` | Short profile that enforces the stable startup, idle RSS, and main-binary redlines while recording broader metrics |
 | Normal stable gate | `make perf-check PERF_OUTPUT=/tmp/tnt-perf-check.json` | Normal sample sizes with the same stable redlines enforced |
 | Target workload | `make perf-full PERF_OUTPUT=/tmp/tnt-perf-full.json` | Exercises 64 joined sessions and 1,000 ordered messages and gates every eligible redline |
-| 30-minute durability | `make perf-soak PERF_SOAK_OUTPUT=/tmp/tnt-perf-soak.json` | Keeps 64 functional sessions joined for 1,800 seconds and gates correctness, survival, peak RSS, and RSS growth |
+| 30-minute durability | `make perf-soak PERF_OUTPUT=/tmp/tnt-perf-soak.json` | Extends the full 64-session profile to 1,800 seconds and gates correctness, survival, peak RSS, and RSS growth without reconnecting a second client set |
 
 `make script-test` runs `tests/test_perf_benchmark.sh`, which verifies the
 driver's percentile/budget helpers, command-line surface, and minimum sample
 validation. That contract test does **not** execute the real-client benchmark
 and must not be reported as a performance result.
 
-The extended Linux CI job runs `make perf-smoke`, fails on a stable-budget
-regression, and uploads the complete JSON report—or a structured diagnostic
-report when a scenario aborts—as a workflow artifact. See
+Routine CI intentionally does not run performance workloads. Maintainers can
+run the manual Performance Charter workflow while advancing performance work.
+It uploads a three-day report only on failure or when explicitly requested. See
 [`PERFORMANCE.md`](PERFORMANCE.md) for metric definitions, budgets, workload
 controls, percentile rules, and coverage boundaries.
 
@@ -127,8 +127,8 @@ as though they were a single baseline.
 | Trigger | Jobs and platforms | Required evidence |
 |---|---|---|
 | Pull request to `main` or `release/**` | PR gate on Ubuntu 24.04 and macOS latest | Default build, ASan build, `make ci-test`, and `make release-check` all succeed |
-| Push to `main` or `release/**` | PR gate plus extended Linux runtime, portable container builds, and package-recipe gate | Runtime/Valgrind/performance gates succeed; Debian stable, Ubuntu 24.04, and Alpine builds succeed; package checks succeed |
-| Manual CI dispatch | Same broad matrix as a protected-branch push | Job logs plus the retained performance JSON artifact |
+| Push to `main` or `release/**` | PR gate plus extended Linux runtime, portable container builds, and package-recipe gate | Runtime/Valgrind gates succeed; Debian stable, Ubuntu 24.04, and Alpine builds succeed; package checks succeed |
+| Manual performance dispatch | 64-session core profile; durability only when selected | Job log; three-day JSON only when failed or explicitly retained |
 | SemVer release tag | Release artifact workflow | Version/tag alignment, architecture-specific builds, source-archive validation, asset collection, and checksum verification; release remains a draft for manual review |
 
 The full workflow and release policy are documented in [`CICD.md`](CICD.md).
@@ -141,8 +141,8 @@ The full workflow and release policy are documented in [`CICD.md`](CICD.md).
 - Treat a skipped test as `SKIP`, not `PASS`, and state the missing dependency.
 - Keep failure output and the first failing command; do not replace it with an
   aggregate success percentage.
-- For performance runs, retain the JSON artifact instead of transcribing only
-  a percentile or throughput value.
+- For reviewed performance runs, keep the compact JSON with the decision; do
+  not retain routine successful reports without a reason.
 - A green suite supports only the behaviors exercised by that suite. It is not
   a blanket declaration that the project has no security, concurrency, or
   memory-safety defects.

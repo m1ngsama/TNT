@@ -9,15 +9,6 @@ static int room_capacity_from_env(void) {
     return tnt_config_env_int(&TNT_CONFIG_MAX_CONNECTIONS);
 }
 
-static uint64_t room_monotonic_ns(void) {
-    struct timespec now;
-
-    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
-        return 0;
-    }
-    return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
-}
-
 /* Initialize chat room */
 chat_room_t* room_create(void) {
     chat_room_t *room = calloc(1, sizeof(chat_room_t));
@@ -27,16 +18,9 @@ chat_room_t* room_create(void) {
         free(room);
         return NULL;
     }
-    if (pthread_mutex_init(&room->distribution_lock, NULL) != 0) {
-        pthread_rwlock_destroy(&room->lock);
-        free(room);
-        return NULL;
-    }
-
     room->client_capacity = room_capacity_from_env();
     room->clients = calloc(room->client_capacity, sizeof(struct client *));
     if (!room->clients) {
-        pthread_mutex_destroy(&room->distribution_lock);
         pthread_rwlock_destroy(&room->lock);
         free(room);
         return NULL;
@@ -47,7 +31,6 @@ chat_room_t* room_create(void) {
                                                MAX_MESSAGES);
     if (!room->message_history.entries) {
         free(room->clients);
-        pthread_mutex_destroy(&room->distribution_lock);
         pthread_rwlock_destroy(&room->lock);
         free(room);
         return NULL;
@@ -70,7 +53,6 @@ void room_destroy(chat_room_t *room) {
 
     pthread_rwlock_unlock(&room->lock);
     pthread_rwlock_destroy(&room->lock);
-    pthread_mutex_destroy(&room->distribution_lock);
 
     free(room);
 }
@@ -148,24 +130,13 @@ void room_broadcast(chat_room_t *room, const message_t *msg) {
     room_add_message(room, msg);
     room->update_seq++;
 
-    pthread_mutex_lock(&room->distribution_lock);
-    room->distribution_started_ns = room_monotonic_ns();
-    room->distribution_seq = room->update_seq;
-    room->distribution_expected = room->client_count;
-    room->distribution_completed = 0;
-    if (room->distribution_expected == 0) {
-        room->distribution_last_complete_seq = room->distribution_seq;
-        room->distribution_last_complete_latency_us = 0;
-    }
-    pthread_mutex_unlock(&room->distribution_lock);
-
     /* The room lock prevents a session from removing and releasing its final
      * reference while it is being nudged.  Production installs a non-blocking
      * directed-signal notifier; unit tests may inject an equally non-blocking
      * spy. */
     if (room->client_notifier) {
         for (int i = 0; i < room->client_count; i++) {
-            room->client_notifier(room->clients[i], room->update_seq);
+            room->client_notifier(room->clients[i]);
         }
     }
 
@@ -188,62 +159,6 @@ void room_set_client_name_accessor(chat_room_t *room,
     pthread_rwlock_wrlock(&room->lock);
     room->client_name = accessor;
     pthread_rwlock_unlock(&room->lock);
-}
-
-void room_set_client_render_ack(chat_room_t *room,
-                                room_client_render_ack_fn ack) {
-    if (!room) return;
-
-    pthread_rwlock_wrlock(&room->lock);
-    room->client_render_ack = ack;
-    pthread_rwlock_unlock(&room->lock);
-}
-
-void room_record_client_rendered(chat_room_t *room, struct client *client,
-                                 uint64_t seq) {
-    room_client_render_ack_fn acknowledge;
-    uint64_t completed_ns;
-
-    if (!room || !client || seq == 0) return;
-
-    pthread_rwlock_rdlock(&room->lock);
-    acknowledge = room->client_render_ack;
-    pthread_rwlock_unlock(&room->lock);
-    if (!acknowledge || !acknowledge(client, seq)) return;
-
-    completed_ns = room_monotonic_ns();
-    pthread_mutex_lock(&room->distribution_lock);
-    if (room->distribution_seq == seq &&
-        room->distribution_completed < room->distribution_expected) {
-        room->distribution_completed++;
-        if (room->distribution_completed == room->distribution_expected) {
-            room->distribution_last_complete_seq = seq;
-            if (room->distribution_started_ns != 0 &&
-                completed_ns >= room->distribution_started_ns) {
-                room->distribution_last_complete_latency_us =
-                    (completed_ns - room->distribution_started_ns) / 1000ULL;
-            } else {
-                room->distribution_last_complete_latency_us = 0;
-            }
-        }
-    }
-    pthread_mutex_unlock(&room->distribution_lock);
-}
-
-void room_get_distribution_stats(chat_room_t *room,
-                                 room_distribution_stats_t *out) {
-    if (!out) return;
-    memset(out, 0, sizeof(*out));
-    if (!room) return;
-
-    pthread_mutex_lock(&room->distribution_lock);
-    out->current_seq = room->distribution_seq;
-    out->expected_clients = room->distribution_expected;
-    out->completed_clients = room->distribution_completed;
-    out->last_complete_seq = room->distribution_last_complete_seq;
-    out->last_complete_latency_us =
-        room->distribution_last_complete_latency_us;
-    pthread_mutex_unlock(&room->distribution_lock);
 }
 
 /* Get message by index (thread-safe value copy) */

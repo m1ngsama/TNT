@@ -1,26 +1,35 @@
 # Reviewed Performance Evidence
 
-Performance reports are code-reviewable evidence, not timeless promises. Each
-JSON file records the exact TNT commit, dirty state, host/toolchain, workload,
-raw samples, percentile method, correctness checks, and budget outcomes.
+Performance reports are evidence for one commit and host, not timeless
+promises. JSON goes to stdout unless an output path is explicit and is not
+committed to permanent Git history.
 
-Current reviewed baselines:
+Both reports were produced on 2026-08-13 from clean commit
+`854059fe7db813777a9a2a4af0621588235a5486` with TNT pinned to one CPU and a
+128 MiB, no-swap cgroup. TNT stayed far below that host limit:
 
-- [`full-linux-x86_64-1cpu-128m.json`](full-linux-x86_64-1cpu-128m.json) —
-  complete 64-session budget profile, including synchronized connection storm,
-  all-receiver fan-out, 1,000-message ordered ingest, slow-client pressure,
-  capacity rejection, and tnt-modules v0.3.0 enabled/disabled comparison.
-- [`soak-linux-x86_64-1cpu-128m.json`](soak-linux-x86_64-1cpu-128m.json) — 64
-  fully joined functional sessions held for 30 minutes, with rotating senders,
-  all-peer delivery, ordered persistence, survival, and memory samples.
+| Result | Measured value | Regression redline |
+|---|---:|---:|
+| Existing-key startup p95 | 25.488 ms | 50 ms |
+| Idle RSS | 7,680 KiB | 16,384 KiB |
+| 64-session RSS | 16,128 KiB | 32,768 KiB |
+| SSH health handshake p95 | 70.406 ms | 100 ms |
+| Persisted record to all 63 peer renders p99 | 12.254 ms | 20 ms |
+| Ordered, persisted 1,000-message ingest | 1,800.039 msg/s | 500 msg/s |
+| Main binary | 180,256 bytes | 524,288 bytes |
 
-These Linux reports constrain TNT and module children as one cgroup with one
-allowed CPU, 128 MiB memory, and no swap. The wrapper is recorded in each
-report; OpenSSH load generators remain outside that constraint. The weekly/manual
-[`Performance charter`](../../.github/workflows/performance.yml) workflow is the
-source of newer Linux evidence and retains both reports for 90 days.
+The durability profile ran for 1,800.001 seconds. All 64 sessions joined,
+survived, and took a turn sending; all 180 messages were persisted in order and
+all 11,340 expected peer renders were observed. Peak RSS was 17,664 KiB and
+RSS growth was -2,560 KiB. Every machine-readable acceptance field is `true`.
 
-To reproduce the reviewed profiles, see
+The manual [`Performance charter`](../../.github/workflows/performance.yml)
+workflow runs only when a maintainer is actively reviewing performance. It
+uploads a three-day report only on failure or explicit request; the 30-minute
+durability profile also requires explicit opt-in. Routine pushes and pull
+requests do not consume runner time or artifact storage for performance work.
+
+To reproduce the reviewed profiles or explicitly retain your own JSON, see
 [`docs/PERFORMANCE.md`](../PERFORMANCE.md). A changed commit, dirty tree,
-different module revision, or different workload is a new measurement rather
-than an update to an old number.
+different workload is a new measurement. Module implementation performance is
+measured separately in `tnt-modules`.

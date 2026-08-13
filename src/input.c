@@ -39,34 +39,17 @@ static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 #define KEEPALIVE_INTERVAL_MS 15000
 #define DARWIN_HIGH_FD_POLL_MS 10
 #define CHANNEL_CLOSE_ACK_TIMEOUT_MS 1000
-#define ROOM_REDRAW_MIN_INTERVAL_MS 6
-#define ROOM_REDRAW_BURST_INTERVAL_MS 16
+#define ROOM_REDRAW_MIN_INTERVAL_MS 8
 
 static const char *input_client_name(const struct client *client) {
     return client ? ((const client_t *)client)->username : NULL;
 }
 
-static void input_client_notify(struct client *client, uint64_t seq) {
-    client_t *session = (client_t *)client;
-
-    if (!session) return;
-    atomic_store(&session->expected_update_seq, seq);
-    client_wake(session);
-}
-
-static bool input_client_render_ack(struct client *client, uint64_t seq) {
-    client_t *session = (client_t *)client;
-
-    return session && atomic_load(&session->expected_update_seq) == seq &&
-           atomic_exchange(&session->rendered_update_seq, seq) != seq;
-}
-
 void input_init(void) {
     g_idle_timeout = tnt_config_env_int(&TNT_CONFIG_IDLE_TIMEOUT);
     g_default_ui_lang = i18n_default_ui_lang();
-    room_set_client_notifier(g_room, input_client_notify);
+    room_set_client_notifier(g_room, client_wake);
     room_set_client_name_accessor(g_room, input_client_name);
-    room_set_client_render_ack(g_room, input_client_render_ack);
 }
 
 static int read_username(client_t *client) {
@@ -1210,7 +1193,6 @@ void input_run_session(client_t *client) {
     /* Render initial screen */
     seen_update_seq = room_get_update_seq(g_room);
     tui_render_screen(client);
-    room_record_client_rendered(g_room, client, seen_update_seq);
     last_room_render_ms = input_monotonic_millis();
 
 main_loop:
@@ -1230,10 +1212,6 @@ main_loop:
         bool input_buffered = ready > 0;
         uint64_t current_update_seq = room_get_update_seq(g_room);
         int64_t loop_now_ms = input_monotonic_millis();
-        int room_redraw_interval_ms =
-            current_update_seq - seen_update_seq > 1
-                ? ROOM_REDRAW_BURST_INTERVAL_MS
-                : ROOM_REDRAW_MIN_INTERVAL_MS;
 
         if (client_flush_pending_bells(client) != 0) {
             break;
@@ -1260,7 +1238,7 @@ main_loop:
         bool room_render_due = room_updated && room_view_visible &&
             (last_room_render_ms == 0 ||
              loop_now_ms - last_room_render_ms >=
-                 room_redraw_interval_ms);
+                 ROOM_REDRAW_MIN_INTERVAL_MS);
 
         if (!input_buffered && room_updated && !room_view_visible) {
             /* Help/MOTD/command output owns the screen.  Remember the room
@@ -1291,7 +1269,6 @@ main_loop:
                     normal_scroll_to_latest(client);
                 }
                 tui_render_screen(client);
-                room_record_client_rendered(g_room, client, seen_update_seq);
                 last_room_render_ms = input_monotonic_millis();
                 if (client->mode == MODE_INSERT && input[0] != '\0') {
                     tui_render_input(client, input);
@@ -1348,7 +1325,7 @@ main_loop:
             bool defer_room_wake = false;
             if (room_updated && room_view_visible && !room_render_due) {
                 int64_t room_wait_ms = last_room_render_ms +
-                    room_redraw_interval_ms - now_ms;
+                    ROOM_REDRAW_MIN_INTERVAL_MS - now_ms;
                 if (room_wait_ms < 0) {
                     room_wait_ms = 0;
                 }

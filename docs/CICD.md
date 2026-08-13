@@ -40,12 +40,6 @@ Runs on `main` or `release/**` pushes and manual dispatch:
 - `extended-linux-runtime`
   - Runs `RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check`.
   - Runs a valgrind smoke test against a temporary server.
-  - Runs `make perf-smoke`, enforcing the existing-key startup, idle RSS, and
-    main-binary redlines while still recording SSH and messaging metrics.
-  - Retains the complete versioned performance JSON report for 30 days,
-    including non-gating all-receiver fan-out, ingest, ordering, slow-client,
-    connection-storm, and capacity measurements. A scenario abort still retains
-    structured diagnostic JSON.
 - `portable-container-builds`
   - Builds in Debian stable glibc.
   - Builds in Ubuntu 24.04 glibc.
@@ -61,29 +55,28 @@ Purpose:
 - Broaden platform confidence without making every PR wait for the full matrix.
 - Detect musl/glibc portability issues early.
 - Keep package metadata reviewable before public registry submission.
-- Keep comparable performance evidence for main/release pushes without making
-  runner-sensitive metrics part of the fast pull-request gate.
+- Keep expensive, runner-sensitive performance work out of routine pushes.
 
 ### Performance Charter
 
 Workflow: `.github/workflows/performance.yml`
 
-Runs weekly and by manual dispatch on Ubuntu 24.04:
+Runs only by manual dispatch on Ubuntu 24.04:
 
-- Checks out TNT and the pinned tnt-modules v0.3.0 release.
 - Runs `make perf-full` with 64 fully joined sessions, synchronized connection
   storm, every-receiver fan-out, 1,000 ordered messages, slow-client pressure,
-  capacity rejection, and modules-on/off evidence.
-- Runs `make perf-soak` with 64 functional sessions for 1,800 seconds by
-  default. Every session sends, every peer receives, persistence stays ordered,
-  all sessions survive, and sampled RSS remains bounded.
-- Retains both machine-readable reports—or the diagnostic report from a failed
-  scenario—for 90 days.
+  and capacity rejection.
+- Optionally runs `make perf-soak` when the operator explicitly enables the
+  durability input. Every session sends, every peer receives, persistence stays
+  ordered, all sessions survive, and sampled RSS remains bounded.
+- Uploads reports for three days only when the run fails or the operator
+  explicitly requests retention.
 
-This scheduled job makes long performance evidence a recurring compatibility
-check without adding more than 30 minutes to ordinary pull requests. Manual
-dispatch accepts a shorter duration for workflow debugging; only a report whose
-configuration records 1,800 seconds is 30-minute durability evidence.
+There is deliberately no schedule. Maintainers run this workflow while working
+on performance-sensitive changes or preparing a release, so GitHub runner time
+and artifact storage are spent only when someone will review the result. Module
+implementations are measured in `tnt-modules`, not duplicated here. Only a
+report whose configuration records 1,800 seconds is durability evidence.
 
 ### Release Artifact Gates
 

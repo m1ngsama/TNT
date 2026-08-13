@@ -85,8 +85,6 @@ typedef struct client {
     pthread_mutex_t whisper_lock;    /* Serialize whisper inbox access */
     atomic_bool wake_ready;          /* Session thread accepts directed wake signals */
     atomic_bool wake_pending;        /* State check closes unblock/poll wake races */
-    _Atomic uint64_t expected_update_seq; /* Generation assigned while in room */
-    _Atomic uint64_t rendered_update_seq; /* Last room generation written to this TUI */
     /* Server-worker lifetime hook.  Called after channel teardown and
      * immediately before ssh_free() closes the socket, so the shutdown
      * registry cannot retain a stale, reusable descriptor number. */

@@ -5,7 +5,6 @@ PASS=0
 FAIL=0
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 SCRIPT="$SCRIPT_DIR/../scripts/perf_benchmark.py"
-SOAK_SCRIPT="$SCRIPT_DIR/../scripts/perf_soak.py"
 
 pass() {
     echo "✓ $1"
@@ -31,27 +30,12 @@ else
     fail "benchmark helper self-test"
 fi
 
-if SOAK_SELF_TEST_OUTPUT=$("$SOAK_SCRIPT" --self-test 2>&1) &&
-   printf '%s\n' "$SOAK_SELF_TEST_OUTPUT" | grep -q 'self-test passed'; then
-    pass "durability benchmark helpers pass self-test"
-else
-    fail "durability benchmark helper self-test"
-fi
-
-if SOAK_HELP_OUTPUT=$("$SOAK_SCRIPT" --help 2>&1) &&
-   printf '%s\n' "$SOAK_HELP_OUTPUT" | grep -q -- '--duration' &&
-   printf '%s\n' "$SOAK_HELP_OUTPUT" | grep -q -- '--server-wrapper'; then
-    pass "durability benchmark exposes duration and target-host controls"
-else
-    fail "durability benchmark help surface"
-fi
-
 if HELP_OUTPUT=$("$SCRIPT" --help 2>&1) &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--enforce' &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--history-records' &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--storm-clients' &&
-   printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--module-paths' &&
-   printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--expect-server-cpus' &&
+   printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--durability-seconds' &&
+   printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--server-wrapper' &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--slow-client-characters'; then
     pass "benchmark exposes budget and full-scenario controls"
 else
@@ -75,15 +59,6 @@ if [ "$BAD_STATUS" -ne 0 ] &&
     pass "benchmark rejects statistically invalid sample counts"
 else
     fail "minimum sample validation"
-fi
-
-BAD_MODULE_OUTPUT=$("$SCRIPT" --module-paths "$SCRIPT_DIR/missing-module" 2>&1)
-BAD_MODULE_STATUS=$?
-if [ "$BAD_MODULE_STATUS" -ne 0 ] &&
-   printf '%s\n' "$BAD_MODULE_OUTPUT" | grep -q 'invalid module path'; then
-    pass "benchmark rejects invalid module comparison input"
-else
-    fail "module path validation"
 fi
 
 ALL_OUTPUT=$("$SCRIPT" --enforce all --clients 8 2>&1)
@@ -111,7 +86,7 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     report = json.load(handle)
 assert report["status"] == "error"
-assert report["schema_version"] == 4
+assert report["schema_version"] == 5
 assert report["metrics_complete"] is False
 assert report["error"]["type"] == "BenchmarkError"
 PY

@@ -7,27 +7,32 @@
   checksum and moved release artifact actions to their Node 24 generations.
 - Completed the performance-charter coverage with synchronized real-client
   connection storms, every-receiver fan-out, best-effort per-file cold-history
-  opening, measured slow-client pressure, and explicit tnt-modules on/off
-  comparison in the versioned JSON benchmark.
+  opening, and measured slow-client pressure in the versioned JSON benchmark.
 - Added `make perf-soak`, a 64-session/30-minute functional durability gate with
   rotating senders, all-peer delivery, ordered persistence, process survival,
-  and bounded RSS, plus a weekly/manual CI workflow that retains full and soak
-  evidence for 90 days.
+  and bounded RSS, plus an explicitly triggered workflow with seven-day
+  evidence retention.
 - Added an optional, recorded server exec wrapper so reference-host runs can
-  constrain TNT and module children to a one-CPU, 128-MiB, no-swap cgroup
+  constrain TNT to a one-CPU, 32-MiB, no-swap cgroup
   without constraining or miscounting the OpenSSH load generators.
-- Coalesced room redraw notifications into an adaptive 6 ms window for a single
-  update and 16 ms window after multiple updates accumulate. A burst no longer
-  wakes and repaints all 64 TUI sessions for every intermediate message, while
-  isolated interactive updates retain the lower latency bound.
-- Defined the gated distribution latency from room update publication through
-  every joined session's screen write, using de-duplicated server telemetry.
-  Persisted-to-all-peer and fresh-SSH-exec measurements remain in reports as
-  correctness and end-to-end diagnostics instead of charging load-generator
-  scheduling to room fan-out; the benchmark report schema is now version 4.
+- Coalesced room redraw notifications into one bounded 8 ms window. A burst no
+  longer wakes and repaints all 64 TUI sessions for every intermediate message.
+- Kept distribution measurement outside the production server: the driver
+  observes flushed persistence and all real TUI receivers without adding
+  benchmark-only locks, counters, or public status fields. The report schema is
+  now version 5.
 - Added optional expected CPU, memory, and swap constraints to full and soak
   drivers, so a target-host run fails instead of silently accepting a wrapper
   that the local cgroup manager did not enforce.
+- Tightened the 64-session resident-memory redline from 112 MiB to 32 MiB and
+  removed performance workloads and report uploads from routine CI. Full and
+  durability runs are manual, durability requires explicit opt-in, and reports
+  are uploaded for three days only on failure or explicit request.
+- Removed benchmark-only production telemetry and duplicate module profiling;
+  module implementation performance remains the responsibility of
+  `tnt-modules`.
+- Merged durability into the full benchmark's existing 64-session run, omitted
+  raw sample arrays, and made JSON output stdout-only unless a path is explicit.
 
 ## 1.3.0 - 2026-08-13
 
@@ -40,8 +45,8 @@
 - Added an explicit performance contract and ideal/redline budgets for startup,
   memory, handshake, interactive post-to-render latency, ingest throughput,
   and binary size.
-- Added an extended Linux CI performance gate for stable low-variance budgets;
-  its machine-readable report is retained as a workflow artifact for 30 days.
+- Added a performance smoke profile for maintainers to run while advancing
+  performance-sensitive work.
 
 ### Changed
 - Replaced the in-memory message history shift with a fixed-capacity ring. Once

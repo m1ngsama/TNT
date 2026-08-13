@@ -9,7 +9,7 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 - **Vim-style UI** - Modal editing (INSERT/NORMAL/COMMAND)
 - **UTF-8 native** - Full Unicode support
 - **Measured performance** - Reproducible startup, RSS, handshake,
-  all-receiver fan-out, ingest, backpressure, module, and durability reports
+  all-receiver fan-out, ingest, backpressure, and durability reports
 - **Secure** - Rate limiting, auth failure protection, input validation
 - **Persistent** - Auto-saves chat history
 - **Elegant** - Flicker-free TUI rendering
@@ -535,16 +535,15 @@ OpenSSH clients, requires at least five samples for latency distributions,
 verifies that interactive clients actually joined the room, checks message
 completeness and ordering, and writes a machine-readable JSON report.
 
-The latest reviewed measurements are the linked
-[64-session full profile](docs/performance/full-linux-x86_64-1cpu-128m.json) and
-[30-minute functional durability profile](docs/performance/soak-linux-x86_64-1cpu-128m.json).
-They include their exact commit, hardware, runtime, module revision, raw samples,
-percentiles, correctness results, and memory observations; they are evidence for
-that recorded host rather than universal numbers.
+The latest reviewed measurements are summarized in the
+[performance evidence index](docs/performance/README.md). JSON is written only
+when `PERF_OUTPUT` is requested (otherwise it goes to stdout); reports are never
+committed and the manual workflow retains one only for a failure or explicit
+review.
 
 The reference budgets include 20 ms existing-key startup, 8 MiB idle RSS,
-64 sessions within 80 MiB RSS, a 50 ms local handshake p95, 5 ms
-room-update-to-all-session-write p99, 1,000 persisted messages/second, and a
+64 sessions within 24 MiB RSS, a 50 ms local handshake p95, 5 ms
+persisted-to-all-peer p99, 1,000 persisted messages/second, and a
 256 KiB main binary.
 These are ideal targets; separate regression redlines and exact metric definitions
 are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Run the benchmark

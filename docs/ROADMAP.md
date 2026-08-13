@@ -120,11 +120,11 @@ Goal: make regressions harder to introduce.
 - expand CI coverage across Linux and macOS for build and smoke tests
 - add sanitizer jobs and targeted fuzzing for UTF-8, log parsing, and command parsing
 - ✅ add a reproducible real-client performance benchmark with versioned JSON
-  output, explicit measurement semantics, stable regression gates, and retained
-  CI reports
+  output, explicit measurement semantics, stable regression gates, and
+  deliberately retained reports
 - ✅ extend the performance benchmark to synchronized connection storms,
-  all-receiver fan-out, best-effort per-file cold storage runs, slow-client
-  latency, and explicit modules-on/off comparisons
+  all-receiver fan-out, best-effort per-file cold storage runs, and slow-client
+  latency; keep module implementation profiling in `tnt-modules`
 - ✅ add a 64-session, 30-minute functional durability profile with rotating
   senders, all-peer delivery, ordered persistence, survival, and memory gates
 - ✅ add a configurable soak test for idle sessions, reconnects, and control
@@ -141,10 +141,7 @@ Goal: make regressions harder to introduce.
 
 These are the next changes that should happen before new feature work expands the surface area.
 
-1. Run the reviewed `make perf-full` and `make perf-soak` profiles on a dedicated
-   1-vCPU/128-MiB/no-swap reference host; retain that environment-specific
-   baseline without replacing evidence from other hardware.
-2. Add systemd-friendly readiness and watchdog behavior without weakening the
+1. Add systemd-friendly readiness and watchdog behavior without weakening the
    current graceful-shutdown contract.
-3. Decide whether admin-only moderation controls belong in the next minor
+2. Decide whether admin-only moderation controls belong in the next minor
    release or should wait.

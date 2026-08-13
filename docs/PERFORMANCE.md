@@ -1,240 +1,134 @@
 # Performance Contract
 
-TNT treats performance as a compatibility property. New features must keep
-queues, retries, caches, and concurrency bounded, and a change that crosses a
-redline must include measurements, an explanation, and a recovery plan.
+Performance is a compatibility property, not a reason to make TNT larger. The
+reference workload is 64 joined SSH sessions on a 1-vCPU, no-swap Linux host.
+The host used for the reviewed run had 128 MiB RAM, but TNT's own 64-session
+resident-memory redline is 32 MiB.
 
-The reference target is a low-end Linux host with 1 vCPU, 128 MiB RAM, and no
-swap. The target load is 64 fully joined interactive sessions with short bursts
-of 1,000 messages per second. Correctness, security, privacy, accessibility, and
-maintainability take precedence over a faster number.
+Correctness, security and a small Unix-style core take priority over a better
+benchmark number. Optional module implementations and their performance tests
+belong in the companion `tnt-modules` repository.
 
 ## Budgets
 
 | Metric | Ideal | Regression redline |
 |---|---:|---:|
-| Existing-key process startup p95 | 20 ms | 50 ms |
+| Existing-key startup p95 | 20 ms | 50 ms |
 | Idle server RSS | 8 MiB | 16 MiB |
-| 64 joined sessions RSS | 80 MiB | 112 MiB |
+| 64 joined sessions RSS | 24 MiB | 32 MiB |
 | Local SSH health handshake p95 | 50 ms | 100 ms |
-| Room update to every joined TUI screen write p99 | 5 ms | 20 ms |
-| Interactive ingest and persistence | 1,000 msg/s | 500 msg/s |
+| Persisted message to all other joined receivers p99 | 5 ms | 20 ms |
+| Ordered interactive ingest | 1,000 msg/s | 500 msg/s |
 | Main `tnt` binary | 256 KiB | 512 KiB |
 
-RSS and virtual address space are reported separately. In particular, the
-1 MiB configured pthread stack is a reservation per session and must not be
-reported as resident memory unless the pages are actually resident.
+RSS and virtual memory are separate. A configured thread-stack reservation is
+not resident memory until its pages are used.
 
-## Running the benchmark
+## Commands
 
-The benchmark requires Python 3.10 or newer and an OpenSSH `ssh` client; it has
-no Python package dependencies. Build TNT first, then run:
+The driver needs Python 3.10+ and OpenSSH, but no Python packages:
 
 ```sh
-make perf
+make perf        # normal local measurement; no gate by default
+make perf-smoke  # short stable-budget gate
+make perf-check  # normal stable-budget gate
+make perf-full   # 64 sessions and every redline
 ```
 
-The command creates a timestamped JSON report under the gitignored
-`perf-results/` directory and also prints successful results to stdout. Use an
-explicit path for automation:
+By default JSON goes to stdout, so it composes with normal Unix tools and does
+not create hidden files. Choose an explicit temporary path when needed:
 
 ```sh
-make perf PERF_OUTPUT=/tmp/tnt-perf.json
+make perf-full PERF_OUTPUT=/tmp/tnt-perf.json
 ```
 
-If a measured scenario or correctness check fails, the same path receives an
-atomic diagnostic JSON with commit, environment, workload, and error metadata
-instead of disappearing entirely.
+Each report records the commit and dirty state, host/toolchain, workload,
+sample counts, min/mean/p50/p95/p99/max, RSS and binary sizes. Raw sample arrays
+are intentionally omitted: they added storage without improving the regression
+decision. A failed scenario writes compact diagnostic JSON to the requested
+path.
 
-Interactive OpenSSH processes use one full-duplex local socket each, and TNT's
-directed-signal session wakeup consumes no per-session notification FD. This
-keeps the 64-client target runnable under the common macOS soft limit of 128
-open file descriptors.
-
-Other entry points are:
+The separate durability profile exists only for release or explicitly reviewed
+performance work:
 
 ```sh
-make perf-smoke  # short CI profile; enforce stable redlines
-make perf-check  # normal profile; enforce stable redlines
-make perf-full   # 64 real sessions; enforce every performance redline
-make perf-soak   # 64 functional sessions for 30 minutes
+make perf-soak PERF_OUTPUT=/tmp/tnt-soak.json
 ```
 
-The workload is configurable without editing the script:
+Its default keeps 64 real sessions joined for 1,800 seconds. Senders rotate;
+every marker must be persisted in order and rendered by all 63 peers. The
+report retains aggregate memory values rather than every resource sample and
+fails above 32 MiB peak RSS or 8 MiB post-warmup RSS growth.
 
-```sh
-make perf \
-  PERF_STARTUP_SAMPLES=21 \
-  PERF_HANDSHAKE_SAMPLES=21 \
-  PERF_FANOUT_SAMPLES=101 \
-  PERF_STORM_CLIENTS=64 \
-  PERF_CLIENTS=64 \
-  PERF_IDLE_SECONDS=10 \
-  PERF_MESSAGES=1000 \
-  PERF_HISTORY_RECORDS=100000 \
-  PERF_ENFORCE=all
-```
+## Cost policy
 
-Use the released tnt-modules checkout for an explicit modules-on/off profile:
+- Ordinary pushes and pull requests never run performance workloads.
+- The Performance Charter workflow has no schedule and runs only by manual
+  dispatch.
+- A normal manual run executes the full core profile but does not upload an
+  artifact. Reports are uploaded for three days only after a failure or when
+  the operator explicitly requests retention.
+- The 30-minute durability profile is separately opt-in. A previous valid run
+  is not repeated for documentation-only or unrelated changes.
+- Production is never used as a continuous benchmark target.
 
-```sh
-MODULE_PATHS=$(find ../tnt-modules/modules -mindepth 1 -maxdepth 1 \
-  -type d -name '*-module' -print | sort | paste -sd: -)
-make perf-full PERF_MODULE_PATHS="$MODULE_PATHS"
-```
+This keeps runner, artifact and server costs proportional to an active
+performance decision.
 
-The long durability profile is separate so an ordinary benchmark never hides a
-half-hour run:
+## Target-host constraints
 
-```sh
-make perf-soak PERF_SOAK_OUTPUT=/tmp/tnt-perf-soak.json
-```
-
-It defaults to 64 fully joined sessions for 1,800 seconds. Senders rotate across
-all sessions; every marker must be persisted in order and rendered by all 63
-peers. The test continuously verifies process/session survival, samples RSS and
-virtual memory, and fails above 112 MiB peak RSS or 16 MiB post-warmup RSS growth.
-Use `make perf-soak-smoke` only to verify the driver contract, never as durability
-evidence.
-
-On a dedicated Linux reference host, constrain only the TNT server (not the
-OpenSSH load generators) and record the constraint in the report:
+On a dedicated Linux host, an optional wrapper can constrain only the TNT
+server while leaving the OpenSSH load generators outside the limit:
 
 ```sh
 taskset -c 1 make perf-full \
-  PERF_SERVER_WRAPPER='taskset -c 0 systemd-run --user --scope --quiet -p AllowedCPUs=0 -p MemoryMax=128M -p MemorySwapMax=0' \
-  PERF_EXPECT_SERVER_CPUS=0 \
-  PERF_EXPECT_MEMORY_MAX_BYTES=134217728 \
-  PERF_EXPECT_MEMORY_SWAP_MAX_BYTES=0
-taskset -c 1 make perf-soak \
-  PERF_SOAK_SERVER_WRAPPER='taskset -c 0 systemd-run --user --scope --quiet -p AllowedCPUs=0 -p MemoryMax=128M -p MemorySwapMax=0' \
-  PERF_SOAK_EXPECT_SERVER_CPUS=0 \
-  PERF_SOAK_EXPECT_MEMORY_MAX_BYTES=134217728 \
-  PERF_SOAK_EXPECT_MEMORY_SWAP_MAX_BYTES=0
+  PERF_SERVER_WRAPPER='taskset -c 0 systemd-run --user --scope --quiet -p AllowedCPUs=0 -p MemoryMax=32M -p MemorySwapMax=0' \
+  PERF_OUTPUT=/tmp/tnt-perf.json
 ```
 
-The inner `taskset` pins TNT to CPU 0, while the transient user scope constrains
-TNT and its module children to 128 MiB of memory and zero swap. The outer
-`taskset` keeps the driver and its OpenSSH children on CPU 1. Use this only on a
-dedicated two-CPU-or-larger host where those CPUs belong to the test and the user
-systemd manager supports the memory properties. The wrapper is stored verbatim
-in JSON and does not include the load generators. Reports record both sides'
-effective affinity plus TNT's cgroup limits; the `PERF_EXPECT_*` arguments make
-the run fail if the host ignored any requested server constraint.
-
-Every latency distribution uses at least five samples and reports the raw
-samples plus min, mean, p50, p95, p99, and max. Percentiles use the nearest-rank
-method. The full target profile uses 101 distribution samples so nearest-rank
-p99 does not collapse to a single maximum; 21 preceding all-session deliveries
-warm the session schedulers and render paths without entering the measured
-sample set. The broader fresh-exec diagnostic likewise uses five warmups.
-`PERF_ENFORCE=stable` gates
-existing-key startup, idle RSS, and binary
-size. The fresh-process SSH handshake remains recorded but is not a hard
-shared-runner gate because host process scheduling dominates its tail.
-`PERF_ENFORCE=all` additionally gates the handshake, 64-session RSS when 64
-sessions were measured, room-update-to-all-session-write latency, and ingest
-throughput. An enforced metric that cannot be measured is a failure, never a
-silent pass. For that reason, `PERF_ENFORCE=all` requires exactly 64 clients so
-a larger workload cannot be mislabeled and judged as 64-session RSS.
-
-The extended Linux CI job runs `make perf-smoke`, fails when a stable redline is
-crossed, and retains the JSON report for 30 days as a workflow artifact. The
-weekly/manual Performance Charter workflow runs the complete 64-session budget
-gate with the pinned tnt-modules release and then the 30-minute functional
-durability gate. Its two reports are retained together for 90 days. Failed
-scenarios retain structured diagnostics rather than disappearing.
+The wrapper and the effective Linux affinity/cgroup values are recorded in the
+report. Inspect them before treating a run as constrained evidence. Global
+cache eviction is never automated because it disturbs unrelated workloads.
 
 ## Measurement contract
 
-The driver records the Git commit and dirty state, UTC timestamp, OS and kernel,
-architecture, CPU, logical CPU count, driver affinity, total memory, compiler,
-OpenSSH, libssh, effective server cgroup limits, workload configuration, raw
-samples, and binary sizes.
-
-Scenarios have deliberately narrow definitions:
-
-- First start measures process spawn through the listening announcement and
-  includes automatic RSA-4096 host-key generation.
-- Existing-key startup repeats that measurement after the key exists.
-- History startup repeats it with a valid 100,000-record log by default. A
-  separate first-open measurement asks the OS to evict that file from cache via
-  `posix_fadvise(POSIX_FADV_DONTNEED)` where available and records whether the
-  request was supported. The benchmark never drops global host caches.
-- Handshake starts a fresh OpenSSH process and ends after an authenticated
+- At least five warm samples are used for every latency distribution. The full
+  fan-out profile uses 101 measured samples and five unrecorded warmups.
+- Startup ends at TNT's listening announcement. First start, existing-key start
+  and 100,000-record history opening are reported separately.
+- Handshake starts a fresh OpenSSH process and ends at an authenticated
   `health` response.
-- Connection storm releases the configured number of OpenSSH clients from a
-  thread barrier together. Every client must pass authentication, submit a
-  username, complete `room_add_client()`, emit the post-join marker, and appear
-  in `users --json`; prompt visibility is not success.
-- A session counts as joined only after authentication, username submission,
-  `room_add_client()`, and emission of the post-join bracketed-paste marker.
-  Seeing the username prompt is never counted as success. The final set is
-  cross-checked through `users --json`, and resources are sampled after the
-  configured idle interval so initial screen setup has settled.
-- Interactive distribution uses one existing joined session as sender. The
-  gated server interval begins when `room_broadcast()` publishes its generation
-  and ends after all 64 joined session loops finish their screen write for that
-  generation. The session acknowledgements are de-duplicated and exposed by
-  `stats --json`; this excludes load-generator process scheduling while still
-  covering wakeup, snapshot, render, and the bounded libssh/outbox write.
-- Correctness and broader latency are checked independently. TNT flushes the
-  message record before broadcasting, and the driver waits until the unique
-  record and marker output are visible in all other 63 real OpenSSH clients.
-  The report retains submit-to-persistence, persisted-to-all-peer, and
-  submit-to-all-peer samples. Those external observations include filesystem,
-  OpenSSH, receiver polling, and driver scheduling, but are not judged against
-  the server-only 20 ms distribution redline.
-- Fresh exec post-to-all-receivers remains recorded as a broader, ungated
-  end-to-end diagnostic. It starts before a new OpenSSH `post` process and ends
-  after every joined TUI renders the exactly-once persisted marker, therefore
-  including process creation and SSH authentication. It must not be compared
-  with the 20 ms server distribution redline on hosts whose handshake alone is
-  slower than that budget.
-- Ingest begins when an interactive client receives an ordered payload and
-  ends after every expected record is visible in `messages.log` and the final
-  unique message has rendered for all joined sessions. Persistence completeness,
-  persistence ordering, and final fan-out are mandatory, not optional throughput
-  tradeoffs. The server must remain healthy and every joined session must still
-  be present afterward.
-- Capacity rejection occupies the configured final slot, times a rejected
-  health connection, verifies that the existing session survives, and requires
-  an explicit operator-log reason. Capacity is enforced before SSH key exchange
-  to protect resources, so a stock client can only receive a fast transport
-  close at that stage; pretending that an application message can be delivered
-  before SSH exists would weaken the protection and is intentionally rejected.
-- Slow-client coverage keeps one fully joined TUI unread with a small socket
-  buffer, fills its input/output path, and reports health plus an independent
-  joined receiver's latency. The unread client may remain bounded or be
-  disconnected; it must never block unrelated progress.
-- Module comparison repeats an identical ordered ingest workload with modules
-  disabled and with every explicitly supplied module enabled. It records module
-  manifests/repository commits, process-tree RSS/virtual memory, throughput
-  ratio, correctness, survival, and runtime errors. No implicit module path or
-  production configuration is inherited.
+- A session counts only after authentication, username submission, room entry,
+  TNT's post-join marker and confirmation through `users --json`. Seeing a
+  username prompt is not success.
+- Connection storm clients start together and must all satisfy that join
+  contract.
+- Fan-out uses an existing joined sender. The gated interval begins when the
+  driver first observes the flushed persisted record and ends when every other
+  joined TUI renders it. No benchmark-only counter or lock exists in TNT.
+- Ingest requires every record to persist in order, the final record to render
+  in every session, every session to survive and `health` to remain responsive.
+- One unread joined client exercises bounded backpressure while health and a
+  responsive peer continue to make progress.
+- Capacity testing fills the configured slots, verifies a fast rejection and
+  confirms that the existing session survives. Before SSH key exchange, the
+  client can only receive a transport close; the explicit reason is available
+  to the operator log.
 
-The JSON schema is versioned with `schema_version`. Consumers should reject a
-new major schema they do not understand instead of silently comparing fields
-with changed semantics.
+`PERF_ENFORCE=stable` gates startup, idle RSS and binary size.
+`PERF_ENFORCE=all` additionally requires exactly 64 clients and gates handshake,
+64-session RSS, fan-out and ingest. A missing enforced metric fails.
 
-## Coverage boundaries
+TNT core integration still validates the module protocol and supervisor. Run
+module implementation performance from the companion repository instead:
 
-The benchmark now covers startup, best-effort per-file cold history opening,
-large-history warm replay, sequential handshakes, synchronized connection
-storms, fully joined idle sessions, all-receiver fan-out, ordered ingest,
-slow-client backpressure, optional modules-on/off comparison, process and
-process-tree memory, idle CPU, binaries, capacity rejection, and a separate
-30-minute 64-session functional durability profile.
+```sh
+make -C ../tnt-modules perf-check
+```
 
-Two boundaries are deliberate:
+## Evidence
 
-- Global cache eviction is not automated because it needs elevated privileges,
-  perturbs unrelated workloads, and is unsafe on shared CI/production hosts.
-  The report records the portable per-file eviction attempt instead.
-- A result belongs to the machine and workload recorded in its JSON. Do not
-  compare different hardware or operating systems as one baseline, and do not
-  describe a GitHub-hosted runner as the 1-vCPU/128-MiB reference host.
-
-Reviewed reports are indexed under [`docs/performance/`](performance/). The
-workflow artifacts remain the evidence for newer commits until another baseline
-is deliberately reviewed and checked in.
+The concise reviewed baseline is in
+[`docs/performance/README.md`](performance/README.md). A result belongs only to
+its recorded commit, host and workload. Raw JSON stays local or in a short-lived
+explicit artifact; it is not committed to Git history.

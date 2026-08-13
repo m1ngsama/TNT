@@ -36,16 +36,16 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 JOIN_MARKER = b"\x1b[?2004h"
 MIB = 1024 * 1024
 
 BUDGETS = {
     "existing_key_startup_p95_ms": {"ideal": 20.0, "redline": 50.0},
     "idle_rss_kib": {"ideal": 8 * 1024, "redline": 16 * 1024},
-    "sessions_64_rss_kib": {"ideal": 80 * 1024, "redline": 112 * 1024},
+    "sessions_64_rss_kib": {"ideal": 24 * 1024, "redline": 32 * 1024},
     "ssh_handshake_p95_ms": {"ideal": 50.0, "redline": 100.0},
-    "room_update_to_all_session_writes_p99_ms": {
+    "persisted_to_all_receivers_p99_ms": {
         "ideal": 5.0,
         "redline": 20.0,
     },
@@ -104,7 +104,6 @@ def summarize(values: Sequence[float]) -> dict[str, Any]:
         raise ValueError("cannot summarize an empty sample")
     samples = [round(float(value), 3) for value in values]
     return {
-        "samples": samples,
         "sample_count": len(samples),
         "min": round(min(samples), 3),
         "max": round(max(samples), 3),
@@ -280,7 +279,6 @@ def _start_server_once(
     state_dir: pathlib.Path,
     *,
     max_connections: int = 1024,
-    module_paths: str | None = None,
     port: int,
     timeout: float = 15.0,
 ) -> ServerProcess:
@@ -311,8 +309,6 @@ def _start_server_once(
             "TNT_SSH_LOG_LEVEL": "0",
         }
     )
-    if module_paths:
-        environment["TNT_MODULE_PATHS"] = module_paths
     command = [
         *_SERVER_WRAPPER,
         str(binary),
@@ -372,7 +368,6 @@ def start_server(
     state_dir: pathlib.Path,
     *,
     max_connections: int = 1024,
-    module_paths: str | None = None,
     port: int | None = None,
     timeout: float = 15.0,
 ) -> ServerProcess:
@@ -386,7 +381,6 @@ def start_server(
                 binary,
                 state_dir,
                 max_connections=max_connections,
-                module_paths=module_paths,
                 port=selected_port,
                 timeout=timeout,
             )
@@ -676,72 +670,6 @@ def process_constraints(pid: int) -> dict[str, Any]:
     return constraints
 
 
-def require_process_constraints(
-    constraints: dict[str, Any],
-    *,
-    cpu_list: str | None,
-    memory_max_bytes: int | None,
-    memory_swap_max_bytes: int | None,
-) -> None:
-    """Fail when an explicitly requested target constraint was not applied."""
-    expected = {
-        "cpu_allowed_list": cpu_list,
-        "memory_max_bytes": memory_max_bytes,
-        "memory_swap_max_bytes": memory_swap_max_bytes,
-    }
-    for field, wanted in expected.items():
-        if wanted is not None and constraints.get(field) != wanted:
-            raise BenchmarkError(
-                f"server constraint mismatch for {field}: "
-                f"expected {wanted!r}, observed {constraints.get(field)!r}"
-            )
-
-
-def direct_child_pids(pid: int) -> list[int]:
-    """Return direct child PIDs without relying on platform-specific pgrep flags."""
-    try:
-        output = run_text(["ps", "-axo", "pid=,ppid="])
-    except FileNotFoundError:
-        return []
-    children: list[int] = []
-    for line in output.splitlines():
-        fields = line.split()
-        if len(fields) != 2:
-            continue
-        try:
-            child_pid, parent_pid = (int(field) for field in fields)
-        except ValueError:
-            continue
-        if parent_pid == pid:
-            children.append(child_pid)
-    return sorted(children)
-
-
-def process_tree_resources(pid: int) -> dict[str, Any]:
-    pids = [pid, *direct_child_pids(pid)]
-    processes = [
-        {"pid": process_pid, **process_resources(process_pid)} for process_pid in pids
-    ]
-    rss_values = [
-        process["rss_kib"]
-        for process in processes
-        if process["rss_kib"] is not None
-    ]
-    virtual_values = [
-        process["virtual_kib"]
-        for process in processes
-        if process["virtual_kib"] is not None
-    ]
-    return {
-        "processes": processes,
-        "process_count": len(processes),
-        "rss_kib": sum(rss_values) if len(rss_values) == len(processes) else None,
-        "virtual_kib": (
-            sum(virtual_values) if len(virtual_values) == len(processes) else None
-        ),
-    }
-
-
 def process_cpu_seconds(pid: int) -> float | None:
     stat_path = pathlib.Path(f"/proc/{pid}/stat")
     if stat_path.exists():
@@ -924,76 +852,7 @@ def measure_handshakes(port: int, samples: int) -> list[float]:
     return measured
 
 
-def measure_exec_post_to_all_receivers(
-    port: int,
-    receivers: Sequence[InteractiveClient],
-    samples: int,
-    run_id: str,
-    log_path: pathlib.Path,
-) -> dict[str, Any]:
-    measured: list[float] = []
-    warmup_messages = 5
-    for receiver in receivers:
-        receiver.drain()
-    for warmup_index in range(warmup_messages):
-        warmup_marker = f"pfw{run_id[:4]}{warmup_index:02d}".encode()
-        warmup_result = ssh_exec(
-            port, ["post", warmup_marker.decode("ascii")], username="perfbot"
-        )
-        if (
-            warmup_result.returncode != 0
-            or warmup_result.stdout.strip() != b"posted"
-        ):
-            raise BenchmarkError("fanout warmup post failed")
-        warmup_deadline = time.monotonic() + 5
-        for receiver in receivers:
-            if not receiver.wait_for(
-                warmup_marker, max(0.0, warmup_deadline - time.monotonic())
-            ):
-                raise BenchmarkError(
-                    f"receiver {receiver.name!r} did not render fanout warmup"
-                )
-    for index in range(samples):
-        marker = f"pf{run_id[:4]}{index:03d}".encode()
-        started_ns = time.monotonic_ns()
-        result = ssh_exec(
-            port, ["post", marker.decode("ascii")], username="perfbot"
-        )
-        if result.returncode != 0 or result.stdout.strip() != b"posted":
-            raise BenchmarkError(
-                "fanout post failed: "
-                + result.stderr.decode("utf-8", errors="replace")
-            )
-        deadline = time.monotonic() + 5
-        for receiver in receivers:
-            if not receiver.wait_for(marker, max(0.0, deadline - time.monotonic())):
-                raise BenchmarkError(
-                    f"receiver {receiver.name!r} did not render fanout marker {marker!r}"
-                )
-        persisted = matching_persisted_messages(
-            log_path, marker.decode("ascii")
-        )
-        if persisted != [marker.decode("ascii")]:
-            raise BenchmarkError(f"fanout marker was not persisted exactly once: {marker!r}")
-        measured.append((time.monotonic_ns() - started_ns) / 1_000_000)
-    return {
-        **summarize(measured),
-        "joined_receivers": len(receivers),
-        "messages": samples,
-        "warmup_messages": warmup_messages,
-        "deliveries_verified": len(receivers) * samples,
-        "persistence_verified": samples,
-        "completion": "every joined receiver rendered the persisted marker",
-        "sender_transport": "fresh SSH exec post",
-        "conservative_scope": (
-            "includes OpenSSH process start, authentication, persistence, room "
-            "fan-out, wakeup, render, and transport to every joined receiver"
-        ),
-    }
-
-
 def measure_interactive_distribution(
-    port: int,
     sender: InteractiveClient,
     receivers: Sequence[InteractiveClient],
     samples: int,
@@ -1004,7 +863,6 @@ def measure_interactive_distribution(
     submit_to_persistence_ms: list[float] = []
     persisted_to_all_receivers_ms: list[float] = []
     submit_to_all_receivers_ms: list[float] = []
-    room_update_to_all_session_writes_ms: list[float] = []
 
     def run_marker(marker: bytes, *, record: bool) -> None:
         marker_text = marker.decode("ascii")
@@ -1064,36 +922,6 @@ def measure_interactive_distribution(
         if all_rendered_ns < persisted_ns:
             raise BenchmarkError("distribution observation order was inconsistent")
 
-        telemetry_deadline = time.monotonic() + 5
-        telemetry: dict[str, Any] | None = None
-        while time.monotonic() < telemetry_deadline:
-            stats_result = ssh_exec(port, ["stats", "--json"])
-            if stats_result.returncode != 0:
-                raise BenchmarkError("stats --json failed during distribution run")
-            telemetry = json.loads(stats_result.stdout)
-            current_seq = telemetry.get("distribution_seq")
-            if (
-                telemetry.get("distribution_expected_clients")
-                == len(receivers) + 1
-                and telemetry.get("distribution_completed_clients")
-                == len(receivers) + 1
-                and telemetry.get("distribution_last_complete_seq")
-                == current_seq
-            ):
-                break
-            time.sleep(0.001)
-        else:
-            raise BenchmarkError(
-                f"server distribution telemetry did not complete: {telemetry}"
-            )
-
-        latency_us = (
-            telemetry.get("distribution_last_complete_latency_us")
-            if telemetry
-            else None
-        )
-        if not isinstance(latency_us, int) or latency_us < 0:
-            raise BenchmarkError("server distribution telemetry is invalid")
         if record:
             submit_to_persistence_ms.append(
                 (persisted_ns - started_ns) / 1_000_000
@@ -1104,9 +932,8 @@ def measure_interactive_distribution(
             submit_to_all_receivers_ms.append(
                 (all_rendered_ns - started_ns) / 1_000_000
             )
-            room_update_to_all_session_writes_ms.append(latency_us / 1000.0)
 
-    warmup_messages = 21
+    warmup_messages = 5
     for warmup_index in range(warmup_messages):
         run_marker(
             f"pdw{run_id[:4]}{warmup_index:02d}".encode(),
@@ -1121,9 +948,6 @@ def measure_interactive_distribution(
             persisted_to_all_receivers_ms
         ),
         "submit_to_all_receivers_ms": summarize(submit_to_all_receivers_ms),
-        "room_update_to_all_session_writes_ms": summarize(
-            room_update_to_all_session_writes_ms
-        ),
         "joined_receivers": len(receivers),
         "messages": samples,
         "warmup_messages": warmup_messages,
@@ -1131,13 +955,9 @@ def measure_interactive_distribution(
         "persistence_verified": samples,
         "completion": "every other joined TUI rendered the persisted marker",
         "sender_transport": "existing interactive SSH session",
-        "external_observer_scope": (
+        "gated_scope": (
             "first external observation of the flushed persisted record through "
             "marker render by every other joined TUI receiver"
-        ),
-        "gated_scope": (
-            "room update publication through completion of the screen write in "
-            "every joined session, reported by server telemetry"
         ),
         "observer_note": (
             "TNT persists before room broadcast; log and receiver observation "
@@ -1302,157 +1122,154 @@ def measure_ingest(
     }
 
 
-def module_source_metadata(module_paths: str) -> dict[str, Any]:
-    manifests: list[dict[str, str]] = []
-    repositories: dict[str, dict[str, Any]] = {}
-    for raw_path in module_paths.split(":"):
-        path = pathlib.Path(raw_path).resolve()
-        manifest_path = path / "tnt-module.json"
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise BenchmarkError(f"cannot read module manifest {manifest_path}: {error}")
-        manifests.append(
-            {
-                "directory": path.name,
-                "name": str(manifest.get("name", "unknown")),
-                "version": str(manifest.get("version", "unknown")),
-            }
-        )
-        try:
-            root = pathlib.Path(
-                run_text(
-                    ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
-                    check=True,
+def expected_durability_messages(duration: float, interval: float) -> int:
+    if duration <= 0 or interval <= 0:
+        return 0
+    return 1 + int(max(0.0, duration - 1e-9) // interval)
+
+
+def measure_durability(
+    server: ServerProcess,
+    clients: Sequence[InteractiveClient],
+    log_path: pathlib.Path,
+    duration: float,
+    message_interval: float,
+    sample_interval: float,
+    progress_interval: float,
+    run_id: str,
+) -> dict[str, Any]:
+    """Keep the already joined target sessions useful for the requested period."""
+    prefix = f"perf-soak-{run_id}-"
+    started = time.monotonic()
+    deadline = started + duration
+    next_message = started
+    next_sample = started
+    next_progress = started + progress_interval
+    messages: list[str] = []
+    senders: set[str] = set()
+    latencies_ms: list[float] = []
+    deliveries = 0
+    resource_samples = 0
+    initial_rss: int | None = None
+    final_rss: int | None = None
+    peak_rss: int | None = None
+    peak_virtual: int | None = None
+
+    while time.monotonic() < deadline:
+        now = time.monotonic()
+        if server.process.poll() is not None:
+            raise BenchmarkError("server exited during durability run")
+        dead = [client.name for client in clients if client.process.poll() is not None]
+        if dead:
+            raise BenchmarkError(f"sessions exited during durability run: {dead[:3]}")
+
+        if now >= next_message:
+            index = len(messages)
+            sender = clients[index % len(clients)]
+            marker_text = f"{prefix}{index:06d}"
+            marker = marker_text.encode("ascii")
+            for client in clients:
+                client.drain()
+            message_started_ns = time.monotonic_ns()
+            sender.send(marker + b"\r")
+            receiver_deadline = time.monotonic() + 5
+            for receiver in clients:
+                if receiver is sender:
+                    continue
+                if not receiver.wait_for(
+                    marker, max(0.0, receiver_deadline - time.monotonic())
+                ):
+                    raise BenchmarkError(
+                        f"{receiver.name} did not render durability marker"
+                    )
+                deliveries += 1
+            latencies_ms.append(
+                (time.monotonic_ns() - message_started_ns) / 1_000_000
+            )
+            messages.append(marker_text)
+            senders.add(sender.name)
+            next_message += message_interval
+
+        if now >= next_sample:
+            resources = process_resources(server.process.pid)
+            rss = resources["rss_kib"]
+            virtual = resources["virtual_kib"]
+            if rss is not None:
+                initial_rss = rss if initial_rss is None else initial_rss
+                final_rss = rss
+                peak_rss = rss if peak_rss is None else max(peak_rss, rss)
+            if virtual is not None:
+                peak_virtual = (
+                    virtual if peak_virtual is None else max(peak_virtual, virtual)
                 )
-            ).resolve()
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            continue
-        key = str(root)
-        if key not in repositories:
-            repositories[key] = {
-                "directory": root.name,
-                **git_metadata(root),
-            }
-    return {
-        "manifests": manifests,
-        "repositories": list(repositories.values()),
-    }
+            resource_samples += 1
+            next_sample += sample_interval
 
+        if progress_interval > 0 and now >= next_progress:
+            print(
+                f"durability progress: elapsed={now - started:.0f}s "
+                f"messages={len(messages)} rss_kib={final_rss}",
+                file=sys.stderr,
+                flush=True,
+            )
+            next_progress += progress_interval
 
-def run_ingest_profile(
-    binary: pathlib.Path,
-    state_dir: pathlib.Path,
-    *,
-    client_count: int,
-    message_count: int,
-    run_id: str,
-    module_paths: str | None,
-) -> dict[str, Any]:
-    server = start_server(
-        binary,
-        state_dir,
-        max_connections=client_count + 16,
-        module_paths=module_paths,
+        for client in clients:
+            client.drain()
+        wake_at = min(deadline, next_message, next_sample)
+        if progress_interval > 0:
+            wake_at = min(wake_at, next_progress)
+        time.sleep(min(0.25, max(0.0, wake_at - time.monotonic())))
+
+    resources = process_resources(server.process.pid)
+    rss = resources["rss_kib"]
+    virtual = resources["virtual_kib"]
+    if rss is not None:
+        initial_rss = rss if initial_rss is None else initial_rss
+        final_rss = rss
+        peak_rss = rss if peak_rss is None else max(peak_rss, rss)
+    if virtual is not None:
+        peak_virtual = virtual if peak_virtual is None else max(peak_virtual, virtual)
+    resource_samples += 1
+
+    persisted = matching_persisted_messages(log_path, prefix)
+    users_result = ssh_exec(server.port, ["users", "--json"], timeout=15)
+    surviving = (
+        set(json.loads(users_result.stdout)) if users_result.returncode == 0 else set()
     )
-    clients: list[InteractiveClient] = []
-    try:
-        wait_for_health(server.port)
-        for index in range(client_count):
-            clients.append(
-                InteractiveClient(server.port, f"p{index:03d}-{run_id[-8:]}")
-            )
-        ingest = measure_ingest(
-            clients[-1],
-            clients,
-            state_dir / "messages.log",
-            message_count,
-            run_id,
-        )
-        users_result = ssh_exec(server.port, ["users", "--json"], timeout=10)
-        users = (
-            set(json.loads(users_result.stdout))
-            if users_result.returncode == 0
-            else set()
-        )
-        expected = {client.name for client in clients}
-        stderr_text = server.stderr_path.read_text(
-            encoding="utf-8", errors="replace"
-        )
-        enabled_modules = re.findall(
-            r"^module runtime: enabled (.+)$", stderr_text, flags=re.MULTILINE
-        )
-        module_error_lines = [
-            line
-            for line in stderr_text.splitlines()
-            if "module runtime:" in line
-            and any(
-                marker in line.lower()
-                for marker in ("failed", "disabled", "queue full", "timeout", "invalid")
-            )
-        ]
-        profile = {
-            "clients": client_count,
-            "ingest": ingest,
-            "sessions_survived": len(expected.intersection(users)),
-            "server_healthy": ssh_exec(server.port, ["health"]).stdout.strip() == b"ok",
-            "process_tree_resources": process_tree_resources(server.process.pid),
-            "enabled_modules": enabled_modules,
-            "module_error_lines": module_error_lines,
-        }
-        if not ingest["complete"] or not ingest["ordered"] or not ingest["fanout_complete"]:
-            raise BenchmarkError(f"{run_id} ingest correctness failed")
-        if profile["sessions_survived"] != client_count or not profile["server_healthy"]:
-            raise BenchmarkError(f"{run_id} sessions or server did not survive")
-        if module_error_lines:
-            raise BenchmarkError(f"{run_id} module runtime reported errors")
-        return profile
-    finally:
-        for client in reversed(clients):
-            client.close()
-        server.stop()
-
-
-def measure_module_comparison(
-    binary: pathlib.Path,
-    host_key: pathlib.Path,
-    module_paths: str,
-    client_count: int,
-    message_count: int,
-    run_id: str,
-) -> dict[str, Any]:
-    profiles: dict[str, dict[str, Any]] = {}
-    for label, paths in (("modules_off", None), ("modules_on", module_paths)):
-        with tempfile.TemporaryDirectory(prefix=f"tnt-perf-{label}-") as temp:
-            state_dir = pathlib.Path(temp)
-            shutil.copy2(host_key, state_dir / "host_key")
-            profiles[label] = run_ingest_profile(
-                binary,
-                state_dir,
-                client_count=client_count,
-                message_count=message_count,
-                run_id=f"{run_id}-{'on' if paths else 'off'}",
-                module_paths=paths,
-            )
-
-    expected_modules = len([path for path in module_paths.split(":") if path])
-    enabled_modules = len(profiles["modules_on"]["enabled_modules"])
-    if enabled_modules != expected_modules:
-        raise BenchmarkError(
-            "module comparison did not enable every requested module: "
-            f"enabled={enabled_modules} expected={expected_modules}"
-        )
-    off_rate = profiles["modules_off"]["ingest"]["messages_per_second"]
-    on_rate = profiles["modules_on"]["ingest"]["messages_per_second"]
+    expected_users = {client.name for client in clients}
+    health = ssh_exec(server.port, ["health"], timeout=15)
+    rss_growth = (
+        final_rss - initial_rss
+        if initial_rss is not None and final_rss is not None
+        else None
+    )
+    acceptance = {
+        "duration_reached": time.monotonic() >= deadline,
+        "every_session_sent": len(senders) == len(clients),
+        "messages_complete": persisted == messages,
+        "fanout_complete": deliveries == len(messages) * (len(clients) - 1),
+        "all_sessions_survived": len(expected_users.intersection(surviving))
+        == len(clients),
+        "server_healthy": health.returncode == 0 and health.stdout.strip() == b"ok",
+        "peak_rss_within_32_mib": peak_rss is not None and peak_rss <= 32 * 1024,
+        "rss_growth_within_8_mib": rss_growth is not None
+        and rss_growth <= 8 * 1024,
+    }
     return {
-        "status": "measured",
-        "clients": client_count,
-        "messages": message_count,
-        "source": module_source_metadata(module_paths),
-        **profiles,
-        "throughput_ratio_modules_on_to_off": round(
-            on_rate / off_rate if off_rate > 0 else 0.0, 3
-        ),
+        "status": "ok" if all(acceptance.values()) else "failed",
+        "duration_seconds": round(time.monotonic() - started, 3),
+        "messages_sent": len(messages),
+        "unique_senders": len(senders),
+        "deliveries_verified": deliveries,
+        "fanout_all_receivers_ms": summarize(latencies_ms),
+        "resource_sample_count": resource_samples,
+        "initial_rss_kib": initial_rss,
+        "final_rss_kib": final_rss,
+        "peak_rss_kib": peak_rss,
+        "rss_growth_kib": rss_growth,
+        "peak_virtual_kib": peak_virtual,
+        "acceptance": acceptance,
     }
 
 
@@ -1526,9 +1343,9 @@ def evaluate_budgets(metrics: dict[str, Any]) -> dict[str, dict[str, Any]]:
             else None
         ),
         "ssh_handshake_p95_ms": metrics["ssh_health_handshake_ms"]["p95"],
-        "room_update_to_all_session_writes_p99_ms": metrics[
+        "persisted_to_all_receivers_p99_ms": metrics[
             "interactive_message_distribution"
-        ]["room_update_to_all_session_writes_ms"]["p99"],
+        ]["persisted_to_all_receivers_ms"]["p99"],
         "message_ingest_per_second": metrics["message_ingest"][
             "messages_per_second"
         ],
@@ -1561,19 +1378,8 @@ def report_failed(report: dict[str, Any], scope: str) -> bool:
     return False
 
 
-def default_output(repo_root: pathlib.Path) -> pathlib.Path:
-    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    try:
-        short_sha = run_text(
-            ["git", "rev-parse", "--short=12", "HEAD"], cwd=repo_root, check=True
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        short_sha = "unknown"
-    return repo_root / "perf-results" / f"{short_sha}-{stamp}.json"
-
-
 def write_report(path: pathlib.Path, report: dict[str, Any]) -> None:
-    """Atomically publish a report so CI never retains truncated JSON."""
+    """Atomically publish an explicitly requested report."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
@@ -1610,14 +1416,11 @@ def failure_report(
             "slow_client_samples": args.slow_client_samples,
             "slow_client_characters": args.slow_client_characters,
             "slow_client_messages": args.slow_client_messages,
-            "module_clients": args.module_clients,
-            "module_messages": args.module_messages,
-            "module_paths_configured": bool(args.module_paths),
+            "durability_seconds": args.durability_seconds,
+            "durability_interval": args.durability_interval,
+            "resource_sample_interval": args.resource_sample_interval,
             "server_wrapper": args.server_wrapper,
             "server_wrapper_argv": None,
-            "expect_server_cpus": args.expect_server_cpus,
-            "expect_memory_max_bytes": args.expect_memory_max_bytes,
-            "expect_memory_swap_max_bytes": args.expect_memory_swap_max_bytes,
             "percentile_method": "nearest-rank",
             "enforce": args.enforce,
         },
@@ -1638,8 +1441,6 @@ def validate_args(args: argparse.Namespace) -> None:
         "slow_client_samples",
         "slow_client_characters",
         "slow_client_messages",
-        "module_clients",
-        "module_messages",
     )
     for field in integer_fields:
         if getattr(args, field) < 1:
@@ -1659,21 +1460,25 @@ def validate_args(args: argparse.Namespace) -> None:
         )
     if args.idle_seconds <= 0:
         raise BenchmarkError("--idle-seconds must be positive")
-    if args.expect_server_cpus is not None and not args.expect_server_cpus.strip():
-        raise BenchmarkError("--expect-server-cpus must not be empty")
-    for field in ("expect_memory_max_bytes", "expect_memory_swap_max_bytes"):
-        if getattr(args, field) is not None and getattr(args, field) < 0:
-            raise BenchmarkError(f"--{field.replace('_', '-')} cannot be negative")
     if args.enforce == "all" and args.clients != 64:
         raise BenchmarkError("--enforce all requires exactly --clients 64")
-    if args.module_paths:
-        paths = [path for path in args.module_paths.split(":") if path]
-        if not paths:
-            raise BenchmarkError("--module-paths must contain at least one path")
-        for raw_path in paths:
-            path = pathlib.Path(raw_path)
-            if not path.is_dir() or not (path / "tnt-module.json").is_file():
-                raise BenchmarkError(f"invalid module path: {raw_path}")
+    if args.durability_seconds < 0:
+        raise BenchmarkError("--durability-seconds cannot be negative")
+    for field in ("durability_interval", "resource_sample_interval"):
+        if getattr(args, field) <= 0:
+            raise BenchmarkError(f"--{field.replace('_', '-')} must be positive")
+    if args.progress_interval < 0:
+        raise BenchmarkError("--progress-interval cannot be negative")
+    if (
+        args.durability_seconds > 0
+        and expected_durability_messages(
+            args.durability_seconds, args.durability_interval
+        )
+        < args.clients
+    ):
+        raise BenchmarkError(
+            "durability duration/interval must let every client send"
+        )
 
 
 def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
@@ -1689,13 +1494,6 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
     server_wrapper = configure_server_wrapper(args.server_wrapper)
 
     run_id = uuid.uuid4().hex[:10]
-    module_paths = None
-    if args.module_paths:
-        module_paths = ":".join(
-            str(pathlib.Path(path).resolve())
-            for path in args.module_paths.split(":")
-            if path
-        )
     metrics: dict[str, Any] = {
         "binary_bytes": {
             "tnt": binary.stat().st_size,
@@ -1757,12 +1555,6 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 metrics["server_constraints"] = process_constraints(
                     server.process.pid
                 )
-                require_process_constraints(
-                    metrics["server_constraints"],
-                    cpu_list=args.expect_server_cpus,
-                    memory_max_bytes=args.expect_memory_max_bytes,
-                    memory_swap_max_bytes=args.expect_memory_swap_max_bytes,
-                )
                 metrics["idle_server"] = process_resources(server.process.pid)
                 metrics["ssh_health_handshake_ms"] = summarize(
                     measure_handshakes(server.port, args.handshake_samples)
@@ -1796,18 +1588,8 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 metrics["interactive_message_distribution"] = (
                     measure_interactive_distribution(
-                        server.port,
                         clients[-1],
                         clients[:-1],
-                        args.fanout_samples,
-                        run_id,
-                        runtime_state / "messages.log",
-                    )
-                )
-                metrics["exec_post_to_all_receivers_ms"] = (
-                    measure_exec_post_to_all_receivers(
-                        server.port,
-                        clients,
                         args.fanout_samples,
                         run_id,
                         runtime_state / "messages.log",
@@ -1857,28 +1639,21 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                     )
                 if not metrics["message_ingest"]["server_healthy"]:
                     raise BenchmarkError("server health failed after ingest run")
+                if args.durability_seconds > 0:
+                    metrics["durability"] = measure_durability(
+                        server,
+                        clients,
+                        runtime_state / "messages.log",
+                        args.durability_seconds,
+                        args.durability_interval,
+                        args.resource_sample_interval,
+                        args.progress_interval,
+                        run_id,
+                    )
             finally:
                 for client in reversed(clients):
                     client.close()
                 server.stop()
-
-        if module_paths:
-            metrics["module_comparison"] = measure_module_comparison(
-                binary,
-                startup_state / "host_key",
-                module_paths,
-                args.module_clients,
-                args.module_messages,
-                run_id,
-            )
-        else:
-            metrics["module_comparison"] = {
-                "status": "not_configured",
-                "reason": (
-                    "pass --module-paths with one or more colon-separated "
-                    "validated module directories"
-                ),
-            }
 
         with tempfile.TemporaryDirectory(prefix="tnt-perf-capacity-") as capacity_tmp:
             capacity_state = pathlib.Path(capacity_tmp)
@@ -1910,14 +1685,11 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             "slow_client_samples": args.slow_client_samples,
             "slow_client_characters": args.slow_client_characters,
             "slow_client_messages": args.slow_client_messages,
-            "module_clients": args.module_clients,
-            "module_messages": args.module_messages,
-            "module_paths_configured": bool(module_paths),
+            "durability_seconds": args.durability_seconds,
+            "durability_interval": args.durability_interval,
+            "resource_sample_interval": args.resource_sample_interval,
             "server_wrapper": args.server_wrapper,
             "server_wrapper_argv": server_wrapper,
-            "expect_server_cpus": args.expect_server_cpus,
-            "expect_memory_max_bytes": args.expect_memory_max_bytes,
-            "expect_memory_swap_max_bytes": args.expect_memory_swap_max_bytes,
             "percentile_method": "nearest-rank",
             "enforce": args.enforce,
         },
@@ -1936,13 +1708,8 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 "confirmed room join"
             ),
             "distribution": (
-                "room update publication through screen write completion in "
-                "every joined session; external persistence and all-peer "
-                "marker delivery are verified separately"
-            ),
-            "conservative_fanout": (
-                "fresh SSH exec post start through persistence and marker "
-                "render by every joined receiver"
+                "first external observation of flushed persistence through "
+                "marker render by every other joined TUI receiver"
             ),
             "ingest": (
                 "interactive payload write to ordered persistence and "
@@ -1952,17 +1719,16 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 "health and responsive-receiver latency while one joined TUI "
                 "is deliberately unread"
             ),
-            "modules": (
-                "identical ordered ingest profile with configured external "
-                "modules disabled and enabled"
+            "durability": (
+                "optional rotating senders, ordered persistence, every-peer "
+                "render, session survival, and aggregate process memory"
             ),
             "memory": (
                 "RSS and virtual memory are reported separately; thread "
                 "stacks are not treated as resident"
             ),
             "server_wrapper": (
-                "optional exec prefix constrains only TNT and inherited "
-                "module processes; it is recorded verbatim"
+                "optional exec prefix constrains TNT and is recorded verbatim"
             ),
         },
         "budgets": BUDGETS,
@@ -1981,27 +1747,7 @@ def self_test() -> int:
     assert metric_status(10, redline=10, higher_is_better=True) == "pass"
     assert metric_status(9, redline=10, higher_is_better=True) == "fail"
     assert metric_status(None, redline=10) == "not_measured"
-    require_process_constraints(
-        {
-            "cpu_allowed_list": "0",
-            "memory_max_bytes": 128 * MIB,
-            "memory_swap_max_bytes": 0,
-        },
-        cpu_list="0",
-        memory_max_bytes=128 * MIB,
-        memory_swap_max_bytes=0,
-    )
-    try:
-        require_process_constraints(
-            {"cpu_allowed_list": "1"},
-            cpu_list="0",
-            memory_max_bytes=None,
-            memory_swap_max_bytes=None,
-        )
-    except BenchmarkError:
-        pass
-    else:
-        raise AssertionError("constraint mismatch was not rejected")
+    assert expected_durability_messages(1800, 10) == 180
     missing_report = {
         "budget_evaluation": {
             name: {"status": "not_measured" if name == "idle_rss_kib" else "pass"}
@@ -2018,7 +1764,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         description="Run TNT's reproducible real-client performance benchmark."
     )
     parser.add_argument("--binary", default="./tnt", help="TNT server binary")
-    parser.add_argument("--output", help="JSON output path")
+    parser.add_argument("--output", help="write JSON here instead of stdout")
     parser.add_argument("--startup-samples", type=int, default=21)
     parser.add_argument("--handshake-samples", type=int, default=11)
     parser.add_argument("--fanout-samples", type=int, default=11)
@@ -2030,26 +1776,13 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--slow-client-samples", type=int, default=5)
     parser.add_argument("--slow-client-characters", type=int, default=3200)
     parser.add_argument("--slow-client-messages", type=int, default=16)
-    parser.add_argument("--module-paths")
-    parser.add_argument("--module-clients", type=int, default=8)
-    parser.add_argument("--module-messages", type=int, default=100)
+    parser.add_argument("--durability-seconds", type=float, default=0.0)
+    parser.add_argument("--durability-interval", type=float, default=10.0)
+    parser.add_argument("--resource-sample-interval", type=float, default=10.0)
+    parser.add_argument("--progress-interval", type=float, default=60.0)
     parser.add_argument(
         "--server-wrapper",
         help="shell-like exec prefix for target-host constraints (for example taskset/prlimit)",
-    )
-    parser.add_argument(
-        "--expect-server-cpus",
-        help="require the TNT process Cpus_allowed_list to equal this value",
-    )
-    parser.add_argument(
-        "--expect-memory-max-bytes",
-        type=int,
-        help="require the TNT cgroup-v2 memory.max value",
-    )
-    parser.add_argument(
-        "--expect-memory-swap-max-bytes",
-        type=int,
-        help="require the TNT cgroup-v2 memory.swap.max value",
     )
     parser.add_argument(
         "--enforce",
@@ -2070,17 +1803,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     repo_root = pathlib.Path(__file__).resolve().parent.parent
     try:
         validate_args(args)
-        output = pathlib.Path(args.output) if args.output else default_output(repo_root)
-        if not output.is_absolute():
+        output = pathlib.Path(args.output) if args.output else None
+        if output is not None and not output.is_absolute():
             output = (repo_root / output).resolve()
         report = run_benchmark(args)
-        report["status"] = "ok"
-        write_report(output, report)
-        json.dump(report, sys.stdout, ensure_ascii=False, sort_keys=True)
-        sys.stdout.write("\n")
-        print(f"performance report: {output}", file=sys.stderr)
+        durability_failed = (
+            report.get("metrics", {}).get("durability", {}).get("status")
+            == "failed"
+        )
+        report["status"] = "failed" if durability_failed else "ok"
+        if output is not None:
+            write_report(output, report)
+            print(f"performance report: {output}", file=sys.stderr)
+        else:
+            json.dump(report, sys.stdout, ensure_ascii=False, sort_keys=True)
+            sys.stdout.write("\n")
         if args.enforce != "none" and report_failed(report, args.enforce):
             print(f"performance redline crossed ({args.enforce} scope)", file=sys.stderr)
+            return 1
+        if durability_failed:
+            print("durability contract failed", file=sys.stderr)
             return 1
         return 0
     except (BenchmarkError, OSError, subprocess.SubprocessError, json.JSONDecodeError) as error:
