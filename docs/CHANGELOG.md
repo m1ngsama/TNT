@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+- Pinned the Arch and Homebrew recipes to the published v1.3.0 source archive
+  checksum and moved release artifact actions to their Node 24 generations.
+
 ## 1.3.0 - 2026-08-13
 
 ### Added

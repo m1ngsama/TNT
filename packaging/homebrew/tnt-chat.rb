@@ -2,7 +2,7 @@ class TntChat < Formula
   desc "SSH-native terminal chat server with a Vim-style interface"
   homepage "https://github.com/m1ngsama/TNT"
   url "https://github.com/m1ngsama/TNT/releases/download/v1.3.0/tnt-chat-v1.3.0-source.tar.gz"
-  sha256 "REPLACE_WITH_RELEASE_TARBALL_SHA256"
+  sha256 "5d43b076b210e060c72c575b780e0f2fc5e377a25936711c789bb16b41cb8f6b"
   license "MIT"
 
   depends_on "libssh"

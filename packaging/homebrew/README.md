@@ -39,7 +39,7 @@ ruby -c packaging/homebrew/tnt-chat.rb
    shasum -a 256 dist/tnt-chat-vX.Y.Z-source.tar.gz
    ```
 
-3. Replace `REPLACE_WITH_RELEASE_TARBALL_SHA256` in `tnt-chat.rb`.
+3. Set the formula `sha256` to the command output.
 4. Run:
 
    ```sh

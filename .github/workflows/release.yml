@@ -88,7 +88,7 @@ jobs:
         mv tntctl ${{ matrix.ctl_artifact }}
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.artifact }}
         path: |
@@ -113,7 +113,7 @@ jobs:
         sha256sum "$archive"
 
     - name: Upload source archive
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: tnt-chat-source
         path: dist/tnt-chat-v*-source.tar.gz
@@ -130,7 +130,7 @@ jobs:
       run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
 
     - name: Download build artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         path: ./artifacts
 
@@ -138,7 +138,7 @@ jobs:
       run: scripts/package_release_assets.sh ./artifacts ./dist/release-assets
 
     - name: Upload release asset bundle
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: release-assets
         path: dist/release-assets/*
@@ -156,7 +156,7 @@ jobs:
       run: scripts/check_release_ref.sh "${GITHUB_REF_NAME}"
 
     - name: Download release asset bundle
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: release-assets
         path: ./release-assets
@@ -168,7 +168,7 @@ jobs:
         cat checksums.txt
 
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         files: |
           release-assets/*
