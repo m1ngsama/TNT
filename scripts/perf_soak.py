@@ -28,6 +28,7 @@ from perf_benchmark import (
     environment_metadata,
     git_metadata,
     matching_persisted_messages,
+    process_constraints,
     process_resources,
     ssh_exec,
     start_server,
@@ -111,6 +112,7 @@ def run_soak(args: argparse.Namespace) -> dict[str, Any]:
         clients: list[InteractiveClient] = []
         try:
             wait_for_health(server.port)
+            server_constraints = process_constraints(server.process.pid)
             for index in range(args.clients):
                 clients.append(
                     InteractiveClient(server.port, f"soak-{run_id}-{index:03d}")
@@ -272,6 +274,7 @@ def run_soak(args: argparse.Namespace) -> dict[str, Any]:
                     "server_wrapper_argv": server_wrapper,
                 },
                 "metrics": {
+                    "server_constraints": server_constraints,
                     "duration_seconds": round(elapsed, 3),
                     "joined_sessions": joined,
                     "sessions_survived": len(expected_users.intersection(final_users)),

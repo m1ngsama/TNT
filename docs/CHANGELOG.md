@@ -16,6 +16,13 @@
 - Added an optional, recorded server exec wrapper so reference-host runs can
   constrain TNT and module children to a one-CPU, 128-MiB, no-swap cgroup
   without constraining or miscounting the OpenSSH load generators.
+- Coalesced room redraw notifications into a bounded 8 ms window. A burst no
+  longer wakes and repaints all 64 TUI sessions for every intermediate message,
+  while interactive updates remain inside the distribution redline.
+- Defined the gated distribution latency from flushed persistence to every
+  other joined TUI receiver. The broader fresh-SSH-exec measurement remains in
+  reports as an ungated diagnostic instead of charging handshake time to room
+  fan-out; the benchmark report schema is now version 3.
 
 ## 1.3.0 - 2026-08-13
 

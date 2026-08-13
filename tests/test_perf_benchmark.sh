@@ -110,7 +110,7 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     report = json.load(handle)
 assert report["status"] == "error"
-assert report["schema_version"] == 2
+assert report["schema_version"] == 3
 assert report["metrics_complete"] is False
 assert report["error"]["type"] == "BenchmarkError"
 PY

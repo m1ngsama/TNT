@@ -17,7 +17,7 @@ maintainability take precedence over a faster number.
 | Idle server RSS | 8 MiB | 16 MiB |
 | 64 joined sessions RSS | 80 MiB | 112 MiB |
 | Local SSH health handshake p95 | 50 ms | 100 ms |
-| Exec post to all joined TUI receivers p99 | 5 ms | 20 ms |
+| Persisted message to all other joined TUI receivers p99 | 5 ms | 20 ms |
 | Interactive ingest and persistence | 1,000 msg/s | 500 msg/s |
 | Main `tnt` binary | 256 KiB | 512 KiB |
 
@@ -66,7 +66,7 @@ The workload is configurable without editing the script:
 make perf \
   PERF_STARTUP_SAMPLES=21 \
   PERF_HANDSHAKE_SAMPLES=21 \
-  PERF_FANOUT_SAMPLES=21 \
+  PERF_FANOUT_SAMPLES=101 \
   PERF_STORM_CLIENTS=64 \
   PERF_CLIENTS=64 \
   PERF_IDLE_SECONDS=10 \
@@ -113,16 +113,24 @@ where CPU 0 belongs to the test and the user systemd manager supports these
 properties. The wrapper is stored verbatim in JSON. It does not constrain the
 benchmark driver or its OpenSSH client processes.
 
+On a two-CPU measurement host, the driver and its OpenSSH children can be kept
+off the server CPU with `taskset -c 1 make perf-full ...`. Reports record the
+driver's effective CPU affinity plus the TNT process's allowed CPU list,
+effective cgroup cpuset, memory limit, and swap limit. These fields distinguish
+an enforced target profile from a wrapper string that the host ignored.
+
 Every latency distribution uses at least five samples and reports the raw
 samples plus min, mean, p50, p95, p99, and max. Percentiles use the nearest-rank
-method. `PERF_ENFORCE=stable` gates existing-key startup, idle RSS, and binary
+method. The full target profile uses 101 distribution samples so nearest-rank
+p99 does not collapse to a single maximum. `PERF_ENFORCE=stable` gates
+existing-key startup, idle RSS, and binary
 size. The fresh-process SSH handshake remains recorded but is not a hard
 shared-runner gate because host process scheduling dominates its tail.
 `PERF_ENFORCE=all` additionally gates the handshake, 64-session RSS when 64
-sessions were measured, end-to-end post-to-all-receivers latency, and
-ingest throughput. An enforced metric that cannot be measured is a failure,
-never a silent pass. For that reason, `PERF_ENFORCE=all` requires exactly 64
-clients so a larger workload cannot be mislabeled and judged as 64-session RSS.
+sessions were measured, persisted-to-all-peer distribution latency, and ingest
+throughput. An enforced metric that cannot be measured is a failure, never a
+silent pass. For that reason, `PERF_ENFORCE=all` requires exactly 64 clients so
+a larger workload cannot be mislabeled and judged as 64-session RSS.
 
 The extended Linux CI job runs `make perf-smoke`, fails when a stable redline is
 crossed, and retains the JSON report for 30 days as a workflow artifact. The
@@ -134,8 +142,9 @@ scenarios retain structured diagnostics rather than disappearing.
 ## Measurement contract
 
 The driver records the Git commit and dirty state, UTC timestamp, OS and kernel,
-architecture, CPU, logical CPU count, total memory, compiler, OpenSSH, libssh,
-workload configuration, raw samples, and binary sizes.
+architecture, CPU, logical CPU count, driver affinity, total memory, compiler,
+OpenSSH, libssh, effective server cgroup limits, workload configuration, raw
+samples, and binary sizes.
 
 Scenarios have deliberately narrow definitions:
 
@@ -157,12 +166,20 @@ Scenarios have deliberately narrow definitions:
   Seeing the username prompt is never counted as success. The final set is
   cross-checked through `users --json`, and resources are sampled after the
   configured idle interval so initial screen setup has settled.
-- Exec post-to-all-receivers begins before starting a fresh OpenSSH exec `post`
-  and ends only after its unique, exactly-once persisted marker is visible in
-  every already joined TUI receiver. It deliberately includes client process
-  startup, SSH authentication, persistence, room fan-out, wake/render, and
-  output transport. This is a conservative end-to-end proxy for the message
-  distribution redline, not an isolated in-process broadcast microbenchmark.
+- Interactive distribution uses one existing joined session as sender. TNT
+  flushes the message record before calling `room_broadcast()`, so the gated
+  interval begins when the driver first observes that unique record in the log
+  and ends when all other 63 joined TUI sessions have rendered it. The report
+  also records submit-to-persistence and submit-to-all-peer distributions.
+  Filesystem polling, receiver polling, and driver scheduling are included, so
+  this remains a conservative external measurement rather than an in-process
+  timestamp that changes production behavior.
+- Fresh exec post-to-all-receivers remains recorded as a broader, ungated
+  end-to-end diagnostic. It starts before a new OpenSSH `post` process and ends
+  after every joined TUI renders the exactly-once persisted marker, therefore
+  including process creation and SSH authentication. It must not be compared
+  with the 20 ms server distribution redline on hosts whose handshake alone is
+  slower than that budget.
 - Ingest begins when an interactive client receives an ordered payload and
   ends after every expected record is visible in `messages.log` and the final
   unique message has rendered for all joined sessions. Persistence completeness,

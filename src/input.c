@@ -39,6 +39,7 @@ static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 #define KEEPALIVE_INTERVAL_MS 15000
 #define DARWIN_HIGH_FD_POLL_MS 10
 #define CHANNEL_CLOSE_ACK_TIMEOUT_MS 1000
+#define ROOM_REDRAW_MIN_INTERVAL_MS 8
 
 static const char *input_client_name(const struct client *client) {
     return client ? ((const client_t *)client)->username : NULL;
@@ -1110,6 +1111,7 @@ void input_run_session(client_t *client) {
     uint64_t seen_update_seq;
     int64_t last_keepalive_ms = input_monotonic_millis();
     int64_t last_activity_ms = last_keepalive_ms;
+    int64_t last_room_render_ms = 0;
 
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
@@ -1191,12 +1193,14 @@ void input_run_session(client_t *client) {
     /* Render initial screen */
     seen_update_seq = room_get_update_seq(g_room);
     tui_render_screen(client);
+    last_room_render_ms = input_monotonic_millis();
 
 main_loop:
 
     /* Main input loop */
     while (client->connected && ssh_channel_is_open(client->channel)) {
         bool room_updated = false;
+        bool room_wake_cleared = false;
         /* Prefer already-buffered channel input over repainting an obsolete
          * intermediate screen.  Human keypresses still repaint immediately,
          * while pasted/batched messages collapse UI work until the receive
@@ -1207,6 +1211,7 @@ main_loop:
         }
         bool input_buffered = ready > 0;
         uint64_t current_update_seq = room_get_update_seq(g_room);
+        int64_t loop_now_ms = input_monotonic_millis();
 
         if (client_flush_pending_bells(client) != 0) {
             break;
@@ -1214,9 +1219,6 @@ main_loop:
 
         if (current_update_seq != seen_update_seq) {
             room_updated = true;
-            if (!input_buffered) {
-                seen_update_seq = current_update_seq;
-            }
         }
 
         if (client->command_output_kind == TNT_COMMAND_OUTPUT_INBOX &&
@@ -1231,10 +1233,30 @@ main_loop:
             redraw_requested = atomic_exchange(&client->redraw_pending,
                                                 false);
         }
-        if (!input_buffered &&
-            (redraw_requested ||
-            (room_updated && !client->show_help &&
-             client->command_output[0] == '\0'))) {
+        bool room_view_visible = !client->show_help && !client->show_motd &&
+                                 client->command_output[0] == '\0';
+        bool room_render_due = room_updated && room_view_visible &&
+            (last_room_render_ms == 0 ||
+             loop_now_ms - last_room_render_ms >=
+                 ROOM_REDRAW_MIN_INTERVAL_MS);
+
+        if (!input_buffered && room_updated && !room_view_visible) {
+            /* Help/MOTD/command output owns the screen.  Remember the room
+             * generation without waking this session for every hidden
+             * intermediate update; closing the overlay renders a fresh room
+             * snapshot. */
+            seen_update_seq = current_update_seq;
+            atomic_store(&client->wake_pending, false);
+            room_wake_cleared = true;
+        }
+
+        if (!input_buffered && (redraw_requested || room_render_due)) {
+            if (room_updated && room_view_visible) {
+                /* Mark only the generation sampled before rendering.  A
+                 * broadcast racing the snapshot remains visible to the next
+                 * generation check instead of being marked as already seen. */
+                seen_update_seq = current_update_seq;
+            }
             if (client->show_help) {
                 tui_render_help(client);
             } else if (client->show_motd) {
@@ -1247,9 +1269,14 @@ main_loop:
                     normal_scroll_to_latest(client);
                 }
                 tui_render_screen(client);
+                last_room_render_ms = input_monotonic_millis();
                 if (client->mode == MODE_INSERT && input[0] != '\0') {
                     tui_render_input(client, input);
                 }
+            }
+            if (room_updated) {
+                atomic_store(&client->wake_pending, false);
+                room_wake_cleared = true;
             }
         }
 
@@ -1278,6 +1305,14 @@ main_loop:
          * socket before this check can sleep forever after libssh read several
          * channel bytes from one packet and the kernel fd became empty. */
         if (ready == 0) {
+            if (room_wake_cleared &&
+                room_get_update_seq(g_room) != seen_update_seq) {
+                /* A broadcaster can observe wake_pending=true while this
+                 * thread is rendering and intentionally skip its signal.
+                 * Clear, recheck the generation, and loop before blocking to
+                 * close that coalescing race. */
+                continue;
+            }
             int session_fd = ssh_get_fd(client->session);
             if (session_fd < 0) {
                 break;
@@ -1287,6 +1322,21 @@ main_loop:
             int timeout_ms = input_poll_timeout_ms(
                 now_ms, last_keepalive_ms, last_activity_ms,
                 g_idle_timeout > 0 && joined_room);
+            bool defer_room_wake = false;
+            if (room_updated && room_view_visible && !room_render_due) {
+                int64_t room_wait_ms = last_room_render_ms +
+                    ROOM_REDRAW_MIN_INTERVAL_MS - now_ms;
+                if (room_wait_ms < 0) {
+                    room_wait_ms = 0;
+                }
+                if (room_wait_ms < timeout_ms) {
+                    timeout_ms = (int)room_wait_ms;
+                }
+                /* Keep the level bit set while updates are coalescing.  New
+                 * broadcasts then avoid another signal/context switch; the
+                 * bounded timeout performs the single consolidated redraw. */
+                defer_room_wake = true;
+            }
             struct timespec wait_timeout = {
                 .tv_sec = timeout_ms / 1000,
                 .tv_nsec = (long)(timeout_ms % 1000) * 1000000L,
@@ -1309,7 +1359,8 @@ main_loop:
             sigdelset(&wait_mask, SIGUSR1);
 
             int poll_rc;
-            if (atomic_exchange(&client->wake_pending, false)) {
+            if (!defer_room_wake &&
+                atomic_exchange(&client->wake_pending, false)) {
                 poll_rc = 0;
             } else {
 #if defined(__APPLE__)

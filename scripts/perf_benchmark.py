@@ -33,10 +33,10 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 JOIN_MARKER = b"\x1b[?2004h"
 MIB = 1024 * 1024
 
@@ -45,7 +45,7 @@ BUDGETS = {
     "idle_rss_kib": {"ideal": 8 * 1024, "redline": 16 * 1024},
     "sessions_64_rss_kib": {"ideal": 80 * 1024, "redline": 112 * 1024},
     "ssh_handshake_p95_ms": {"ideal": 50.0, "redline": 100.0},
-    "exec_post_to_all_receivers_p99_ms": {
+    "persisted_to_all_receivers_p99_ms": {
         "ideal": 5.0,
         "redline": 20.0,
     },
@@ -220,6 +220,11 @@ def environment_metadata(binary: pathlib.Path) -> dict[str, Any]:
         "architecture": platform.machine(),
         "cpu_model": cpu_model(),
         "logical_cpus": os.cpu_count(),
+        "driver_cpu_affinity": (
+            sorted(os.sched_getaffinity(0))
+            if hasattr(os, "sched_getaffinity")
+            else None
+        ),
         "total_memory_kib": total_memory_kib(),
         "python": platform.python_version(),
         "ssh": version_line(["ssh", "-V"]),
@@ -625,6 +630,52 @@ def process_resources(pid: int) -> dict[str, int | None]:
     return resources
 
 
+def process_constraints(pid: int) -> dict[str, Any]:
+    """Report effective Linux affinity and cgroup-v2 memory constraints."""
+    constraints: dict[str, Any] = {
+        "cpu_allowed_list": None,
+        "cgroup_v2_path": None,
+        "cpuset_cpus_effective": None,
+        "memory_max_bytes": None,
+        "memory_swap_max_bytes": None,
+    }
+    try:
+        for line in pathlib.Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("Cpus_allowed_list:"):
+                constraints["cpu_allowed_list"] = line.split(":", 1)[1].strip()
+                break
+    except OSError:
+        pass
+
+    try:
+        cgroup_lines = pathlib.Path(f"/proc/{pid}/cgroup").read_text().splitlines()
+        relative = next(
+            line.split("::", 1)[1] for line in cgroup_lines if line.startswith("0::")
+        )
+        constraints["cgroup_v2_path"] = relative
+        cgroup_dir = pathlib.Path("/sys/fs/cgroup") / relative.lstrip("/")
+        files = {
+            "cpuset_cpus_effective": "cpuset.cpus.effective",
+            "memory_max_bytes": "memory.max",
+            "memory_swap_max_bytes": "memory.swap.max",
+        }
+        for field, filename in files.items():
+            try:
+                value = (cgroup_dir / filename).read_text().strip()
+            except OSError:
+                continue
+            if field.startswith("memory_") and value != "max":
+                try:
+                    constraints[field] = int(value)
+                    continue
+                except ValueError:
+                    pass
+            constraints[field] = value
+    except (OSError, StopIteration, IndexError):
+        pass
+    return constraints
+
+
 def direct_child_pids(pid: int) -> list[int]:
     """Return direct child PIDs without relying on platform-specific pgrep flags."""
     try:
@@ -915,6 +966,114 @@ def measure_exec_post_to_all_receivers(
     }
 
 
+def measure_interactive_distribution(
+    sender: InteractiveClient,
+    receivers: Sequence[InteractiveClient],
+    samples: int,
+    run_id: str,
+    log_path: pathlib.Path,
+) -> dict[str, Any]:
+    """Measure server-side distribution without charging a fresh SSH handshake."""
+    submit_to_persistence_ms: list[float] = []
+    persisted_to_all_receivers_ms: list[float] = []
+    submit_to_all_receivers_ms: list[float] = []
+
+    def run_marker(marker: bytes, *, record: bool) -> None:
+        marker_text = marker.decode("ascii")
+        tails = {receiver.name: b"" for receiver in receivers}
+        rendered: set[str] = set()
+        sender.drain()
+        for receiver in receivers:
+            receiver.drain()
+
+        started_ns = time.monotonic_ns()
+        sender.send(marker + b"\r")
+        persisted_ns: int | None = None
+        all_rendered_ns: int | None = None
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            persisted = matching_persisted_messages(log_path, marker_text)
+            if len(persisted) > 1:
+                raise BenchmarkError(
+                    f"distribution marker was persisted more than once: {marker!r}"
+                )
+            if persisted == [marker_text] and persisted_ns is None:
+                persisted_ns = time.monotonic_ns()
+
+            for receiver in receivers:
+                output = receiver.drain()
+                probe = tails[receiver.name] + output
+                if marker in probe:
+                    rendered.add(receiver.name)
+                tails[receiver.name] = probe[-max(0, len(marker) - 1) :]
+            if len(rendered) == len(receivers) and all_rendered_ns is None:
+                all_rendered_ns = time.monotonic_ns()
+
+            if persisted_ns is not None and all_rendered_ns is not None:
+                break
+            if sender.process.poll() is not None:
+                raise BenchmarkError(
+                    "interactive sender disconnected during distribution run"
+                )
+            time.sleep(0.0002)
+
+        if persisted_ns is None:
+            raise BenchmarkError(
+                f"distribution marker was not persisted exactly once: {marker!r}"
+            )
+        if all_rendered_ns is None:
+            missing = sorted(
+                receiver.name
+                for receiver in receivers
+                if receiver.name not in rendered
+            )
+            raise BenchmarkError(
+                f"distribution marker was not rendered by receivers: {missing[:3]}"
+            )
+        # Persistence is completed before room_broadcast(). Scan the durable
+        # log before draining receiver output in each probe iteration so the
+        # external observation timestamps preserve that ordering as well.
+        if all_rendered_ns < persisted_ns:
+            raise BenchmarkError("distribution observation order was inconsistent")
+        if record:
+            submit_to_persistence_ms.append(
+                (persisted_ns - started_ns) / 1_000_000
+            )
+            persisted_to_all_receivers_ms.append(
+                (all_rendered_ns - persisted_ns) / 1_000_000
+            )
+            submit_to_all_receivers_ms.append(
+                (all_rendered_ns - started_ns) / 1_000_000
+            )
+
+    run_marker(f"pdw{run_id[:4]}".encode(), record=False)
+    for index in range(samples):
+        run_marker(f"pd{run_id[:4]}{index:03d}".encode(), record=True)
+
+    return {
+        "submit_to_persistence_ms": summarize(submit_to_persistence_ms),
+        "persisted_to_all_receivers_ms": summarize(
+            persisted_to_all_receivers_ms
+        ),
+        "submit_to_all_receivers_ms": summarize(submit_to_all_receivers_ms),
+        "joined_receivers": len(receivers),
+        "messages": samples,
+        "warmup_messages": 1,
+        "deliveries_verified": len(receivers) * samples,
+        "persistence_verified": samples,
+        "completion": "every other joined TUI rendered the persisted marker",
+        "sender_transport": "existing interactive SSH session",
+        "gated_scope": (
+            "first external observation of the flushed persisted record through "
+            "marker render by every other joined TUI receiver"
+        ),
+        "observer_note": (
+            "TNT persists before room broadcast; log and receiver observation "
+            "add benchmark-loop scheduling overhead to the measured interval"
+        ),
+    }
+
+
 def measure_slow_client(
     port: int,
     observer: InteractiveClient,
@@ -989,7 +1148,9 @@ def measure_slow_client(
             "health_ms": summarize(health_ms),
             "responsive_observer_post_to_render_ms": summarize(render_ms),
             "slow_session_state": (
-                "joined" if slow.name in users and slow.process.poll() is None else "bounded_disconnect"
+                "joined"
+                if slow.name in users and slow.process.poll() is None
+                else "bounded_disconnect"
             ),
             "server_healthy": users_result.returncode == 0,
             "progress_contract": (
@@ -1293,9 +1454,9 @@ def evaluate_budgets(metrics: dict[str, Any]) -> dict[str, dict[str, Any]]:
             else None
         ),
         "ssh_handshake_p95_ms": metrics["ssh_health_handshake_ms"]["p95"],
-        "exec_post_to_all_receivers_p99_ms": metrics[
-            "exec_post_to_all_receivers_ms"
-        ]["p99"],
+        "persisted_to_all_receivers_p99_ms": metrics[
+            "interactive_message_distribution"
+        ]["persisted_to_all_receivers_ms"]["p99"],
         "message_ingest_per_second": metrics["message_ingest"][
             "messages_per_second"
         ],
@@ -1513,6 +1674,9 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             clients: list[InteractiveClient] = []
             try:
                 wait_for_health(server.port)
+                metrics["server_constraints"] = process_constraints(
+                    server.process.pid
+                )
                 metrics["idle_server"] = process_resources(server.process.pid)
                 metrics["ssh_health_handshake_ms"] = summarize(
                     measure_handshakes(server.port, args.handshake_samples)
@@ -1543,6 +1707,15 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 metrics["joined_sessions"]["resources"] = process_resources(
                     server.process.pid
+                )
+                metrics["interactive_message_distribution"] = (
+                    measure_interactive_distribution(
+                        clients[-1],
+                        clients[:-1],
+                        args.fanout_samples,
+                        run_id,
+                        runtime_state / "messages.log",
+                    )
                 )
                 metrics["exec_post_to_all_receivers_ms"] = (
                     measure_exec_post_to_all_receivers(
@@ -1661,15 +1834,45 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         "metrics": metrics,
         "measurement_contract": {
             "startup": "process spawn to TNT listening announcement",
-            "handshake": "fresh OpenSSH process through authenticated health response",
-            "joined_session": "authentication, username submission, room add, and bracketed-paste marker emitted",
-            "connection_storm": "thread-barrier synchronized OpenSSH clients through confirmed room join",
-            "fanout": "fresh SSH exec post start through persistence and marker render by every joined receiver",
-            "ingest": "interactive payload write to ordered persistence and final-message render in every joined session",
-            "slow_client": "health and responsive-receiver latency while one joined TUI is deliberately unread",
-            "modules": "identical ordered ingest profile with configured external modules disabled and enabled",
-            "memory": "RSS and virtual memory are reported separately; thread stacks are not treated as resident",
-            "server_wrapper": "optional exec prefix constrains only TNT and inherited module processes; it is recorded verbatim",
+            "handshake": (
+                "fresh OpenSSH process through authenticated health response"
+            ),
+            "joined_session": (
+                "authentication, username submission, room add, and "
+                "bracketed-paste marker emitted"
+            ),
+            "connection_storm": (
+                "thread-barrier synchronized OpenSSH clients through "
+                "confirmed room join"
+            ),
+            "distribution": (
+                "flushed persistence observation through marker render by "
+                "every other joined TUI receiver"
+            ),
+            "conservative_fanout": (
+                "fresh SSH exec post start through persistence and marker "
+                "render by every joined receiver"
+            ),
+            "ingest": (
+                "interactive payload write to ordered persistence and "
+                "final-message render in every joined session"
+            ),
+            "slow_client": (
+                "health and responsive-receiver latency while one joined TUI "
+                "is deliberately unread"
+            ),
+            "modules": (
+                "identical ordered ingest profile with configured external "
+                "modules disabled and enabled"
+            ),
+            "memory": (
+                "RSS and virtual memory are reported separately; thread "
+                "stacks are not treated as resident"
+            ),
+            "server_wrapper": (
+                "optional exec prefix constrains only TNT and inherited "
+                "module processes; it is recorded verbatim"
+            ),
         },
         "budgets": BUDGETS,
     }

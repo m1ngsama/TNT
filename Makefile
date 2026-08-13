@@ -260,8 +260,11 @@ perf-check: PERF_ENFORCE = stable
 perf-check: perf
 
 # Exercise and enforce the issue #66 target concurrency and all-receiver load.
+# 101 samples make nearest-rank p99 the second-highest observation rather than
+# relabeling one maximum as a percentile.
 perf-full: PERF_CLIENTS = 64
 perf-full: PERF_STORM_CLIENTS = 64
+perf-full: PERF_FANOUT_SAMPLES = 101
 perf-full: PERF_IDLE_SECONDS = 10
 perf-full: PERF_MESSAGES = 1000
 perf-full: PERF_ENFORCE = all

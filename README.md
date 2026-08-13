@@ -543,9 +543,9 @@ percentiles, correctness results, and memory observations; they are evidence for
 that recorded host rather than universal numbers.
 
 The reference budgets include 20 ms existing-key startup, 8 MiB idle RSS,
-64 sessions within 80 MiB RSS, a 50 ms local handshake p95, 5 ms conservative
-exec-post-to-all-receivers p99, 1,000 persisted messages/second, and a 256 KiB
-main binary.
+64 sessions within 80 MiB RSS, a 50 ms local handshake p95, 5 ms
+persisted-to-all-peer distribution p99, 1,000 persisted messages/second, and a
+256 KiB main binary.
 These are ideal targets; separate regression redlines and exact metric definitions
 are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Run the benchmark
 on the deployment class you care about instead of extrapolating from another
