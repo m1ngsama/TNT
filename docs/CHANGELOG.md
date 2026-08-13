@@ -10,8 +10,7 @@
   opening, and measured slow-client pressure in the versioned JSON benchmark.
 - Added `make perf-soak`, a 64-session/30-minute functional durability gate with
   rotating senders, all-peer delivery, ordered persistence, process survival,
-  and bounded RSS, plus an explicitly triggered workflow with seven-day
-  evidence retention.
+  and bounded RSS, plus an explicitly triggered workflow.
 - Added an optional, recorded server exec wrapper so reference-host runs can
   constrain TNT to a one-CPU, 32-MiB, no-swap cgroup
   without constraining or miscounting the OpenSSH load generators.
@@ -21,9 +20,8 @@
   observes flushed persistence and all real TUI receivers without adding
   benchmark-only locks, counters, or public status fields. The report schema is
   now version 5.
-- Added optional expected CPU, memory, and swap constraints to full and soak
-  drivers, so a target-host run fails instead of silently accepting a wrapper
-  that the local cgroup manager did not enforce.
+- Reports record effective Linux CPU, memory, and swap constraints so a
+  target-host reviewer can confirm that the requested wrapper took effect.
 - Tightened the 64-session resident-memory redline from 112 MiB to 32 MiB and
   removed performance workloads and report uploads from routine CI. Full and
   durability runs are manual, durability requires explicit opt-in, and reports
