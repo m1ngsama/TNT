@@ -126,8 +126,8 @@ as though they were a single baseline.
 
 | Trigger | Jobs and platforms | Required evidence |
 |---|---|---|
-| Pull request to `main` or `release/**` | PR gate on Ubuntu 24.04 and macOS latest | Default build, ASan build, `make ci-test`, and `make release-check` all succeed |
-| Push to `main` or `release/**` | PR gate plus extended Linux runtime, portable container builds, and package-recipe gate | Runtime/Valgrind gates succeed; Debian stable, Ubuntu 24.04, and Alpine builds succeed; package checks succeed |
+| Pull request to `main` or `release/**` | Ubuntu release/runtime gate and macOS runtime gate | Default and ASan builds succeed on both; runtime tests pass on both; Ubuntu alone runs the release/package preflight |
+| Push to `main` or `release/**` | PR gate plus focused Linux soak/slow-client/Valgrind and portable containers | Extended runtime succeeds; Debian stable and Alpine builds succeed without duplicating native Ubuntu or package jobs |
 | Manual performance dispatch | 64-session core profile; durability only when selected | Job log; three-day JSON only when failed or explicitly retained |
 | SemVer release tag | Release artifact workflow | Version/tag alignment, architecture-specific builds, source-archive validation, asset collection, and checksum verification; release remains a draft for manual review |
 

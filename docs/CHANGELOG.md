@@ -26,6 +26,9 @@
   removed performance workloads and report uploads from routine CI. Full and
   durability runs are manual, durability requires explicit opt-in, and reports
   are uploaded for three days only on failure or explicit request.
+- Removed duplicate release/package checks and the redundant Ubuntu container
+  build from routine CI while retaining Linux/macOS runtime, Debian, Alpine,
+  soak, slow-client, and Valgrind coverage.
 - Removed benchmark-only production telemetry and duplicate module profiling;
   module implementation performance remains the responsibility of
   `tnt-modules`.

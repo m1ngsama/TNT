@@ -21,8 +21,8 @@ or `release/**`:
 - Ubuntu 24.04 and macOS latest builds.
 - Normal build with `make`.
 - AddressSanitizer build with `make asan`.
-- Integration/security gate with `make ci-test`.
-- Local release/package preflight with `make release-check`.
+- macOS integration/security gate with `make ci-test`.
+- Ubuntu release/package preflight plus the integration/security runtime gates.
 
 Purpose:
 
@@ -38,17 +38,17 @@ Workflow: `.github/workflows/ci.yml`
 Runs on `main` or `release/**` pushes and manual dispatch:
 
 - `extended-linux-runtime`
-  - Runs `RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check`.
-  - Runs a valgrind smoke test against a temporary server.
+  - Builds once, then runs only the longer soak and slow-client checks not
+    already covered by the Ubuntu gate.
+  - Runs a Valgrind smoke test against a temporary server.
 - `portable-container-builds`
   - Builds in Debian stable glibc.
-  - Builds in Ubuntu 24.04 glibc.
   - Builds in Alpine musl.
-- `package-recipe-gate`
-  - Syntax-checks shell scripts.
-  - Syntax-checks the Arch `PKGBUILD`.
-  - Syntax-checks the Homebrew formula.
-  - Assembles the Debian source tree.
+
+The Ubuntu release preflight already syntax-checks package recipes and
+assembles the Debian source tree, so those checks are not repeated in a
+separate job. The Ubuntu container build is likewise redundant with the native
+Ubuntu build; Debian stable and Alpine retain the useful portability delta.
 
 Purpose:
 
@@ -114,7 +114,6 @@ Current CI validation:
 - Ubuntu 24.04
 - macOS latest
 - Debian stable glibc container build
-- Ubuntu 24.04 glibc container build
 - Alpine musl container build
 
 Package-manager routes:

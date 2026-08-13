@@ -33,24 +33,33 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y expect libssh-dev
+        sudo apt-get install -y cpio expect libssh-dev ruby
 
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
         brew install libssh coreutils
 
-    - name: Build
-      run: make
-
     - name: Build with AddressSanitizer
       run: make asan
 
-    - name: Run comprehensive tests
-      run: make ci-test
+    - name: Run comprehensive tests (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        make ci-test
+        make clean
+        make
+        ./tnt --version
+        ./tntctl --version
 
-    - name: Run release preflight
-      run: make release-check
+    - name: Run release and runtime gates (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        make release-check
+        make integration-test PORT=13700
+        make anonymous-access-test PORT=13720
+        make connection-limit-test PORT=13730
+        make security-test PORT=13740
 
   extended-linux-runtime:
     name: Extended Linux runtime
@@ -65,9 +74,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y expect libssh-dev valgrind
 
-    - name: Run extended release preflight
+    - name: Build once for extended checks
+      run: make
+
+    - name: Run extended durability checks
       run: |
-        RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check
+        DURATION=8 RECONNECTS=5 make soak-test PORT=13800
+        DURATION=8 BURST_CHARS=1600 make slow-client-test PORT=13820
 
     - name: Check for memory leaks
       run: |
@@ -138,9 +151,6 @@ jobs:
           - name: debian-stable-glibc
             image: debian:stable-slim
             setup: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential libssh-dev ca-certificates
-          - name: ubuntu-24.04-glibc
-            image: ubuntu:24.04
-            setup: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential libssh-dev ca-certificates
           - name: alpine-musl
             image: alpine:3.20
             setup: apk add --no-cache build-base libssh-dev ca-certificates
@@ -161,25 +171,3 @@ jobs:
           ./tnt --version
           ./tntctl --version
         '
-
-  package-recipe-gate:
-    name: Package recipe gate
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
-    runs-on: ubuntu-24.04
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Install packaging tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ruby cpio
-
-    - name: Validate packaging metadata
-      run: |
-        for script in scripts/*.sh; do
-          sh -n "$script"
-        done
-        bash -n packaging/arch/PKGBUILD
-        ruby -c packaging/homebrew/tnt-chat.rb
-        scripts/package_debian_source.sh "$RUNNER_TEMP/debian-source"
