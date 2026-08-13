@@ -64,7 +64,7 @@ static int scan_log(const char *path, bool recover) {
 
     while (fgets(line, sizeof(line), fp)) {
         size_t line_len = strlen(line);
-        message_t parsed;
+        message_t parsed = {0};
         bool valid = false;
 
         line_no++;

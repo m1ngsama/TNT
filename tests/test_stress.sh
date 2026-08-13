@@ -50,7 +50,7 @@ if [ "$CLIENTS" -lt 1 ] || [ "$DURATION" -lt 1 ]; then
     exit 2
 fi
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT"
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
 
 wait_for_health() {
     out=""
@@ -70,6 +70,7 @@ echo "clients=$CLIENTS duration=${DURATION}s port=$PORT"
 
 MAX_CONN_PER_IP=$((CLIENTS + 5))
 TNT_LANG=zh TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=$MAX_CONN_PER_IP \
+    TNT_MAX_CONNECTIONS=$MAX_CONN_PER_IP \
     "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
@@ -92,8 +93,11 @@ set timeout [expr {$DURATION + 15}]
 spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT stress$i@localhost
 expect "请输入用户名"
 send -- "stress$i\r"
+expect "›"
 exec touch "$ready"
 sleep $DURATION
+send -- "\003"
+after 100
 send -- "\003"
 expect eof
 EOF

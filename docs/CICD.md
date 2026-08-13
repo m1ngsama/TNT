@@ -40,6 +40,11 @@ Runs on `main` or `release/**` pushes and manual dispatch:
 - `extended-linux-runtime`
   - Runs `RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 make release-check`.
   - Runs a valgrind smoke test against a temporary server.
+  - Runs `make perf-smoke`, enforcing the existing-key startup, idle RSS, and
+    main-binary redlines while still recording SSH and messaging metrics.
+  - Retains the complete versioned performance JSON report for 30 days,
+    including non-gating post-to-render, ingest, ordering, and capacity
+    measurements. A scenario abort still retains structured diagnostic JSON.
 - `portable-container-builds`
   - Builds in Debian stable glibc.
   - Builds in Ubuntu 24.04 glibc.
@@ -55,6 +60,8 @@ Purpose:
 - Broaden platform confidence without making every PR wait for the full matrix.
 - Detect musl/glibc portability issues early.
 - Keep package metadata reviewable before public registry submission.
+- Keep comparable performance evidence for main/release pushes without making
+  runner-sensitive metrics part of the fast pull-request gate.
 
 ### Release Artifact Gates
 

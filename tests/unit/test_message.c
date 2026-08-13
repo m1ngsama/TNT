@@ -63,6 +63,18 @@ TEST(message_init) {
     /* No assertion needed, just ensure it doesn't crash */
 }
 
+TEST(message_prepare_display_populates_cached_fields) {
+    message_t msg = { .timestamp = 1704067200 };
+
+    message_prepare_display(&msg);
+
+    assert(strlen(msg.display_time) == 5);
+    assert(msg.display_time[2] == ':');
+    assert(strlen(msg.display_date) == 10);
+    assert(msg.display_date[4] == '-');
+    assert(msg.display_date[7] == '-');
+}
+
 /* Test loading from empty file */
 TEST(message_load_empty) {
     cleanup_test_log();
@@ -342,6 +354,7 @@ int main(void) {
     printf("Running message unit tests...\n\n");
 
     RUN_TEST(message_init);
+    RUN_TEST(message_prepare_display_populates_cached_fields);
     RUN_TEST(message_load_empty);
     RUN_TEST(message_format_basic);
     RUN_TEST(message_format_long_content);

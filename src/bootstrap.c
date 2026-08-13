@@ -6,6 +6,7 @@
 #include "theme.h"
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <libssh/callbacks.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
@@ -32,6 +33,8 @@ typedef struct {
     bool channel_ready;  /* Set when shell/exec request received */
     ssh_channel channel;  /* Channel created in callback */
     struct ssh_channel_callbacks_struct *channel_cb;  /* Channel callbacks */
+    void (*socket_closing)(void *userdata);
+    void *socket_closing_userdata;
 } session_context_t;
 
 /* Configured access token; empty string means "no auth required". */
@@ -92,6 +95,7 @@ static bool constant_time_strcmp(const char *a, const char *b) {
 static int auth_password(ssh_session session, const char *user,
                          const char *password, void *userdata) {
     session_context_t *ctx = (session_context_t *)userdata;
+    (void)session;
 
     if (user && user[0] != '\0') {
         strncpy(ctx->requested_user, user, sizeof(ctx->requested_user) - 1);
@@ -104,7 +108,6 @@ static int auth_password(ssh_session session, const char *user,
     if (ctx->auth_attempts > 3) {
         ratelimit_record_auth_failure(ctx->client_ip);
         fprintf(stderr, "Too many auth attempts from %s\n", ctx->client_ip);
-        ssh_disconnect(session);
         return SSH_AUTH_DENIED;
     }
 
@@ -113,6 +116,7 @@ static int auth_password(ssh_session session, const char *user,
         if (password && constant_time_strcmp(password, g_access_token)) {
             /* Token matches */
             ctx->auth_success = true;
+            ratelimit_record_auth_success(ctx->client_ip);
             return SSH_AUTH_SUCCESS;
         } else {
             /* Wrong token — IP blocking handles brute force, no sleep needed here
@@ -123,6 +127,7 @@ static int auth_password(ssh_session session, const char *user,
     } else {
         /* No token configured, accept any password */
         ctx->auth_success = true;
+        ratelimit_record_auth_success(ctx->client_ip);
         return SSH_AUTH_SUCCESS;
     }
 }
@@ -143,6 +148,7 @@ static int auth_none(ssh_session session, const char *user, void *userdata) {
     } else {
         /* No token configured, allow passwordless */
         ctx->auth_success = true;
+        ratelimit_record_auth_success(ctx->client_ip);
         return SSH_AUTH_SUCCESS;
     }
 }
@@ -173,6 +179,7 @@ static int auth_pubkey(ssh_session session, const char *user,
     }
 
     ctx->auth_success = true;
+    ratelimit_record_auth_success(ctx->client_ip);
     return SSH_AUTH_SUCCESS;
 }
 
@@ -199,6 +206,20 @@ static void cleanup_failed_session(ssh_session session, session_context_t *ctx) 
     }
 
     if (session) {
+        int session_fd = ssh_get_fd(session);
+        int flags = session_fd >= 0 ? fcntl(session_fd, F_GETFL, 0) : -1;
+        ssh_set_blocking(session, 0);
+        if (flags >= 0) {
+            (void)fcntl(session_fd, F_SETFL, flags | O_NONBLOCK);
+        }
+        /* Coordinate the final close with the registry.  O_NONBLOCK prevents
+         * the protocol disconnect from creating a blind shutdown wait, while
+         * preserving normal SSH teardown instead of resetting every peer. */
+        if (ctx && ctx->socket_closing) {
+            ctx->socket_closing(ctx->socket_closing_userdata);
+            ctx->socket_closing = NULL;
+            ctx->socket_closing_userdata = NULL;
+        }
         ssh_disconnect(session);
         ssh_free(session);
     }
@@ -342,12 +363,16 @@ void *bootstrap_run(void *arg) {
     bool timed_out = false;
     time_t start_time;
     char accepted_ip[INET6_ADDRSTRLEN] = "";
+    void (*socket_closing)(void *userdata) = NULL;
+    void *socket_closing_userdata = NULL;
 
     if (!accepted) {
         return NULL;
     }
 
     session = accepted->session;
+    socket_closing = accepted->socket_closing;
+    socket_closing_userdata = accepted->socket_closing_userdata;
     if (accepted->client_ip[0] != '\0') {
         snprintf(accepted_ip, sizeof(accepted_ip), "%s", accepted->client_ip);
     }
@@ -356,11 +381,25 @@ void *bootstrap_run(void *arg) {
     ctx = calloc(1, sizeof(session_context_t));
     if (!ctx) {
         ratelimit_release_ip(accepted_ip);
+        {
+            int session_fd = ssh_get_fd(session);
+            int flags = session_fd >= 0 ? fcntl(session_fd, F_GETFL, 0) : -1;
+            ssh_set_blocking(session, 0);
+            if (flags >= 0) {
+                (void)fcntl(session_fd, F_SETFL, flags | O_NONBLOCK);
+            }
+        }
+        if (socket_closing) {
+            socket_closing(socket_closing_userdata);
+        }
         ssh_disconnect(session);
         ssh_free(session);
         ratelimit_decrement_total();
         return NULL;
     }
+
+    ctx->socket_closing = socket_closing;
+    ctx->socket_closing_userdata = socket_closing_userdata;
 
     if (accepted_ip[0] != '\0') {
         snprintf(ctx->client_ip, sizeof(ctx->client_ip), "%s", accepted_ip);
@@ -411,7 +450,7 @@ void *bootstrap_run(void *arg) {
 
     start_time = time(NULL);
     while ((!ctx->auth_success || ctx->channel == NULL || !ctx->channel_ready) &&
-           !timed_out) {
+           ctx->auth_attempts <= 3 && !timed_out) {
         int rc = ssh_event_dopoll(event, 1000);
 
         if (rc == SSH_ERROR) {
@@ -449,6 +488,9 @@ void *bootstrap_run(void *arg) {
         return NULL;
     }
 
+    atomic_init(&client->wake_ready, false);
+    atomic_init(&client->wake_pending, false);
+
     client->session = session;
     client->channel = channel;
     int init_w = ctx->pty_width;
@@ -461,6 +503,17 @@ void *bootstrap_run(void *arg) {
     pthread_mutex_init(&client->ref_lock, NULL);
     pthread_mutex_init(&client->io_lock, NULL);
     pthread_mutex_init(&client->whisper_lock, NULL);
+
+    if (client_wake_init(client) < 0) {
+        fprintf(stderr, "Failed to initialize session wakeup for %s: %s\n",
+                ctx->client_ip, strerror(errno));
+        /* The bootstrap context still owns the libssh objects here. */
+        client->session = NULL;
+        client->channel = NULL;
+        client_release(client);
+        cleanup_failed_session(session, ctx);
+        return NULL;
+    }
 
     if (ctx->requested_user[0] != '\0') {
         strncpy(client->ssh_login, ctx->requested_user,
@@ -487,6 +540,14 @@ void *bootstrap_run(void *arg) {
         cleanup_failed_session(session, ctx);
         return NULL;
     }
+
+    /* The fully initialized client now owns the socket and its registry
+     * lifetime hook.  Keep the hook in ctx until this point so every earlier
+     * failure path marks the worker descriptor before freeing the session. */
+    client->socket_closing = ctx->socket_closing;
+    client->socket_closing_userdata = ctx->socket_closing_userdata;
+    ctx->socket_closing = NULL;
+    ctx->socket_closing_userdata = NULL;
 
     if (ctx->channel_cb) {
         ssh_remove_channel_callbacks(channel, ctx->channel_cb);

@@ -1,3 +1,7 @@
+#if !defined(__APPLE__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE /* ppoll() on Linux */
+#endif
+
 #include "input.h"
 #include "chat_room.h"
 #include "client.h"
@@ -19,6 +23,10 @@
 #include <libssh/callbacks.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
+#include <errno.h>
+#include <limits.h>
+#include <poll.h>
+#include <signal.h>
 #include <strings.h>  /* strncasecmp */
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,11 +36,18 @@
 static int g_idle_timeout = TNT_DEFAULT_IDLE_TIMEOUT;
 static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 
-#define MAIN_LOOP_POLL_TIMEOUT_MS 250
+#define KEEPALIVE_INTERVAL_MS 15000
+#define DARWIN_HIGH_FD_POLL_MS 10
+
+static const char *input_client_name(const struct client *client) {
+    return client ? ((const client_t *)client)->username : NULL;
+}
 
 void input_init(void) {
     g_idle_timeout = tnt_config_env_int(&TNT_CONFIG_IDLE_TIMEOUT);
     g_default_ui_lang = i18n_default_ui_lang();
+    room_set_client_notifier(g_room, client_wake);
+    room_set_client_name_accessor(g_room, input_client_name);
 }
 
 static int read_username(client_t *client) {
@@ -205,14 +220,14 @@ static int normal_visible_message_count(const client_t *client) {
         return room_get_message_count(g_room);
     }
 
+    message_t messages[MAX_MESSAGES];
+    int message_count = room_copy_messages(g_room, 0, messages, MAX_MESSAGES);
     int count = 0;
-    pthread_rwlock_rdlock(&g_room->lock);
-    for (int i = 0; i < g_room->message_count; i++) {
-        if (!system_message_is_join_leave(&g_room->messages[i])) {
+    for (int i = 0; i < message_count; i++) {
+        if (!system_message_is_join_leave(&messages[i])) {
             count++;
         }
     }
-    pthread_rwlock_unlock(&g_room->lock);
     return count;
 }
 
@@ -744,7 +759,11 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     }
                     input[0] = '\0';
                 }
-                tui_render_screen(client);
+                /* The room update/redraw path at the top of the session loop
+                 * owns the post-send repaint.  Deferring it lets a buffered
+                 * burst of complete messages collapse into one screen render
+                 * without changing persistence or broadcast ordering. */
+                client->redraw_pending = true;
                 return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */
                 if (input[0] != '\0') {
@@ -986,13 +1005,59 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
     return false;  /* Key not consumed */
 }
 
+static int64_t input_monotonic_millis(void) {
+    struct timespec now;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
+        return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    }
+    return (int64_t)time(NULL) * 1000;
+}
+
+static int input_poll_timeout_ms(int64_t now_ms, int64_t last_keepalive_ms,
+                                 int64_t last_activity_ms,
+                                 bool idle_timeout_enabled) {
+    int64_t deadline = last_keepalive_ms + KEEPALIVE_INTERVAL_MS;
+
+    if (idle_timeout_enabled) {
+        int64_t idle_deadline = last_activity_ms +
+                                (int64_t)g_idle_timeout * 1000;
+        if (idle_deadline < deadline) {
+            deadline = idle_deadline;
+        }
+    }
+
+    if (deadline <= now_ms) return 0;
+    if (deadline - now_ms > INT_MAX) return INT_MAX;
+    return (int)(deadline - now_ms);
+}
+
+/* Drain as much of the bounded outbox as the current SSH window permits.
+ * A render can exceed one fairness-budget chunk; stopping only when no
+ * progress is possible avoids both stranded output and a POLLOUT busy loop. */
+static int input_flush_client_output(client_t *client) {
+    size_t before;
+    size_t after;
+
+    do {
+        before = client_pending_output(client);
+        if (client_flush_output(client) != 0) {
+            return -1;
+        }
+        after = client_pending_output(client);
+    } while (after > 0 && after < before);
+
+    return 0;
+}
+
 void input_run_session(client_t *client) {
     char input[MAX_MESSAGE_LEN] = {0};
     char buf[4];
     bool joined_room = false;
     bool bracketed_paste_enabled = false;
     uint64_t seen_update_seq;
-    time_t last_keepalive = time(NULL);
+    int64_t last_keepalive_ms = input_monotonic_millis();
+    int64_t last_activity_ms = last_keepalive_ms;
 
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
@@ -1024,9 +1089,17 @@ void input_run_session(client_t *client) {
     }
 
     /* Add to room */
-    if (room_add_client(g_room, client) < 0) {
-        client_printf(client, "%s", i18n_text(client->ui_lang,
-                                              I18N_ROOM_FULL));
+    int join_rc = room_add_client(g_room, client);
+    if (join_rc < 0) {
+        if (join_rc == -2) {
+            client_printf(client,
+                          i18n_text(client->ui_lang,
+                                    I18N_NICK_TAKEN_FORMAT),
+                          client->username);
+        } else {
+            client_printf(client, "%s", i18n_text(client->ui_lang,
+                                                  I18N_ROOM_FULL));
+        }
         goto cleanup;
     }
     joined_room = true;
@@ -1060,8 +1133,8 @@ void input_run_session(client_t *client) {
                     client->command_output_scroll = 0;
                     client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
                     client->show_motd = true;
-                    tui_render_motd(client);
                     seen_update_seq = room_get_update_seq(g_room);
+                    tui_render_motd(client);
                     goto main_loop;
                 }
             }
@@ -1069,89 +1142,204 @@ void input_run_session(client_t *client) {
     }
 
     /* Render initial screen */
-    tui_render_screen(client);
     seen_update_seq = room_get_update_seq(g_room);
+    tui_render_screen(client);
 
 main_loop:
 
     /* Main input loop */
     while (client->connected && ssh_channel_is_open(client->channel)) {
-        if (client_flush_output(client) != 0) {
+        bool room_updated = false;
+        /* Prefer already-buffered channel input over repainting an obsolete
+         * intermediate screen.  Human keypresses still repaint immediately,
+         * while pasted/batched messages collapse UI work until the receive
+         * buffer is empty. */
+        int ready = ssh_channel_poll_timeout(client->channel, 0, 0);
+        if (ready < 0) {
+            break;
+        }
+        bool input_buffered = ready > 0;
+        uint64_t current_update_seq = room_get_update_seq(g_room);
+
+        if (client_flush_pending_bells(client) != 0) {
             break;
         }
 
-        int ready = ssh_channel_poll_timeout(client->channel,
-                                             MAIN_LOOP_POLL_TIMEOUT_MS, 0);
-
-        if (ready == SSH_ERROR) {
-            break;
-        }
-
-        if (ready == 0) {
-            bool room_updated = false;
-            uint64_t current_update_seq = room_get_update_seq(g_room);
-
-            if (!ssh_channel_is_open(client->channel)) {
-                break;
-            }
-
-            if (client_flush_output(client) != 0) {
-                break;
-            }
-
-            if (client_flush_pending_bells(client) != 0) {
-                break;
-            }
-
-            if (current_update_seq != seen_update_seq) {
+        if (current_update_seq != seen_update_seq) {
+            room_updated = true;
+            if (!input_buffered) {
                 seen_update_seq = current_update_seq;
-                room_updated = true;
             }
+        }
 
-            if (client->command_output_kind == TNT_COMMAND_OUTPUT_INBOX &&
-                client->command_output[0] != '\0' &&
-                client->unread_whispers > 0) {
-                commands_refresh_active_output(client);
-                client->redraw_pending = true;
-            }
+        if (client->command_output_kind == TNT_COMMAND_OUTPUT_INBOX &&
+            client->command_output[0] != '\0' &&
+            client->unread_whispers > 0) {
+            commands_refresh_active_output(client);
+            client->redraw_pending = true;
+        }
 
-            if (client->redraw_pending ||
-                (room_updated && !client->show_help &&
-                 client->command_output[0] == '\0')) {
-                client->redraw_pending = false;
-
-                if (client->show_help) {
-                    tui_render_help(client);
-                } else if (client->show_motd) {
-                    tui_render_motd(client);
-                } else if (client->command_output[0] != '\0') {
-                    tui_render_command_output(client);
-                } else {
-                    if (room_updated && client->mode == MODE_NORMAL &&
-                        client->follow_tail) {
-                        normal_scroll_to_latest(client);
-                    }
-                    tui_render_screen(client);
-                    if (client->mode == MODE_INSERT && input[0] != '\0') {
-                        tui_render_input(client, input);
-                    }
+        bool redraw_requested = false;
+        if (!input_buffered) {
+            redraw_requested = atomic_exchange(&client->redraw_pending,
+                                                false);
+        }
+        if (!input_buffered &&
+            (redraw_requested ||
+            (room_updated && !client->show_help &&
+             client->command_output[0] == '\0'))) {
+            if (client->show_help) {
+                tui_render_help(client);
+            } else if (client->show_motd) {
+                tui_render_motd(client);
+            } else if (client->command_output[0] != '\0') {
+                tui_render_command_output(client);
+            } else {
+                if (room_updated && client->mode == MODE_NORMAL &&
+                    client->follow_tail) {
+                    normal_scroll_to_latest(client);
                 }
-            } else if (time(NULL) - last_keepalive >= 15) {
-                if (ssh_send_keepalive(client->session) != SSH_OK) {
+                tui_render_screen(client);
+                if (client->mode == MODE_INSERT && input[0] != '\0') {
+                    tui_render_input(client, input);
+                }
+            }
+        }
+
+        if (input_flush_client_output(client) != 0) {
+            break;
+        }
+
+        int64_t now_ms = input_monotonic_millis();
+        if (g_idle_timeout > 0 && joined_room &&
+            now_ms - last_activity_ms >= (int64_t)g_idle_timeout * 1000) {
+            client_printf(client,
+                          i18n_text(client->ui_lang,
+                                    I18N_IDLE_TIMEOUT_FORMAT),
+                          g_idle_timeout / 60);
+            break;
+        }
+
+        if (now_ms - last_keepalive_ms >= KEEPALIVE_INTERVAL_MS) {
+            if (ssh_send_keepalive(client->session) != SSH_OK) {
+                break;
+            }
+            last_keepalive_ms = now_ms;
+        }
+
+        /* First consume bytes libssh already buffered.  Waiting on the raw
+         * socket before this check can sleep forever after libssh read several
+         * channel bytes from one packet and the kernel fd became empty. */
+        if (ready == 0) {
+            int session_fd = ssh_get_fd(client->session);
+            if (session_fd < 0) {
+                break;
+            }
+            int ssh_poll_flags = ssh_get_poll_flags(client->session);
+            sigset_t wait_mask;
+            int timeout_ms = input_poll_timeout_ms(
+                now_ms, last_keepalive_ms, last_activity_ms,
+                g_idle_timeout > 0 && joined_room);
+            struct timespec wait_timeout = {
+                .tv_sec = timeout_ms / 1000,
+                .tv_nsec = (long)(timeout_ms % 1000) * 1000000L,
+            };
+#if defined(__APPLE__)
+            fd_set read_fds;
+            fd_set write_fds;
+            fd_set error_fds;
+#endif
+            struct pollfd wait_fd = {
+                .fd = session_fd,
+                .events = POLLIN |
+                          ((ssh_poll_flags & SSH_WRITE_PENDING)
+                               ? POLLOUT : 0),
+                .revents = 0,
+            };
+            if (pthread_sigmask(SIG_SETMASK, NULL, &wait_mask) != 0) {
+                break;
+            }
+            sigdelset(&wait_mask, SIGUSR1);
+
+            int poll_rc;
+            if (atomic_exchange(&client->wake_pending, false)) {
+                poll_rc = 0;
+            } else {
+#if defined(__APPLE__)
+                if (session_fd < FD_SETSIZE) {
+                    FD_ZERO(&read_fds);
+                    FD_ZERO(&write_fds);
+                    FD_ZERO(&error_fds);
+                    FD_SET(session_fd, &read_fds);
+                    FD_SET(session_fd, &error_fds);
+                    if (ssh_poll_flags & SSH_WRITE_PENDING) {
+                        FD_SET(session_fd, &write_fds);
+                    }
+                    poll_rc = pselect(session_fd + 1, &read_fds,
+                                      &write_fds, &error_fds,
+                                      &wait_timeout, &wait_mask);
+                } else {
+                    /* Darwin has no ppoll().  pselect() is atomic with the
+                     * wake-signal mask, but fd_set cannot represent a high
+                     * descriptor.  Keep SIGUSR1 blocked and bound poll() to
+                     * a short interval; wake_pending remains the level state
+                     * that prevents a notification from being lost. */
+                    int fallback_timeout = timeout_ms;
+                    if (fallback_timeout > DARWIN_HIGH_FD_POLL_MS) {
+                        fallback_timeout = DARWIN_HIGH_FD_POLL_MS;
+                    }
+                    poll_rc = poll(&wait_fd, 1, fallback_timeout);
+                }
+#else
+                poll_rc = ppoll(&wait_fd, 1, &wait_timeout, &wait_mask);
+#endif
+            }
+
+            if (poll_rc < 0) {
+                if (errno == EINTR) continue;
+                break;
+            }
+            if (poll_rc == 0) {
+                continue;
+            }
+
+#if defined(__APPLE__)
+            bool session_event;
+            if (session_fd < FD_SETSIZE) {
+                session_event = FD_ISSET(session_fd, &read_fds) ||
+                                FD_ISSET(session_fd, &write_fds) ||
+                                FD_ISSET(session_fd, &error_fds);
+            } else {
+                if (wait_fd.revents & POLLNVAL) {
                     break;
                 }
-                last_keepalive = time(NULL);
+                session_event =
+                    wait_fd.revents & (POLLIN | POLLOUT | POLLERR | POLLHUP);
             }
-
-            if (g_idle_timeout > 0 && joined_room &&
-                time(NULL) - client->last_active >= g_idle_timeout) {
-                client_printf(client,
-                              i18n_text(client->ui_lang,
-                                        I18N_IDLE_TIMEOUT_FORMAT),
-                              g_idle_timeout / 60);
+#else
+            if (wait_fd.revents & POLLNVAL) {
                 break;
             }
-            continue;
+            bool session_event =
+                wait_fd.revents & (POLLIN | POLLOUT | POLLERR | POLLHUP);
+#endif
+            if (session_event) {
+                /* Let libssh parse packets and run channel callbacks; channel
+                 * data, if any, is then read below. */
+                ready = ssh_channel_poll_timeout(client->channel, 0, 0);
+                if (ready < 0) {
+                    break;
+                }
+                if (ready == 0 &&
+                    (!ssh_is_connected(client->session) ||
+                     !ssh_channel_is_open(client->channel))) {
+                    break;
+                }
+            }
+
+            if (ready == 0) {
+                continue;
+            }
         }
 
         int n = ssh_channel_read(client->channel, buf, 1, 0);
@@ -1161,8 +1349,9 @@ main_loop:
             break;
         }
 
-        last_keepalive = time(NULL);
-        client->last_active = last_keepalive;
+        last_keepalive_ms = input_monotonic_millis();
+        last_activity_ms = last_keepalive_ms;
+        client->last_active = time(NULL);
 
         unsigned char b = buf[0];
 
@@ -1178,7 +1367,9 @@ main_loop:
                     int status = tnt_input_append_ascii(input,
                                                         MAX_MESSAGE_LEN, b);
                     if (status == TNT_INPUT_APPEND_OK) {
-                        tui_render_input(client, input);
+                        if (ready <= n) {
+                            tui_render_input(client, input);
+                        }
                     } else {
                         client_send(client, "\a", 1);
                     }
@@ -1204,7 +1395,9 @@ main_loop:
                     int status = tnt_input_append_utf8_sequence(
                         input, MAX_MESSAGE_LEN, buf, char_len);
                     if (status == TNT_INPUT_APPEND_OK) {
-                        tui_render_input(client, input);
+                        if (ready <= char_len) {
+                            tui_render_input(client, input);
+                        }
                     } else {
                         client_send(client, "\a", 1);
                     }
@@ -1216,7 +1409,9 @@ main_loop:
                         client->command_input, sizeof(client->command_input),
                         b);
                     if (status == TNT_INPUT_APPEND_OK) {
-                        tui_render_command_input(client);
+                        if (ready <= n) {
+                            tui_render_command_input(client);
+                        }
                     } else {
                         client_send(client, "\a", 1);
                     }
@@ -1234,7 +1429,9 @@ main_loop:
                         client->command_input, sizeof(client->command_input),
                         buf, char_len);
                     if (status == TNT_INPUT_APPEND_OK) {
-                        tui_render_command_input(client);
+                        if (ready <= char_len) {
+                            tui_render_command_input(client);
+                        }
                     } else {
                         client_send(client, "\a", 1);
                     }
@@ -1259,6 +1456,16 @@ cleanup:
         room_remove_client(g_room, client);
         room_broadcast(g_room, &leave_msg);
         message_save(&leave_msg);
+    }
+
+    /* Interactive shells otherwise look like a transport reset to OpenSSH
+     * when the owning worker releases libssh state.  Send an explicit clean
+     * channel result for :quit, Ctrl-C, stdin EOF, and other normal exits.
+     * Shutdown-swept sockets simply reject these best-effort writes. */
+    if (client->channel && ssh_channel_is_open(client->channel)) {
+        (void)ssh_channel_request_send_exit_status(client->channel, 0);
+        (void)ssh_channel_send_eof(client->channel);
+        (void)ssh_blocking_flush(client->session, 1000);
     }
 
     ratelimit_release_ip(client->client_ip);

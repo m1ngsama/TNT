@@ -40,8 +40,8 @@ fi
 
 MISSING_OUTPUT=$("$SCRIPT" "$STATE_DIR/missing.log" 100 10 2>&1)
 MISSING_STATUS=$?
-printf '%s\n' "$MISSING_OUTPUT" | grep -q 'does not exist'
-if [ "$MISSING_STATUS" -eq 0 ] && [ $? -eq 0 ]; then
+if [ "$MISSING_STATUS" -eq 0 ] &&
+   printf '%s\n' "$MISSING_OUTPUT" | grep -q 'does not exist'; then
     pass "missing log is a successful no-op"
 else
     fail "missing log handling"

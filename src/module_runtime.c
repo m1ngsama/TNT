@@ -8,9 +8,10 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdlib.h>
-#include <sys/select.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -19,6 +20,8 @@
 #define TNT_MODULE_LINE_MAX 4096
 #define TNT_MODULE_HANDSHAKE_TIMEOUT_MS 2000
 #define TNT_MODULE_RESPONSE_TIMEOUT_MS 100
+#define TNT_MODULE_WRITE_TIMEOUT_MS 250
+#define TNT_MODULE_IO_POLL_SLICE_MS 25
 #define TNT_MODULE_MAX_RESPONSES_PER_EVENT 8
 #define TNT_MODULE_MAX_INVALID_RESPONSES 3
 #define TNT_MODULE_STOP_GRACE_MS 500
@@ -47,11 +50,24 @@ typedef enum module_response_action {
     MODULE_RESPONSE_INVALID
 } module_response_action_t;
 
+typedef enum module_write_result {
+    MODULE_WRITE_OK = 0,
+    MODULE_WRITE_ERROR = -1,
+    MODULE_WRITE_TIMEOUT = -2,
+    MODULE_WRITE_STOPPING = -3
+} module_write_result_t;
+
+typedef enum module_read_result {
+    MODULE_READ_ERROR = -1,
+    MODULE_READ_STOPPING = -2
+} module_read_result_t;
+
 static module_process_t g_modules[TNT_MAX_MODULES];
 static int g_module_count = 0;
 static pthread_t g_module_thread;
 static bool g_thread_started = false;
 static bool g_running = false;
+static atomic_bool g_stop_requested = ATOMIC_VAR_INIT(true);
 static pthread_mutex_t g_queue_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_queue_cond = PTHREAD_COND_INITIALIZER;
 static module_event_node_t *g_queue_head = NULL;
@@ -203,34 +219,186 @@ int tnt_module_manifest_load(const char *module_dir,
     return 0;
 }
 
-static int wait_fd_readable(int fd, int timeout_ms) {
-    fd_set readfds;
-    struct timeval tv;
+static int64_t monotonic_millis(void) {
+    struct timespec now;
 
-    FD_ZERO(&readfds);
-    FD_SET(fd, &readfds);
-    tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (timeout_ms % 1000) * 1000;
-
-    return select(fd + 1, &readfds, NULL, NULL, &tv);
+    if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
+        return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    }
+    return (int64_t)time(NULL) * 1000;
 }
 
-static int read_line_timeout(int fd, char *line, size_t line_size,
-                             int timeout_ms) {
-    size_t pos = 0;
+static int set_fd_nonblocking(int fd) {
+    int flags;
 
-    if (!line || line_size == 0) return -1;
+    if (fd < 0) return -1;
+    flags = fcntl(fd, F_GETFL);
+    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+/* Write one complete protocol record without ever blocking the module worker
+ * indefinitely.  Module stdin is O_NONBLOCK; poll supplies backpressure up to
+ * an absolute deadline.  Short poll slices let shutdown cancel a full pipe
+ * promptly instead of waiting for the entire normal write budget. */
+static module_write_result_t write_module_input(int fd, const char *data,
+                                                size_t len, int timeout_ms,
+                                                bool cancel_on_stop) {
+    size_t written = 0;
+    int64_t deadline;
+
+    if (fd < 0 || (!data && len > 0) || timeout_ms < 0) {
+        return MODULE_WRITE_ERROR;
+    }
+    if (len == 0) return MODULE_WRITE_OK;
+
+    deadline = monotonic_millis() + timeout_ms;
+    while (written < len) {
+        ssize_t n;
+
+        if (cancel_on_stop &&
+            atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+            return MODULE_WRITE_STOPPING;
+        }
+        if (monotonic_millis() >= deadline) {
+            return MODULE_WRITE_TIMEOUT;
+        }
+
+        n = write(fd, data + written, len - written);
+        if (n > 0) {
+            written += (size_t)n;
+            continue;
+        }
+        if (n == 0) {
+            return MODULE_WRITE_ERROR;
+        }
+        if (errno == EINTR) {
+            if (monotonic_millis() >= deadline) {
+                return MODULE_WRITE_TIMEOUT;
+            }
+            continue;
+        }
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            return MODULE_WRITE_ERROR;
+        }
+
+        for (;;) {
+            struct pollfd wait_fd = {
+                .fd = fd,
+                .events = POLLOUT,
+                .revents = 0,
+            };
+            int64_t now = monotonic_millis();
+            int64_t remaining = deadline - now;
+            int wait_ms;
+            int ready;
+
+            if (cancel_on_stop &&
+                atomic_load_explicit(&g_stop_requested,
+                                     memory_order_acquire)) {
+                return MODULE_WRITE_STOPPING;
+            }
+            if (remaining <= 0) {
+                return MODULE_WRITE_TIMEOUT;
+            }
+
+            wait_ms = remaining > INT_MAX ? INT_MAX : (int)remaining;
+            if (cancel_on_stop && wait_ms > TNT_MODULE_IO_POLL_SLICE_MS) {
+                wait_ms = TNT_MODULE_IO_POLL_SLICE_MS;
+            }
+            ready = poll(&wait_fd, 1, wait_ms);
+            if (ready > 0) {
+                if (wait_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                    return MODULE_WRITE_ERROR;
+                }
+                if (wait_fd.revents & POLLOUT) {
+                    break;
+                }
+                continue;
+            }
+            if (ready == 0) {
+                continue;
+            }
+            if (errno != EINTR) {
+                return MODULE_WRITE_ERROR;
+            }
+        }
+    }
+
+    return MODULE_WRITE_OK;
+}
+
+/* Read exactly one newline-terminated protocol record within one absolute
+ * deadline.  A peer cannot extend the budget indefinitely by drip-feeding a
+ * byte before each wait expires.  A partial record at the deadline is a
+ * protocol error because continuing would split one JSONL frame across calls. */
+static int read_line_timeout(int fd, char *line, size_t line_size,
+                             int timeout_ms, bool cancel_on_stop) {
+    size_t pos = 0;
+    int64_t deadline;
+
+    if (fd < 0 || !line || line_size == 0 || timeout_ms < 0) {
+        return MODULE_READ_ERROR;
+    }
     line[0] = '\0';
+    deadline = monotonic_millis() + timeout_ms;
 
     while (pos + 1 < line_size) {
         char c;
-        int ready = wait_fd_readable(fd, timeout_ms);
-        if (ready <= 0) {
-            break;
+        ssize_t n;
+
+        for (;;) {
+            struct pollfd wait_fd = {
+                .fd = fd,
+                .events = POLLIN,
+                .revents = 0,
+            };
+            int64_t remaining = deadline - monotonic_millis();
+            int wait_ms;
+            int ready;
+
+            if (cancel_on_stop &&
+                atomic_load_explicit(&g_stop_requested,
+                                     memory_order_acquire)) {
+                return MODULE_READ_STOPPING;
+            }
+            if (remaining <= 0) {
+                return pos == 0 ? 0 : MODULE_READ_ERROR;
+            }
+
+            wait_ms = remaining > INT_MAX ? INT_MAX : (int)remaining;
+            if (cancel_on_stop && wait_ms > TNT_MODULE_IO_POLL_SLICE_MS) {
+                wait_ms = TNT_MODULE_IO_POLL_SLICE_MS;
+            }
+            ready = poll(&wait_fd, 1, wait_ms);
+            if (ready > 0) {
+                if (wait_fd.revents & POLLIN) {
+                    break;
+                }
+                if (wait_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                    return MODULE_READ_ERROR;
+                }
+                continue;
+            }
+            if (ready == 0) {
+                continue;
+            }
+            if (errno != EINTR) {
+                return MODULE_READ_ERROR;
+            }
         }
-        ssize_t n = read(fd, &c, 1);
-        if (n <= 0) {
-            return -1;
+
+        n = read(fd, &c, 1);
+        if (n < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            return MODULE_READ_ERROR;
+        }
+        if (n == 0) {
+            return MODULE_READ_ERROR;
         }
         if (c == '\n') {
             line[pos] = '\0';
@@ -243,7 +411,7 @@ static int read_line_timeout(int fd, char *line, size_t line_size,
     }
 
     line[pos] = '\0';
-    return pos > 0 ? (int)pos : 0;
+    return MODULE_READ_ERROR;
 }
 
 static void set_module_rlimit(int resource, rlim_t value) {
@@ -398,10 +566,13 @@ static int start_module_process(const char *module_dir,
 
     if (tnt_module_append_handshake(handshake, sizeof(handshake), &pos,
                                     TNT_VERSION) < 0 ||
-        write(module->stdin_fd, handshake, strlen(handshake)) !=
-            (ssize_t)strlen(handshake) ||
+        set_fd_nonblocking(module->stdin_fd) < 0 ||
+        set_fd_nonblocking(module->stdout_fd) < 0 ||
+        write_module_input(module->stdin_fd, handshake, strlen(handshake),
+                           TNT_MODULE_HANDSHAKE_TIMEOUT_MS, false) !=
+            MODULE_WRITE_OK ||
         read_line_timeout(module->stdout_fd, line, sizeof(line),
-                          TNT_MODULE_HANDSHAKE_TIMEOUT_MS) <= 0 ||
+                          TNT_MODULE_HANDSHAKE_TIMEOUT_MS, false) <= 0 ||
         !handshake_ok(line)) {
         close_module_process(module);
         return -1;
@@ -412,13 +583,15 @@ static int start_module_process(const char *module_dir,
 
 static void enqueue_message(const message_t *msg) {
     module_event_node_t *node;
+    bool queue_full;
 
     if (!msg) return;
 
     pthread_mutex_lock(&g_queue_lock);
-    if (!g_running || g_queue_len >= TNT_MODULE_QUEUE_LIMIT) {
+    queue_full = g_queue_len >= TNT_MODULE_QUEUE_LIMIT;
+    if (!g_running || queue_full) {
         pthread_mutex_unlock(&g_queue_lock);
-        if (g_queue_len >= TNT_MODULE_QUEUE_LIMIT) {
+        if (queue_full) {
             fprintf(stderr, "module runtime: event queue full, dropping\n");
         }
         return;
@@ -448,6 +621,10 @@ static module_event_node_t *dequeue_message(void) {
     pthread_mutex_lock(&g_queue_lock);
     while (g_running && !g_queue_head) {
         pthread_cond_wait(&g_queue_cond, &g_queue_lock);
+    }
+    if (!g_running) {
+        pthread_mutex_unlock(&g_queue_lock);
+        return NULL;
     }
     node = g_queue_head;
     if (node) {
@@ -511,24 +688,50 @@ static void deliver_message_to_module(module_process_t *module,
     char message_id[64];
     size_t pos = 0;
     int responses = 0;
+    module_write_result_t write_result;
 
-    if (!module || !module->active || !msg) return;
+    if (!module || !module->active || !msg ||
+        atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+        return;
+    }
 
     snprintf(message_id, sizeof(message_id), "local-%llu",
              (unsigned long long)event_id);
     if (tnt_module_append_message_created(event, sizeof(event), &pos,
-                                          message_id, msg) < 0 ||
-        write(module->stdin_fd, event, strlen(event)) !=
-            (ssize_t)strlen(event)) {
-        fprintf(stderr, "module runtime: disabling %s after write failure\n",
+                                          message_id, msg) < 0) {
+        fprintf(stderr,
+                "module runtime: disabling %s after event encoding failure\n",
                 module->manifest.name);
         close_module_process(module);
         return;
     }
 
+    write_result = write_module_input(
+        module->stdin_fd, event, strlen(event), TNT_MODULE_WRITE_TIMEOUT_MS,
+        true);
+    if (write_result == MODULE_WRITE_STOPPING) {
+        return;
+    }
+    if (write_result != MODULE_WRITE_OK) {
+        fprintf(stderr, "module runtime: disabling %s after write %s\n",
+                module->manifest.name,
+                write_result == MODULE_WRITE_TIMEOUT ? "timeout" : "failure");
+        close_module_process(module);
+        return;
+    }
+
     while (1) {
+        if (atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+            return;
+        }
         int n = read_line_timeout(module->stdout_fd, line, sizeof(line),
-                                  TNT_MODULE_RESPONSE_TIMEOUT_MS);
+                                  TNT_MODULE_RESPONSE_TIMEOUT_MS, true);
+        if (n == MODULE_READ_STOPPING) {
+            return;
+        }
+        if (atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+            return;
+        }
         if (n == 0) {
             return;
         }
@@ -570,11 +773,9 @@ static void *module_worker_main(void *arg) {
     uint64_t event_id = 0;
     (void)arg;
 
-    while (g_running) {
+    while (1) {
         module_event_node_t *node = dequeue_message();
-        if (!node) {
-            continue;
-        }
+        if (!node) break;
 
         event_id++;
         for (int i = 0; i < g_module_count; i++) {
@@ -626,17 +827,21 @@ static int load_modules_from_env(void) {
 int tnt_module_runtime_init(void) {
     g_module_count = 0;
     g_running = false;
+    atomic_store_explicit(&g_stop_requested, false, memory_order_release);
 
     if (load_modules_from_env() < 0) {
+        atomic_store_explicit(&g_stop_requested, true, memory_order_release);
         return -1;
     }
     if (g_module_count == 0) {
+        atomic_store_explicit(&g_stop_requested, true, memory_order_release);
         return 0;
     }
 
     g_running = true;
     if (pthread_create(&g_module_thread, NULL, module_worker_main, NULL) != 0) {
         g_running = false;
+        atomic_store_explicit(&g_stop_requested, true, memory_order_release);
         for (int i = 0; i < g_module_count; i++) {
             close_module_process(&g_modules[i]);
         }
@@ -650,6 +855,7 @@ int tnt_module_runtime_init(void) {
 void tnt_module_runtime_shutdown(void) {
     module_event_node_t *node;
 
+    atomic_store_explicit(&g_stop_requested, true, memory_order_release);
     pthread_mutex_lock(&g_queue_lock);
     g_running = false;
     pthread_cond_broadcast(&g_queue_cond);
@@ -680,3 +886,28 @@ void tnt_module_runtime_publish_message_created(const message_t *msg) {
 
     enqueue_message(msg);
 }
+
+#ifdef TNT_TESTING
+/* Deterministic pipe-level coverage for the timeout and shutdown-cancellation
+ * paths.  Production callers only reach this writer through module_process. */
+int tnt_module_runtime_test_write_fd(int fd, const char *data, size_t len,
+                                     int timeout_ms, bool cancel_on_stop) {
+    if (set_fd_nonblocking(fd) < 0) {
+        return MODULE_WRITE_ERROR;
+    }
+    return write_module_input(fd, data, len, timeout_ms, cancel_on_stop);
+}
+
+int tnt_module_runtime_test_read_fd(int fd, char *line, size_t line_size,
+                                    int timeout_ms, bool cancel_on_stop) {
+    if (set_fd_nonblocking(fd) < 0) {
+        return MODULE_READ_ERROR;
+    }
+    return read_line_timeout(fd, line, line_size, timeout_ms,
+                             cancel_on_stop);
+}
+
+void tnt_module_runtime_test_reset_stop(void) {
+    atomic_store_explicit(&g_stop_requested, false, memory_order_release);
+}
+#endif

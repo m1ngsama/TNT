@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
+#include <signal.h>
 
 /* One stored whisper.  Kept per-recipient, not broadcast to the room
  * and not persisted to messages.log.  Inbox is bounded; oldest slides
@@ -81,6 +82,13 @@ typedef struct client {
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */
     pthread_mutex_t whisper_lock;    /* Serialize whisper inbox access */
+    atomic_bool wake_ready;          /* Session thread accepts directed wake signals */
+    atomic_bool wake_pending;        /* State check closes unblock/poll wake races */
+    /* Server-worker lifetime hook.  Called after the socket is non-blocking
+     * and immediately before ssh_disconnect() closes it, so the shutdown
+     * registry cannot retain a stale, reusable descriptor number. */
+    void (*socket_closing)(void *userdata);
+    void *socket_closing_userdata;
     bool channel_callback_ref;       /* client.c owns one ref while callbacks are installed */
     struct ssh_channel_callbacks_struct *channel_cb;
 } client_t;
@@ -88,8 +96,12 @@ typedef struct client {
 /* Initialize SSH server */
 int ssh_server_init(int port);
 
-/* Start SSH server (blocking) */
-int ssh_server_start(int listen_fd);
+/* Start the SSH server and block until shutdown_fd becomes readable or
+ * shutdown_requested becomes non-zero.  On shutdown this stops accepting,
+ * disconnects every accepted socket, and waits for all detached session
+ * workers to finish before returning. */
+int ssh_server_start(int shutdown_fd,
+                     const volatile sig_atomic_t *shutdown_requested);
 
 /* Read-only accessor for the server start time (used by exec stats). */
 time_t ssh_server_start_time(void);

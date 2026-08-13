@@ -17,6 +17,9 @@ int client_send(client_t *client, const char *data, size_t len);
  * is currently closed. */
 int client_flush_output(client_t *client);
 
+/* Return the number of interactive outbox bytes still awaiting transport. */
+size_t client_pending_output(client_t *client);
+
 /* Queue an audible bell for the client's own session loop to send.  This
  * avoids writing to another client's SSH channel from the sender's thread. */
 void client_queue_bell(client_t *client);
@@ -24,6 +27,12 @@ void client_queue_bell(client_t *client);
 /* Send one queued bell, if present, from the client's own session loop.
  * Returns 0 when no bell was pending or it was written successfully. */
 int client_flush_pending_bells(client_t *client);
+
+/* Per-session event wakeup.  A directed, blocked signal interrupts the
+ * session's atomic signal-mask wait without consuming an FD or touching
+ * libssh from another thread. */
+int client_wake_init(client_t *client);
+void client_wake(client_t *client);
 
 /* printf-style wrapper around client_send().  The formatted string must
  * fit in 2048 bytes; truncation or encoding errors return -1. */

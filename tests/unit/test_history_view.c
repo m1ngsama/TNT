@@ -94,6 +94,25 @@ TEST(latest_start_handles_empty_and_tiny_view) {
     assert(history_view_latest_start_for_height(messages, 1, 1) == 0);
 }
 
+TEST(latest_start_uses_prepared_date_cache) {
+    message_t messages[4];
+    for (int i = 0; i < 4; i++) {
+        messages[i] = make_msg(0, "cached");
+    }
+    snprintf(messages[0].display_date, sizeof(messages[0].display_date),
+             "2024-01-01");
+    snprintf(messages[1].display_date, sizeof(messages[1].display_date),
+             "2024-01-01");
+    snprintf(messages[2].display_date, sizeof(messages[2].display_date),
+             "2024-01-02");
+    snprintf(messages[3].display_date, sizeof(messages[3].display_date),
+             "2024-01-02");
+
+    assert(history_view_latest_start_for_height(messages, 4, 3) == 2);
+    assert(history_view_latest_start_for_height(messages, 4, 4) == 2);
+    assert(history_view_latest_start_for_height(messages, 4, 5) == 1);
+}
+
 int main(void) {
     printf("=== History View Unit Tests ===\n");
 
@@ -104,6 +123,7 @@ int main(void) {
     RUN_TEST(scroll_by_clamps_and_toggles_follow);
     RUN_TEST(latest_start_counts_date_dividers);
     RUN_TEST(latest_start_handles_empty_and_tiny_view);
+    RUN_TEST(latest_start_uses_prepared_date_cache);
 
     printf("\nAll %d tests passed!\n", tests_passed);
     return 0;

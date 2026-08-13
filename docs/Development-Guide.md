@@ -220,6 +220,9 @@ make stress-test   # Run configurable concurrent-client stress test
 make soak-test     # Run idle/reconnect/control-plane soak test
 make slow-client-test # Run slow interactive-client backpressure test
 make user-lifecycle-test # Run a two-user TUI lifecycle test
+make perf          # Write a real-client JSON performance report
+make perf-smoke    # Enforce stable performance redlines
+make perf-full     # Exercise the 64-session target workload
 make ci-test       # Run the same checks as GitHub Actions
 
 # Individual tests
@@ -618,16 +621,21 @@ gprof tnt gmon.out > profile.txt
 ### Benchmarking
 
 ```sh
-# Message throughput
-time (for i in {1..1000}; do echo "msg $i"; done | ssh -p 2222 localhost)
+# Reproducible startup, history, handshake, real-session RSS/idle CPU,
+# interactive fan-out, ordered ingest, and capacity-rejection report
+make perf
 
-# Concurrent connections
-./tests/test_stress.sh
+# Stable redline gate used by extended Linux CI
+make perf-smoke
 
-# Startup time with large log
-dd if=/dev/zero of=messages.log bs=1M count=10
-time ./tnt
+# Reference concurrency workload
+make perf-full
 ```
+
+Do not use the username prompt as evidence that an interactive client joined
+the room, and do not use a sparse file made from zero bytes as a valid history
+fixture. The benchmark's measurement definitions, target budgets, JSON schema,
+and remaining coverage gaps are documented in `docs/PERFORMANCE.md`.
 
 ---
 

@@ -178,9 +178,9 @@ static int exec_command_stats(client_t *client, bool json) {
 
     pthread_rwlock_rdlock(&g_room->lock);
     online_users = g_room->client_count;
-    message_count = g_room->message_count;
     client_capacity = g_room->client_capacity;
     pthread_rwlock_unlock(&g_room->lock);
+    message_count = room_get_message_count(g_room);
 
     active_connections = ratelimit_get_active_total();
 
@@ -304,8 +304,6 @@ static int parse_dump_count(const char *args, int *count) {
 
 static int exec_command_tail(client_t *client, const char *args) {
     int requested = 20;
-    int total_messages;
-    int start;
     int count;
     message_t *snapshot = NULL;
     char *output;
@@ -317,24 +315,12 @@ static int exec_command_tail(client_t *client, const char *args) {
         return exec_command_usage(client, TNT_EXEC_COMMAND_TAIL);
     }
 
-    pthread_rwlock_rdlock(&g_room->lock);
-    total_messages = g_room->message_count;
-    start = total_messages - requested;
-    if (start < 0) {
-        start = 0;
+    snapshot = calloc((size_t)requested, sizeof(message_t));
+    if (!snapshot) {
+        client_printf(client, "tail: out of memory\n");
+        return TNT_EXIT_ERROR;
     }
-    count = total_messages - start;
-
-    if (count > 0) {
-        snapshot = calloc((size_t)count, sizeof(message_t));
-        if (!snapshot) {
-            pthread_rwlock_unlock(&g_room->lock);
-            client_printf(client, "tail: out of memory\n");
-            return TNT_EXIT_ERROR;
-        }
-        memcpy(snapshot, &g_room->messages[start], (size_t)count * sizeof(message_t));
-    }
-    pthread_rwlock_unlock(&g_room->lock);
+    count = room_copy_recent_messages(g_room, snapshot, requested, NULL);
 
     output_size = (size_t)(count > 0 ? count : 1) *
                   (MAX_USERNAME_LEN + MAX_MESSAGE_LEN + 48);

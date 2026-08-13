@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 
 /* Append `text` to the output buffer with every case-insensitive match of
@@ -100,7 +101,7 @@ static void send_private_message(client_t *client, const char *target_name,
 
     pthread_rwlock_rdlock(&g_room->lock);
     for (int i = 0; i < g_room->client_count; i++) {
-        if (strcmp(g_room->clients[i]->username, target_name) == 0) {
+        if (strcasecmp(g_room->clients[i]->username, target_name) == 0) {
             target = g_room->clients[i];
             client_addref(target);
             found = true;
@@ -430,8 +431,8 @@ void commands_dispatch(client_t *client) {
             if (strcmp(validated_name, old_name) != 0) {
                 for (int i = 0; i < g_room->client_count; i++) {
                     if (g_room->clients[i] == client) continue;
-                    if (strcmp(g_room->clients[i]->username,
-                               validated_name) == 0) {
+                    if (strcasecmp(g_room->clients[i]->username,
+                                   validated_name) == 0) {
                         taken = true;
                         break;
                     }

@@ -8,10 +8,18 @@ typedef struct {
     time_t timestamp;
     char username[MAX_USERNAME_LEN];
     char content[MAX_MESSAGE_LEN];
+    /* Cached server-local display fields.  A room message is formatted once
+     * when inserted instead of making every connected TUI contend on the
+     * platform timezone lock for every repaint. */
+    char display_time[6];            /* HH:MM */
+    char display_date[11];           /* YYYY-MM-DD */
 } message_t;
 
 /* Initialize message subsystem */
 void message_init(void);
+
+/* Populate the cached local display fields above. */
+void message_prepare_display(message_t *msg);
 
 /* Load messages from log file */
 int message_load(message_t **messages, int max_messages);

@@ -35,7 +35,17 @@ MANDIR ?= $(PREFIX)/share/man
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test module-runtime-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test info
+PERF_STARTUP_SAMPLES ?= 21
+PERF_HANDSHAKE_SAMPLES ?= 11
+PERF_FANOUT_SAMPLES ?= 11
+PERF_CLIENTS ?= 8
+PERF_IDLE_SECONDS ?= 2
+PERF_MESSAGES ?= 100
+PERF_HISTORY_RECORDS ?= 100000
+PERF_ENFORCE ?= none
+PERF_OUTPUT ?=
+
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full info
 
 all: $(TARGETS)
 
@@ -141,6 +151,7 @@ script-test: all
 	@cd tests && ./test_message_log_tool.sh
 	@cd tests && ./test_source_archive.sh
 	@cd tests && ./test_release_artifact_gate.sh
+	@cd tests && ./test_perf_benchmark.sh
 
 integration-test: all
 	@echo "Running integration tests..."
@@ -151,11 +162,16 @@ integration-test: all
 	@cd tests && PORT=$$(($${PORT:-2222} + 4)) ./test_mute_joins_view.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 5)) ./test_empty_view.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 6)) ./test_module_runtime.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 7)) ./test_graceful_shutdown.sh
 	@cd tests && ./test_tntctl_cli.sh
 
 module-runtime-test: all
 	@echo "Running module runtime tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_module_runtime.sh
+
+graceful-shutdown-test: all
+	@echo "Running graceful shutdown tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_graceful_shutdown.sh
 
 anonymous-access-test: all
 	@echo "Running anonymous access tests..."
@@ -184,6 +200,44 @@ slow-client-test: all
 user-lifecycle-test: all
 	@echo "Running user lifecycle tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_user_lifecycle.sh
+
+# Reproducible real-client performance benchmark. Results are JSON and are
+# ignored by git under perf-results/ unless PERF_OUTPUT names another path.
+perf: all
+	@./scripts/perf_benchmark.py \
+		--binary ./tnt \
+		--startup-samples "$(PERF_STARTUP_SAMPLES)" \
+		--handshake-samples "$(PERF_HANDSHAKE_SAMPLES)" \
+		--fanout-samples "$(PERF_FANOUT_SAMPLES)" \
+		--clients "$(PERF_CLIENTS)" \
+		--idle-seconds "$(PERF_IDLE_SECONDS)" \
+		--messages "$(PERF_MESSAGES)" \
+		--history-records "$(PERF_HISTORY_RECORDS)" $(if $(strip $(PERF_OUTPUT)),--output "$(PERF_OUTPUT)",) \
+		--enforce "$(PERF_ENFORCE)"
+
+# Short CI workload; 21 startup samples keep nearest-rank p95 from collapsing
+# to a single worst sample while the non-gating scenarios remain compact.
+perf-smoke: PERF_STARTUP_SAMPLES = 21
+perf-smoke: PERF_HANDSHAKE_SAMPLES = 11
+perf-smoke: PERF_FANOUT_SAMPLES = 5
+perf-smoke: PERF_CLIENTS = 2
+perf-smoke: PERF_IDLE_SECONDS = 1
+perf-smoke: PERF_MESSAGES = 20
+perf-smoke: PERF_HISTORY_RECORDS = 1000
+perf-smoke: PERF_ENFORCE = stable
+perf-smoke: perf
+
+# Enforce the low-variance startup, idle RSS, and binary-size gates.
+perf-check: PERF_ENFORCE = stable
+perf-check: perf
+
+# Exercise the issue #66 target concurrency. Longer 30-minute durability
+# remains the responsibility of make soak-test with an explicit duration.
+perf-full: PERF_CLIENTS = 64
+perf-full: PERF_IDLE_SECONDS = 10
+perf-full: PERF_MESSAGES = 1000
+perf-full: PERF_ENFORCE = all
+perf-full: perf
 
 ci-test:
 	@$(MAKE) test PORT=$(CI_TEST_PORT)

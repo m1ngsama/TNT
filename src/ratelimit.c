@@ -8,10 +8,10 @@
 #include <string.h>
 #include <time.h>
 
-#define MAX_TRACKED_IPS 256
 #define RATE_LIMIT_WINDOW 60   /* seconds */
 #define MAX_AUTH_FAILURES 5    /* auth failures before block */
 #define BLOCK_DURATION 300     /* seconds to block after too many failures */
+#define MIN_RATE_LIMIT_RESERVE 256 /* Inactive/security ledgers beyond sessions */
 
 typedef struct {
     char ip[INET6_ADDRSTRLEN];
@@ -23,7 +23,8 @@ typedef struct {
     time_t block_until;
 } ip_rate_limit_t;
 
-static ip_rate_limit_t g_rate_limits[MAX_TRACKED_IPS];
+static ip_rate_limit_t *g_rate_limits = NULL;
+static int g_rate_limit_capacity = 0;
 static pthread_mutex_t g_rate_limit_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_total_connections = 0;
 static pthread_mutex_t g_conn_count_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -42,19 +43,48 @@ void ratelimit_init(void) {
         tnt_config_env_int(&TNT_CONFIG_MAX_CONN_RATE_PER_IP);
     g_rate_limit_enabled =
         tnt_config_env_int(&TNT_CONFIG_RATE_LIMIT);
+
+    /* Active sessions must never displace each other's per-IP counters.  Keep
+     * a separate bounded reserve for connection-rate and authentication
+     * ledgers, preserving at least the legacy 256-source security horizon. */
+    int target_capacity = g_max_connections + MIN_RATE_LIMIT_RESERVE;
+
+    pthread_mutex_lock(&g_rate_limit_lock);
+    if (g_rate_limit_capacity < target_capacity) {
+        ip_rate_limit_t *grown = realloc(
+            g_rate_limits,
+            (size_t)target_capacity * sizeof(*g_rate_limits));
+        if (grown) {
+            memset(grown + g_rate_limit_capacity, 0,
+                   (size_t)(target_capacity - g_rate_limit_capacity) *
+                       sizeof(*g_rate_limits));
+            g_rate_limits = grown;
+            g_rate_limit_capacity = target_capacity;
+        } else {
+            fprintf(stderr,
+                    "Warning: could not grow rate-limit table to %d entries\n",
+                    target_capacity);
+        }
+    }
+    pthread_mutex_unlock(&g_rate_limit_lock);
 }
 
 /* Caller MUST hold g_rate_limit_lock. */
 static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
+    if (!ip || ip[0] == '\0' || !g_rate_limits ||
+        g_rate_limit_capacity <= 0) {
+        return NULL;
+    }
+
     /* Look for existing entry */
-    for (int i = 0; i < MAX_TRACKED_IPS; i++) {
+    for (int i = 0; i < g_rate_limit_capacity; i++) {
         if (strcmp(g_rate_limits[i].ip, ip) == 0) {
             return &g_rate_limits[i];
         }
     }
 
     /* Find empty slot */
-    for (int i = 0; i < MAX_TRACKED_IPS; i++) {
+    for (int i = 0; i < g_rate_limit_capacity; i++) {
         if (g_rate_limits[i].ip[0] == '\0') {
             strncpy(g_rate_limits[i].ip, ip, sizeof(g_rate_limits[i].ip) - 1);
             g_rate_limits[i].window_start = time(NULL);
@@ -67,11 +97,16 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
         }
     }
 
-    /* Reuse the oldest inactive entry first so active IP accounting stays intact. */
+    /* Reuse the oldest inactive, unblocked entry first.  An unexpired block
+     * is security state, not disposable cache data: source churn must not
+     * turn a five-minute ban into an immediate retry. */
     int oldest_idx = -1;
     time_t oldest_time = 0;
-    for (int i = 0; i < MAX_TRACKED_IPS; i++) {
-        if (g_rate_limits[i].active_connections != 0) {
+    time_t now = time(NULL);
+    for (int i = 0; i < g_rate_limit_capacity; i++) {
+        if (g_rate_limits[i].active_connections != 0 ||
+            (g_rate_limits[i].is_blocked &&
+             now < g_rate_limits[i].block_until)) {
             continue;
         }
         if (oldest_idx < 0 || g_rate_limits[i].window_start < oldest_time) {
@@ -81,20 +116,10 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
     }
 
     if (oldest_idx < 0) {
-        /* All slots have active connections — evicting will corrupt their
-         * concurrency accounting.  Pick the oldest entry but warn. */
-        oldest_idx = 0;
-        oldest_time = g_rate_limits[0].window_start;
-        for (int i = 1; i < MAX_TRACKED_IPS; i++) {
-            if (g_rate_limits[i].window_start < oldest_time) {
-                oldest_time = g_rate_limits[i].window_start;
-                oldest_idx = i;
-            }
-        }
-        fprintf(stderr, "Warning: rate-limit table full, evicting active IP %s "
-                "(%d active connections lost)\n",
-                g_rate_limits[oldest_idx].ip,
-                g_rate_limits[oldest_idx].active_connections);
+        /* Never evict active accounting or a live block.  Exhaustion under a
+         * distributed attack fails closed instead of silently forgiving a
+         * source that is still inside its block interval. */
+        return NULL;
     }
 
     /* Reset and reuse */
@@ -114,6 +139,12 @@ bool ratelimit_check_ip(const char *ip) {
 
     pthread_mutex_lock(&g_rate_limit_lock);
     ip_rate_limit_t *entry = get_rate_limit_entry(ip);
+    if (!entry) {
+        pthread_mutex_unlock(&g_rate_limit_lock);
+        fprintf(stderr, "Rate-limit table unavailable for %s\n",
+                ip ? ip : "unknown");
+        return false;
+    }
 
     if (entry->active_connections >= g_max_conn_per_ip) {
         pthread_mutex_unlock(&g_rate_limit_lock);
@@ -162,6 +193,10 @@ void ratelimit_record_auth_failure(const char *ip) {
 
     pthread_mutex_lock(&g_rate_limit_lock);
     ip_rate_limit_t *entry = get_rate_limit_entry(ip);
+    if (!entry) {
+        pthread_mutex_unlock(&g_rate_limit_lock);
+        return;
+    }
 
     entry->auth_failure_count++;
     if (entry->auth_failure_count >= MAX_AUTH_FAILURES) {
@@ -173,15 +208,33 @@ void ratelimit_record_auth_failure(const char *ip) {
     pthread_mutex_unlock(&g_rate_limit_lock);
 }
 
+void ratelimit_record_auth_success(const char *ip) {
+    if (!ip || ip[0] == '\0') return;
+
+    pthread_mutex_lock(&g_rate_limit_lock);
+    ip_rate_limit_t *entry = get_rate_limit_entry(ip);
+    if (entry) {
+        entry->auth_failure_count = 0;
+    }
+    pthread_mutex_unlock(&g_rate_limit_lock);
+}
+
 void ratelimit_release_ip(const char *ip) {
     if (!ip || ip[0] == '\0') {
         return;
     }
 
     pthread_mutex_lock(&g_rate_limit_lock);
-    ip_rate_limit_t *entry = get_rate_limit_entry(ip);
-    if (entry->active_connections > 0) {
-        entry->active_connections--;
+    /* Release must never manufacture a new ledger.  Apart from polluting the
+     * bounded table, doing so could recycle unrelated inactive state after a
+     * caller passes an address whose admission was never recorded. */
+    for (int i = 0; i < g_rate_limit_capacity; i++) {
+        if (strcmp(g_rate_limits[i].ip, ip) == 0) {
+            if (g_rate_limits[i].active_connections > 0) {
+                g_rate_limits[i].active_connections--;
+            }
+            break;
+        }
     }
     pthread_mutex_unlock(&g_rate_limit_lock);
 }
@@ -214,3 +267,39 @@ int ratelimit_get_active_total(void) {
     pthread_mutex_unlock(&g_conn_count_lock);
     return count;
 }
+
+#ifdef TNT_TESTING
+int ratelimit_test_capacity(void) {
+    int capacity;
+    pthread_mutex_lock(&g_rate_limit_lock);
+    capacity = g_rate_limit_capacity;
+    pthread_mutex_unlock(&g_rate_limit_lock);
+    return capacity;
+}
+
+int ratelimit_test_active_for_ip(const char *ip) {
+    int active = -1;
+    pthread_mutex_lock(&g_rate_limit_lock);
+    for (int i = 0; i < g_rate_limit_capacity; i++) {
+        if (ip && strcmp(g_rate_limits[i].ip, ip) == 0) {
+            active = g_rate_limits[i].active_connections;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_rate_limit_lock);
+    return active;
+}
+
+int ratelimit_test_auth_failures_for_ip(const char *ip) {
+    int failures = -1;
+    pthread_mutex_lock(&g_rate_limit_lock);
+    for (int i = 0; g_rate_limits && i < g_rate_limit_capacity; i++) {
+        if (ip && strcmp(g_rate_limits[i].ip, ip) == 0) {
+            failures = g_rate_limits[i].auth_failure_count;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_rate_limit_lock);
+    return failures;
+}
+#endif

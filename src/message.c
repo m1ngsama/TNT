@@ -65,6 +65,26 @@ void message_init(void) {
     /* Nothing to initialize for now */
 }
 
+void message_prepare_display(message_t *msg) {
+    struct tm tm_info;
+
+    if (!msg) return;
+    if (localtime_r(&msg->timestamp, &tm_info) == NULL) {
+        snprintf(msg->display_time, sizeof(msg->display_time), "--:--");
+        snprintf(msg->display_date, sizeof(msg->display_date), "----------");
+        return;
+    }
+
+    if (strftime(msg->display_time, sizeof(msg->display_time),
+                 "%H:%M", &tm_info) == 0) {
+        snprintf(msg->display_time, sizeof(msg->display_time), "--:--");
+    }
+    if (strftime(msg->display_date, sizeof(msg->display_date),
+                 "%Y-%m-%d", &tm_info) == 0) {
+        snprintf(msg->display_date, sizeof(msg->display_date), "----------");
+    }
+}
+
 /* Load messages from log file - Optimized for large files.
  * Holds g_message_file_lock for the duration of the read so concurrent
  * message_save() calls from chat threads cannot interleave a partial line. */
@@ -165,7 +185,7 @@ read_messages:;
             continue;
         }
 
-        message_t parsed;
+        message_t parsed = {0};
         if (!message_log_parse_record(line, &parsed, now)) {
             continue;
         }
@@ -273,7 +293,7 @@ int message_search(const char *query, message_t **results, int max_results) {
             continue;
         }
 
-        message_t m;
+        message_t m = {0};
         if (!message_log_parse_record(line, &m, now)) continue;
         if (strcasestr(m.username, query) == NULL &&
             strcasestr(m.content, query) == NULL) continue;
@@ -350,7 +370,7 @@ int message_dump_text(char **output, size_t *output_len, int max_records) {
             continue;
         }
 
-        message_t parsed;
+        message_t parsed = {0};
         if (!message_log_parse_record(line, &parsed, now)) {
             continue;
         }

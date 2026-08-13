@@ -43,9 +43,9 @@ EOF
 
 CHECK_OUTPUT=$("$BIN" --log-check "$CLEAN_LOG" 2>&1)
 CHECK_STATUS=$?
-printf '%s\n' "$CHECK_OUTPUT" | grep -q '^valid_records 2$' &&
-printf '%s\n' "$CHECK_OUTPUT" | grep -q '^invalid_records 0$'
-if [ "$CHECK_STATUS" -eq 0 ] && [ $? -eq 0 ]; then
+if [ "$CHECK_STATUS" -eq 0 ] &&
+   printf '%s\n' "$CHECK_OUTPUT" | grep -q '^valid_records 2$' &&
+   printf '%s\n' "$CHECK_OUTPUT" | grep -q '^invalid_records 0$'; then
     pass "clean log check exits 0"
 else
     fail "clean log check"
@@ -63,11 +63,11 @@ printf '%s|partial|unterminated' "$TS" >> "$BAD_LOG"
 
 BAD_CHECK_OUTPUT=$("$BIN" --log-check "$BAD_LOG" 2>&1)
 BAD_CHECK_STATUS=$?
-printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^records_seen 4$' &&
-printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^valid_records 2$' &&
-printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^invalid_records 2$' &&
-printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^first_invalid_line 2$'
-if [ "$BAD_CHECK_STATUS" -eq 1 ] && [ $? -eq 0 ]; then
+if [ "$BAD_CHECK_STATUS" -eq 1 ] &&
+   printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^records_seen 4$' &&
+   printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^valid_records 2$' &&
+   printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^invalid_records 2$' &&
+   printf '%s\n' "$BAD_CHECK_OUTPUT" | grep -q '^first_invalid_line 2$'; then
     pass "bad log check reports skipped records"
 else
     fail "bad log check"

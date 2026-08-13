@@ -1,27 +1,13 @@
 #include "history_view.h"
 
 static void message_date_key(const message_t *msg, char out[11]) {
+    if (msg->display_date[0] != '\0') {
+        memcpy(out, msg->display_date, 11);
+        return;
+    }
     struct tm tmi;
     localtime_r(&msg->timestamp, &tmi);
     strftime(out, 11, "%Y-%m-%d", &tmi);
-}
-
-static int rendered_rows_for_slice(const message_t *messages, int start,
-                                   int end) {
-    int rows = 0;
-    char last_date[11] = "";
-
-    for (int i = start; i < end; i++) {
-        char this_date[11];
-        message_date_key(&messages[i], this_date);
-        if (strcmp(this_date, last_date) != 0) {
-            rows++;
-            memcpy(last_date, this_date, sizeof(last_date));
-        }
-        rows++;
-    }
-
-    return rows;
 }
 
 int history_view_height(int terminal_height) {
@@ -68,13 +54,26 @@ void history_view_scroll_by(int *scroll_pos, bool *follow_tail,
 int history_view_latest_start_for_height(const message_t *messages, int count,
                                          int height) {
     int start = count;
+    int rows = 0;
+    char next_date[11] = "";
 
     for (int candidate = count - 1; candidate >= 0; candidate--) {
-        int rows = rendered_rows_for_slice(messages, candidate, count);
+        char this_date[11];
+        message_date_key(&messages[candidate], this_date);
+
+        /* Prepending a message costs one row.  It also starts a date run (and
+         * therefore needs a divider) when it differs from the next message.
+         * Tracking the running row count makes this newest-slice calculation
+         * O(n), rather than rescanning the whole suffix for every candidate. */
+        rows++;
+        if (next_date[0] == '\0' || strcmp(this_date, next_date) != 0) {
+            rows++;
+        }
         if (rows > height) {
             break;
         }
         start = candidate;
+        memcpy(next_date, this_date, sizeof(next_date));
     }
 
     if (start == count && count > 0) {

@@ -127,6 +127,18 @@ jobs:
           exit 1
         fi
 
+    - name: Run stable performance budget gate
+      run: make perf-smoke PERF_OUTPUT="$RUNNER_TEMP/perf-report.json"
+
+    - name: Preserve performance report
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: tnt-performance-${{ runner.os }}-${{ runner.arch }}
+        path: ${{ runner.temp }}/perf-report.json
+        if-no-files-found: error
+        retention-days: 30
+
   portable-container-builds:
     name: Portable build (${{ matrix.name }})
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'

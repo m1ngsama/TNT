@@ -7,18 +7,90 @@
 #include "message_log_tool.h"
 #include "module_runtime.h"
 #include "ssh_server.h"
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 
-/* Signal handler: must only call async-signal-safe functions.
- * pthread, malloc, printf, exit() are NOT safe here.
- * Just write a message and call _exit() — OS reclaims all resources. */
+static volatile sig_atomic_t g_shutdown_requested = 0;
+static volatile sig_atomic_t g_shutdown_write_fd = -1;
+
+/* The handler only updates sig_atomic_t state and writes to a non-blocking
+ * self-pipe.  Both operations are async-signal-safe; teardown happens back in
+ * normal control flow after ssh_server_start() has reaped all session work. */
 static void signal_handler(int sig) {
-    (void)sig;
-    static const char msg[] = "\nShutting down...\n";
-    ssize_t ignored = write(STDERR_FILENO, msg, sizeof(msg) - 1);
-    (void)ignored;
-    _exit(0);
+    int saved_errno = errno;
+    unsigned char byte = (unsigned char)sig;
+    int write_fd;
+
+    g_shutdown_requested = sig;
+    write_fd = (int)g_shutdown_write_fd;
+    if (write_fd >= 0) {
+        ssize_t ignored = write(write_fd, &byte, sizeof(byte));
+        (void)ignored;
+    }
+    errno = saved_errno;
+}
+
+static int configure_signal_pipe_fd(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    int fd_flags;
+
+    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        return -1;
+    }
+
+    fd_flags = fcntl(fd, F_GETFD, 0);
+    if (fd_flags < 0 || fcntl(fd, F_SETFD, fd_flags | FD_CLOEXEC) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+static int setup_signal_handlers(int shutdown_pipe[2]) {
+    struct sigaction shutdown_action;
+    struct sigaction ignore_action;
+
+    if (pipe(shutdown_pipe) < 0 ||
+        configure_signal_pipe_fd(shutdown_pipe[0]) < 0 ||
+        configure_signal_pipe_fd(shutdown_pipe[1]) < 0) {
+        if (shutdown_pipe[0] >= 0) close(shutdown_pipe[0]);
+        if (shutdown_pipe[1] >= 0) close(shutdown_pipe[1]);
+        shutdown_pipe[0] = -1;
+        shutdown_pipe[1] = -1;
+        return -1;
+    }
+
+    memset(&shutdown_action, 0, sizeof(shutdown_action));
+    shutdown_action.sa_handler = signal_handler;
+    sigemptyset(&shutdown_action.sa_mask);
+    sigaddset(&shutdown_action.sa_mask, SIGINT);
+    sigaddset(&shutdown_action.sa_mask, SIGTERM);
+
+    memset(&ignore_action, 0, sizeof(ignore_action));
+    ignore_action.sa_handler = SIG_IGN;
+    sigemptyset(&ignore_action.sa_mask);
+
+    g_shutdown_write_fd = shutdown_pipe[1];
+    if (sigaction(SIGINT, &shutdown_action, NULL) < 0 ||
+        sigaction(SIGTERM, &shutdown_action, NULL) < 0 ||
+        sigaction(SIGPIPE, &ignore_action, NULL) < 0) {
+        g_shutdown_write_fd = -1;
+        close(shutdown_pipe[0]);
+        close(shutdown_pipe[1]);
+        shutdown_pipe[0] = -1;
+        shutdown_pipe[1] = -1;
+        return -1;
+    }
+    return 0;
+}
+
+static void close_signal_pipe(int shutdown_pipe[2]) {
+    g_shutdown_write_fd = -1;
+    if (shutdown_pipe[0] >= 0) close(shutdown_pipe[0]);
+    if (shutdown_pipe[1] >= 0) close(shutdown_pipe[1]);
+    shutdown_pipe[0] = -1;
+    shutdown_pipe[1] = -1;
 }
 
 static bool is_config_token(const char *value) {
@@ -74,6 +146,7 @@ int main(int argc, char **argv) {
     ui_lang_t lang = i18n_default_ui_lang();
     const char *log_check_path = NULL;
     const char *log_recover_path = NULL;
+    int shutdown_pipe[2] = {-1, -1};
 
     /* Parse command line arguments */
     for (int i = 1; i < argc; i++) {
@@ -227,20 +300,24 @@ int main(int argc, char **argv) {
         return message_log_tool_recover(log_recover_path);
     }
 
-    /* Setup signal handlers */
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
-    signal(SIGPIPE, SIG_IGN);
+    /* Setup the self-pipe before installing handlers so a termination signal
+     * can always wake the blocking server loop. */
+    if (setup_signal_handlers(shutdown_pipe) < 0) {
+        perror("Failed to initialize signal handling");
+        return TNT_EXIT_ERROR;
+    }
 
     /* Initialize subsystems */
     if (tnt_ensure_state_dir() < 0) {
         fprintf(stderr, "Failed to create state directory: %s\n", tnt_state_dir());
+        close_signal_pipe(shutdown_pipe);
         return TNT_EXIT_ERROR;
     }
 
     message_init();
     if (tnt_module_runtime_init() < 0) {
         fprintf(stderr, "Failed to initialize module runtime\n");
+        close_signal_pipe(shutdown_pipe);
         return TNT_EXIT_ERROR;
     }
 
@@ -249,6 +326,7 @@ int main(int argc, char **argv) {
     if (!g_room) {
         fprintf(stderr, "Failed to create chat room\n");
         tnt_module_runtime_shutdown();
+        close_signal_pipe(shutdown_pipe);
         return TNT_EXIT_ERROR;
     }
 
@@ -257,13 +335,20 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to initialize server\n");
         tnt_module_runtime_shutdown();
         room_destroy(g_room);
+        close_signal_pipe(shutdown_pipe);
         return TNT_EXIT_ERROR;
     }
 
     /* Start server (blocking) */
-    int ret = ssh_server_start(0);
+    int ret = ssh_server_start(shutdown_pipe[0], &g_shutdown_requested);
+
+    if (g_shutdown_requested) {
+        fprintf(stderr, "\nShutting down...\n");
+    }
 
     tnt_module_runtime_shutdown();
     room_destroy(g_room);
+    g_room = NULL;
+    close_signal_pipe(shutdown_pipe);
     return ret;
 }

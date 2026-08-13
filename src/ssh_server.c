@@ -13,6 +13,7 @@
 #include <libssh/callbacks.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -22,6 +23,7 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <poll.h>
 
 #define TNT_SESSION_THREAD_STACK_SIZE ((size_t)1024 * 1024)
 
@@ -29,10 +31,108 @@
 static ssh_bind g_sshbind = NULL;
 static int g_listen_port = TNT_DEFAULT_PORT;
 
+typedef struct session_worker {
+    accepted_session_t *accepted;
+    int socket_fd;
+    struct session_worker *next;
+} session_worker_t;
+
+/* Detached session threads reclaim their pthread resources automatically.
+ * This registry makes their application-level lifetime joinable: shutdown
+ * interrupts every accepted socket and waits on the condition until the last
+ * worker has completed all client/ratelimit cleanup. */
+static pthread_mutex_t g_session_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_session_cond = PTHREAD_COND_INITIALIZER;
+static session_worker_t *g_session_workers = NULL;
+static size_t g_session_worker_count = 0;
+
 static time_t g_server_start_time = 0;
 
 time_t ssh_server_start_time(void) {
     return g_server_start_time;
+}
+
+static void session_worker_register(session_worker_t *worker) {
+    pthread_mutex_lock(&g_session_lock);
+    worker->next = g_session_workers;
+    g_session_workers = worker;
+    g_session_worker_count++;
+    pthread_mutex_unlock(&g_session_lock);
+}
+
+static void session_worker_remove_locked(session_worker_t *worker) {
+    session_worker_t **cursor;
+
+    cursor = &g_session_workers;
+    while (*cursor && *cursor != worker) {
+        cursor = &(*cursor)->next;
+    }
+    if (*cursor == worker) {
+        *cursor = worker->next;
+        if (g_session_worker_count > 0) {
+            g_session_worker_count--;
+        }
+    }
+    if (g_session_worker_count == 0) {
+        pthread_cond_broadcast(&g_session_cond);
+    }
+}
+
+static void session_worker_socket_closing(void *userdata) {
+    session_worker_t *worker = userdata;
+
+    if (!worker) return;
+    pthread_mutex_lock(&g_session_lock);
+    worker->socket_fd = -1;
+    pthread_mutex_unlock(&g_session_lock);
+}
+
+static void *session_worker_run(void *arg) {
+    session_worker_t *worker = arg;
+
+    bootstrap_run(worker->accepted);
+    pthread_mutex_lock(&g_session_lock);
+    session_worker_remove_locked(worker);
+    pthread_mutex_unlock(&g_session_lock);
+    free(worker);
+    return NULL;
+}
+
+static void session_workers_stop_and_wait(void) {
+    session_worker_t *worker;
+
+    pthread_mutex_lock(&g_session_lock);
+    for (worker = g_session_workers; worker; worker = worker->next) {
+        if (worker->socket_fd >= 0) {
+            /* Do not call libssh from a foreign thread.  shutdown(2) wakes
+             * bootstrap and interactive waits; the owning worker then runs
+             * the normal libssh/client cleanup path. */
+            (void)shutdown(worker->socket_fd, SHUT_RDWR);
+        }
+    }
+    while (g_session_worker_count > 0) {
+        pthread_cond_wait(&g_session_cond, &g_session_lock);
+    }
+    pthread_mutex_unlock(&g_session_lock);
+}
+
+static bool shutdown_is_requested(
+    const volatile sig_atomic_t *shutdown_requested) {
+    return shutdown_requested && *shutdown_requested != 0;
+}
+
+static int set_fd_nonblocking(int fd, bool nonblocking) {
+    int flags;
+
+    if (fd < 0) return -1;
+    flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) return -1;
+    if (nonblocking) {
+        flags |= O_NONBLOCK;
+    } else {
+        flags &= ~O_NONBLOCK;
+    }
+    return fcntl(fd, F_SETFL, flags);
 }
 
 /* Configuration from environment variables.  Rate-limiting moved to ratelimit.{c,h},
@@ -173,6 +273,7 @@ int ssh_server_init(int port) {
     /* Set up host key */
     if (setup_host_key(g_sshbind) < 0) {
         ssh_bind_free(g_sshbind);
+        g_sshbind = NULL;
         return -1;
     }
 
@@ -190,9 +291,22 @@ int ssh_server_init(int port) {
     int verbosity = env_int("TNT_SSH_LOG_LEVEL", SSH_LOG_WARNING, 0, 4);
     ssh_bind_options_set(g_sshbind, SSH_BIND_OPTIONS_LOG_VERBOSITY, &verbosity);
 
+    /* Keep the libssh bind in non-blocking mode.  We additionally enforce
+     * O_NONBLOCK on its listener after listen(), because older libssh
+     * releases only record this setting without updating an existing fd. */
+    ssh_bind_set_blocking(g_sshbind, 0);
+
     if (ssh_bind_listen(g_sshbind) < 0) {
         fprintf(stderr, "Failed to bind to port %d: %s\n", port, ssh_get_error(g_sshbind));
         ssh_bind_free(g_sshbind);
+        g_sshbind = NULL;
+        return -1;
+    }
+    if (set_fd_nonblocking((int)ssh_bind_get_fd(g_sshbind), true) < 0) {
+        fprintf(stderr, "Failed to make SSH listener non-blocking: %s\n",
+                strerror(errno));
+        ssh_bind_free(g_sshbind);
+        g_sshbind = NULL;
         return -1;
     }
 
@@ -200,10 +314,23 @@ int ssh_server_init(int port) {
 }
 
 /* Start SSH server (blocking) */
-int ssh_server_start(int unused) {
-    (void)unused;
+int ssh_server_start(int shutdown_fd,
+                     const volatile sig_atomic_t *shutdown_requested) {
     const char *public_host = getenv("TNT_PUBLIC_HOST");
     pthread_attr_t attr;
+    int result = 0;
+    int listen_fd;
+
+    if (!g_sshbind || shutdown_fd < 0) {
+        return -1;
+    }
+    listen_fd = (int)ssh_bind_get_fd(g_sshbind);
+    if (listen_fd < 0) {
+        ssh_bind_free(g_sshbind);
+        g_sshbind = NULL;
+        return -1;
+    }
+
     if (!public_host || public_host[0] == '\0') {
         public_host = "localhost";
     }
@@ -212,7 +339,11 @@ int ssh_server_start(int unused) {
     printf("Connect with: ssh -p %d %s\n", g_listen_port, public_host);
     fflush(stdout);
 
-    pthread_attr_init(&attr);
+    if (pthread_attr_init(&attr) != 0) {
+        ssh_bind_free(g_sshbind);
+        g_sshbind = NULL;
+        return -1;
+    }
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     {
         size_t stack_size = TNT_SESSION_THREAD_STACK_SIZE;
@@ -226,11 +357,43 @@ int ssh_server_start(int unused) {
         }
     }
 
-    while (1) {
-        ssh_session session = ssh_new();
+    while (!shutdown_is_requested(shutdown_requested)) {
+        struct pollfd wait_fds[2] = {
+            {.fd = listen_fd, .events = POLLIN, .revents = 0},
+            {.fd = shutdown_fd, .events = POLLIN, .revents = 0},
+        };
+        int poll_rc = poll(wait_fds, 2, -1);
+        ssh_session session;
         char client_ip[INET6_ADDRSTRLEN];
         accepted_session_t *accepted;
+        session_worker_t *worker;
         pthread_t thread;
+        int thread_rc;
+
+        if (poll_rc < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            fprintf(stderr, "Error waiting for connections: %s\n",
+                    strerror(errno));
+            result = -1;
+            break;
+        }
+
+        if (shutdown_is_requested(shutdown_requested) ||
+            (wait_fds[1].revents & (POLLIN | POLLERR | POLLHUP | POLLNVAL))) {
+            break;
+        }
+        if (wait_fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            fprintf(stderr, "SSH listening socket failed\n");
+            result = -1;
+            break;
+        }
+        if (!(wait_fds[0].revents & POLLIN)) {
+            continue;
+        }
+
+        session = ssh_new();
 
         if (!session) {
             fprintf(stderr, "Failed to create SSH session\n");
@@ -239,9 +402,49 @@ int ssh_server_start(int unused) {
 
         /* Accept connection */
         if (ssh_bind_accept(g_sshbind, session) != SSH_OK) {
-            fprintf(stderr, "Error accepting connection: %s\n", ssh_get_error(g_sshbind));
+            int accept_errno = errno;
+
+            if (!shutdown_is_requested(shutdown_requested) &&
+                accept_errno != EAGAIN && accept_errno != EWOULDBLOCK &&
+                accept_errno != EINTR) {
+                fprintf(stderr, "Error accepting connection: %s\n",
+                        ssh_get_error(g_sshbind));
+            }
             ssh_free(session);
             continue;
+        }
+
+        /* A signal can arrive after poll() reports the listener but before
+         * accept completes.  Reject that socket without starting a worker. */
+        if (shutdown_is_requested(shutdown_requested)) {
+            ssh_disconnect(session);
+            ssh_free(session);
+            break;
+        }
+
+        /* Some BSDs inherit O_NONBLOCK across accept().  Session workers use
+         * libssh's blocking APIs, so restore the accepted connection without
+         * changing the non-blocking listener. */
+        if (set_fd_nonblocking(ssh_get_fd(session), false) < 0) {
+            fprintf(stderr, "Failed to configure accepted SSH socket: %s\n",
+                    strerror(errno));
+            ssh_disconnect(session);
+            ssh_free(session);
+            continue;
+        }
+
+        /* Interactive redraws often follow a small SSH control/reply packet.
+         * Leaving Nagle enabled can hold the redraw behind a delayed ACK for
+         * roughly 40 ms even though the room wakeup was immediate. */
+        {
+            int enabled = 1;
+            int session_fd = ssh_get_fd(session);
+            if (session_fd >= 0 &&
+                setsockopt(session_fd, IPPROTO_TCP, TCP_NODELAY,
+                           &enabled, sizeof(enabled)) < 0) {
+                fprintf(stderr, "Warning: could not enable TCP_NODELAY: %s\n",
+                        strerror(errno));
+            }
         }
 
         bootstrap_peer_ip(session, client_ip, sizeof(client_ip));
@@ -262,7 +465,10 @@ int ssh_server_start(int unused) {
         }
 
         accepted = calloc(1, sizeof(*accepted));
-        if (!accepted) {
+        worker = calloc(1, sizeof(*worker));
+        if (!accepted || !worker) {
+            free(accepted);
+            free(worker);
             ratelimit_release_ip(client_ip);
             ratelimit_decrement_total();
             ssh_disconnect(session);
@@ -274,8 +480,30 @@ int ssh_server_start(int unused) {
         snprintf(accepted->client_ip, sizeof(accepted->client_ip), "%s",
                  client_ip);
 
-        if (pthread_create(&thread, &attr, bootstrap_run, accepted) != 0) {
-            fprintf(stderr, "Thread creation failed: %s\n", strerror(errno));
+        if (shutdown_is_requested(shutdown_requested)) {
+            free(accepted);
+            free(worker);
+            ratelimit_release_ip(client_ip);
+            ratelimit_decrement_total();
+            ssh_disconnect(session);
+            ssh_free(session);
+            break;
+        }
+
+        worker->accepted = accepted;
+        worker->socket_fd = ssh_get_fd(session);
+        accepted->socket_closing = session_worker_socket_closing;
+        accepted->socket_closing_userdata = worker;
+        session_worker_register(worker);
+
+        thread_rc = pthread_create(&thread, &attr, session_worker_run, worker);
+        if (thread_rc != 0) {
+            fprintf(stderr, "Thread creation failed: %s\n",
+                    strerror(thread_rc));
+            pthread_mutex_lock(&g_session_lock);
+            session_worker_remove_locked(worker);
+            pthread_mutex_unlock(&g_session_lock);
+            free(worker);
             free(accepted);
             ratelimit_release_ip(client_ip);
             ratelimit_decrement_total();
@@ -284,5 +512,14 @@ int ssh_server_start(int unused) {
             continue;
         }
     }
-    /* Unreachable — the while(1) loop only exits via signal/_exit(). */
+
+    pthread_attr_destroy(&attr);
+
+    /* Closing the bind first guarantees no further accepts.  Existing
+     * ssh_session objects own their connected sockets independently. */
+    ssh_bind_free(g_sshbind);
+    g_sshbind = NULL;
+
+    session_workers_stop_and_wait();
+    return result;
 }

@@ -52,7 +52,7 @@ test_module_protocol: test_module_protocol.c $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_module_runtime: test_module_runtime.c $(MODULE_RUNTIME_SRC) $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -DTNT_TESTING -o $@ $^ $(LDFLAGS)
 
 test_message: test_message.c $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
@@ -88,7 +88,7 @@ test_tntctl_text: test_tntctl_text.c $(TNTCTL_TEXT_SRC) $(EXEC_CATALOG_SRC) $(CO
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_ratelimit: test_ratelimit.c $(RATELIMIT_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -DTNT_TESTING -o $@ $^ $(LDFLAGS)
 
 test_config_defaults: test_config_defaults.c $(CONFIG_DEFAULTS_SRC) $(COMMON_SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)

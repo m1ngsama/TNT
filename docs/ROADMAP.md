@@ -119,6 +119,11 @@ Goal: make regressions harder to introduce.
 
 - expand CI coverage across Linux and macOS for build and smoke tests
 - add sanitizer jobs and targeted fuzzing for UTF-8, log parsing, and command parsing
+- ✅ add a reproducible real-client performance benchmark with versioned JSON
+  output, explicit measurement semantics, stable regression gates, and retained
+  CI reports
+- extend the performance benchmark to synchronized connection storms,
+  64-receiver fan-out, storage cache-miss runs, and modules-on/off comparisons
 - ✅ add a configurable soak test for idle sessions, reconnects, and control
   interface availability
 - ✅ add deeper slow-client coverage with a deliberately backpressured SSH
@@ -137,5 +142,7 @@ These are the next changes that should happen before new feature work expands th
    explicit release source archive exists, then run `make package-publish-check`.
 2. Create or move the `vX.Y.Z` tag only when the release commit is final, then
    run `make release-check-strict` before pushing it.
-3. Decide whether admin-only moderation controls belong in 1.0.x or should
-   wait for a later minor release.
+3. Run `make perf-full` on the 1 vCPU / 128 MiB reference host and retain its
+   baseline report; then add connection-storm, 64-receiver, and module scenarios.
+4. Decide whether admin-only moderation controls belong in the next minor
+   release or should wait.

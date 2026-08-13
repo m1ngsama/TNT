@@ -45,10 +45,14 @@ static void format_message_colored(const message_t *msg, char *buffer,
                                    size_t buf_size, int width,
                                    const char *my_username,
                                    const theme_t *theme) {
-    struct tm tm_info;
-    localtime_r(&msg->timestamp, &tm_info);
     char time_str[32];
-    strftime(time_str, sizeof(time_str), "%H:%M", &tm_info);
+    if (msg->display_time[0] != '\0') {
+        snprintf(time_str, sizeof(time_str), "%s", msg->display_time);
+    } else {
+        struct tm tm_info;
+        localtime_r(&msg->timestamp, &tm_info);
+        strftime(time_str, sizeof(time_str), "%H:%M", &tm_info);
+    }
 
     /* Is this message from the local user?  Used to draw a 1-column gutter
      * marker so they can scan their own contributions when scrolling. */
@@ -298,15 +302,13 @@ void tui_render_screen(client_t *client) {
     size_t pos = 0;
     buffer[0] = '\0';
 
-    /* First pass under lock: compute indices and counts */
-    pthread_rwlock_rdlock(&g_room->lock);
-    int online = g_room->client_count;
-    int msg_count = g_room->message_count;
-    pthread_rwlock_unlock(&g_room->lock);
+    /* First pass: compute indices and counts. */
+    int online = room_get_client_count(g_room);
+    int msg_count = room_get_message_count(g_room);
     int raw_msg_count = msg_count;
 
     /* Calculate which messages to show.  The initial slice is capped by
-     * message count; the lock-held copy below tightens "latest" slices so
+     * message count; the snapshot copy below tightens "latest" slices so
      * date dividers cannot push the newest messages off-screen. */
     int msg_height = history_view_height(render_height);
 
@@ -338,15 +340,14 @@ void tui_render_screen(client_t *client) {
         if (visible_messages) {
             int visible_count = 0;
 
-            pthread_rwlock_rdlock(&g_room->lock);
-            online = g_room->client_count;
-            raw_msg_count = g_room->message_count;
-            for (int i = 0; i < g_room->message_count; i++) {
-                if (!system_message_is_join_leave(&g_room->messages[i])) {
-                    visible_messages[visible_count++] = g_room->messages[i];
+            raw_msg_count = room_copy_messages(
+                g_room, 0, visible_messages, MAX_MESSAGES);
+            online = room_get_client_count(g_room);
+            for (int i = 0; i < raw_msg_count; i++) {
+                if (!system_message_is_join_leave(&visible_messages[i])) {
+                    visible_messages[visible_count++] = visible_messages[i];
                 }
             }
-            pthread_rwlock_unlock(&g_room->lock);
 
             msg_count = visible_count;
             latest_scroll_start = history_view_max_scroll(msg_count, msg_height);
@@ -385,32 +386,38 @@ void tui_render_screen(client_t *client) {
             msg_snapshot = calloc(snapshot_capacity, sizeof(message_t));
         }
 
-        /* Second pass under lock: copy messages */
+        /* Second pass: copy a chronological slice from the ring. */
         if (msg_snapshot) {
-            pthread_rwlock_rdlock(&g_room->lock);
-            /* Re-clamp in case msg_count changed */
-            int actual_count = g_room->message_count;
-            int actual_start = start;
-            int actual_end = end;
             if (anchor_latest) {
-                actual_end = actual_count;
-                actual_start = history_view_latest_start_for_height(
-                    g_room->messages, actual_count, msg_height);
+                int actual_count = 0;
+                int recent_count = room_copy_recent_messages(
+                    g_room, msg_snapshot, snapshot_capacity, &actual_count);
+                int local_start = history_view_latest_start_for_height(
+                    msg_snapshot, recent_count, msg_height);
+                snapshot_count = recent_count - local_start;
+                if (local_start > 0 && snapshot_count > 0) {
+                    memmove(msg_snapshot, msg_snapshot + local_start,
+                            (size_t)snapshot_count * sizeof(message_t));
+                }
+                start = actual_count - recent_count + local_start;
+                end = actual_count;
+                msg_count = actual_count;
+                raw_msg_count = actual_count;
             } else {
-                actual_end = (actual_end <= actual_count) ? actual_end : actual_count;
-                actual_start = (actual_start < actual_end) ? actual_start : actual_end;
-            }
-            int actual_snapshot = actual_end - actual_start;
-            if (actual_snapshot > 0 && actual_snapshot <= snapshot_capacity) {
-                memcpy(msg_snapshot, &g_room->messages[actual_start],
-                       actual_snapshot * sizeof(message_t));
+                int actual_count = room_get_message_count(g_room);
+                int actual_start = start;
+                int actual_end = end <= actual_count ? end : actual_count;
+                actual_start = actual_start < actual_end
+                                   ? actual_start
+                                   : actual_end;
+                snapshot_count = room_copy_messages(
+                    g_room, actual_start, msg_snapshot,
+                    actual_end - actual_start);
                 start = actual_start;
-                end = actual_end;
-                snapshot_count = actual_snapshot;
-            } else {
-                snapshot_count = 0;
+                end = actual_start + snapshot_count;
+                msg_count = actual_count;
+                raw_msg_count = actual_count;
             }
-            pthread_rwlock_unlock(&g_room->lock);
         }
     }
 
@@ -583,9 +590,14 @@ void tui_render_screen(client_t *client) {
         char last_date[11] = "";  /* "YYYY-MM-DD" */
         for (int i = 0; i < snapshot_count && rows_written < msg_height; i++) {
             char this_date[11];
-            struct tm tmi;
-            localtime_r(&msg_snapshot[i].timestamp, &tmi);
-            strftime(this_date, sizeof(this_date), "%Y-%m-%d", &tmi);
+            if (msg_snapshot[i].display_date[0] != '\0') {
+                memcpy(this_date, msg_snapshot[i].display_date,
+                       sizeof(this_date));
+            } else {
+                struct tm tmi;
+                localtime_r(&msg_snapshot[i].timestamp, &tmi);
+                strftime(this_date, sizeof(this_date), "%Y-%m-%d", &tmi);
+            }
 
             if (strcmp(this_date, last_date) != 0) {
                 /* Build divider: "── YYYY-MM-DD " then fill the rest with ─ */

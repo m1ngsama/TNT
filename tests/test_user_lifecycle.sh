@@ -77,6 +77,7 @@ fi
 
 cat >"$STATE_DIR/bob.expect" <<EOF
 set timeout 30
+set stty_init "rows 24 columns 80"
 spawn ssh $SSH_OPTS bob@127.0.0.1
 sleep 1
 send -- "bob\r"
@@ -150,6 +151,7 @@ fi
 
 cat >"$STATE_DIR/alice.expect" <<EOF
 set timeout 30
+set stty_init "rows 24 columns 80"
 spawn ssh $SSH_OPTS alice@127.0.0.1
 sleep 1
 send -- "alice\r"
@@ -303,9 +305,8 @@ else
 fi
 
 TAIL_OUTPUT=$(ssh $SSH_EXEC_OPTS localhost "tail -n 10" 2>/dev/null || true)
-printf '%s\n' "$TAIL_OUTPUT" | grep -q 'hello lifecycle alpha' &&
-printf '%s\n' "$TAIL_OUTPUT" | grep -q 'alice2 ships lifecycle'
-if [ $? -eq 0 ]; then
+if printf '%s\n' "$TAIL_OUTPUT" | grep -Fq 'hello lifecycle alpha' &&
+   printf '%s\n' "$TAIL_OUTPUT" | grep -Fq 'alice2 ships lifecycle'; then
     echo "✓ exec tail sees public lifecycle messages"
     PASS=$((PASS + 1))
 else
@@ -314,10 +315,10 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if grep -q 'alice|hello lifecycle alpha' "$STATE_DIR/messages.log" &&
-   grep -q '系统|alice 更名为 alice2' "$STATE_DIR/messages.log" &&
-   grep -q '*|alice2 ships lifecycle' "$STATE_DIR/messages.log" &&
-   ! grep -q 'private lifecycle ping' "$STATE_DIR/messages.log"; then
+if grep -Fq 'alice|hello lifecycle alpha' "$STATE_DIR/messages.log" &&
+   grep -Fq '系统|alice 更名为 alice2' "$STATE_DIR/messages.log" &&
+   grep -Fq '*|alice2 ships lifecycle' "$STATE_DIR/messages.log" &&
+   ! grep -Fq 'private lifecycle ping' "$STATE_DIR/messages.log"; then
     echo "✓ persisted history matches public/private boundary"
     PASS=$((PASS + 1))
 else

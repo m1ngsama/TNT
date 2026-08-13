@@ -8,7 +8,8 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 - **SSH-based** - Leverage mature SSH protocol for encryption and auth
 - **Vim-style UI** - Modal editing (INSERT/NORMAL/COMMAND)
 - **UTF-8 native** - Full Unicode support
-- **High performance** - Pure C, multi-threaded, sub-100ms startup
+- **Measured performance** - Reproducible startup, RSS, handshake,
+  post-to-render, and ingest benchmark with machine-readable reports
 - **Secure** - Rate limiting, auth failure protection, input validation
 - **Persistent** - Auto-saves chat history
 - **Elegant** - Flicker-free TUI rendering
@@ -303,6 +304,9 @@ make stress-test   # run configurable concurrent-client stress test
 make soak-test     # run idle/reconnect/control-plane soak test
 make slow-client-test # run slow interactive-client backpressure test
 make user-lifecycle-test # run a two-user TUI lifecycle test
+make perf          # write a reproducible real-client JSON benchmark
+make perf-smoke    # run the short, minimum-sample stable budget gate
+make perf-full     # exercise the 64-session target workload
 make ci-test       # run the same checks as GitHub Actions
 
 # Individual tests
@@ -330,6 +334,8 @@ cd tests
 - **libssh** (>= 0.9.0) - SSH protocol library
 - **pthread** - POSIX threads
 - **gcc/clang** - C11 compiler
+- **Python 3.10+ and OpenSSH client** - development-only `make perf` benchmark
+- **expect** - interactive integration and stress tests
 
 **Ubuntu/Debian:**
 ```sh
@@ -381,7 +387,7 @@ TNT/
 ├── tests/            # test scripts
 ├── docs/             # documentation
 ├── packaging/        # package-manager drafts and release checklist
-├── scripts/          # operational scripts
+├── scripts/          # operational and performance tooling
 ├── Makefile          # build configuration
 └── README.md         # this file
 ```
@@ -515,14 +521,24 @@ Delete `motd.txt` to disable the MOTD.
 - [Contributing](docs/CONTRIBUTING.md) - How to contribute
 - [Changelog](docs/CHANGELOG.md) - Version history
 - [CI/CD](docs/CICD.md) - Continuous integration setup
+- [Performance Contract](docs/PERFORMANCE.md) - Reproducible benchmark,
+  budgets, measurement semantics, and coverage boundaries
 - [Quick Reference](docs/QUICKREF.md) - Command cheat sheet
 
 ## Performance
 
-- **Startup**: < 100ms (even with 100k+ message history)
-- **Memory**: ~2MB (idle)
-- **Concurrency**: Supports 100+ concurrent connections
-- **Throughput**: 1000+ messages/second
+Performance claims are measurements, not slogans. `make perf` uses real
+OpenSSH clients, requires at least five samples for latency distributions,
+verifies that interactive clients actually joined the room, checks message
+completeness and ordering, and writes a machine-readable JSON report.
+
+The reference budgets include 20 ms existing-key startup, 8 MiB idle RSS,
+64 sessions within 80 MiB RSS, a 50 ms local handshake p95, 5 ms interactive
+post-to-render p99, 1,000 persisted messages/second, and a 256 KiB main binary.
+These are ideal targets; separate regression redlines and exact metric definitions
+are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Run the benchmark
+on the deployment class you care about instead of extrapolating from another
+machine.
 
 ## Troubleshooting
 

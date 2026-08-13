@@ -13,9 +13,12 @@ void ratelimit_init(void);
 bool ratelimit_check_ip(const char *ip);
 void ratelimit_release_ip(const char *ip);
 
-/* Auth-failure ledger.  After enough failures within the window the IP is
- * blocked for a fixed duration. */
+/* Auth-failure ledger.  After enough consecutive failures the IP is blocked
+ * for a fixed duration; a successful authentication clears the sequence. */
 void ratelimit_record_auth_failure(const char *ip);
+
+/* Clear the consecutive-auth-failure ledger after a successful login. */
+void ratelimit_record_auth_success(const char *ip);
 
 /* Global active-connection cap (separate from per-IP).  Pair them. */
 bool ratelimit_check_and_increment_total(void);
@@ -23,5 +26,11 @@ void ratelimit_decrement_total(void);
 
 /* Read-only accessor for stats subcommand. */
 int  ratelimit_get_active_total(void);
+
+#ifdef TNT_TESTING
+int ratelimit_test_capacity(void);
+int ratelimit_test_active_for_ip(const char *ip);
+int ratelimit_test_auth_failures_for_ip(const char *ip);
+#endif
 
 #endif /* RATELIMIT_H */

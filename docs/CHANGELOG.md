@@ -2,6 +2,55 @@
 
 ## Unreleased
 
+### Added
+- Added `make perf`, `make perf-smoke`, `make perf-check`, and `make perf-full`
+  around a dependency-free Python benchmark that drives real OpenSSH clients
+  and writes versioned JSON reports with commit, environment, workload, raw
+  samples, percentiles, RSS/virtual memory, binary sizes, ordering, and capacity
+  rejection evidence.
+- Added an explicit performance contract and ideal/redline budgets for startup,
+  memory, handshake, interactive post-to-render latency, ingest throughput,
+  and binary size.
+- Added an extended Linux CI performance gate for stable low-variance budgets;
+  its machine-readable report is retained as a workflow artifact for 30 days.
+
+### Changed
+- Replaced the in-memory message history shift with a fixed-capacity ring. Once
+  the 100-record history is full, broadcast insertion is now O(1) instead of
+  moving roughly 100 KiB while holding the room write lock for every message.
+- Replaced each session's fixed 250 ms room polling with a non-blocking event
+  wakeup, while retaining explicit keepalive and idle-timeout deadlines.
+- Coalesced redraw work while a session still has buffered input, avoiding a
+  full sender repaint for every byte and every intermediate message in a burst.
+- Cached local display dates/times once per room message and made latest-view
+  date-divider selection linear, removing repeated timezone-lock contention
+  and suffix rescans from every connected TUI repaint.
+- Replaced unverified README startup, memory, concurrency, and throughput claims
+  with the reproducible benchmark and documented target budgets.
+- Made benchmark metadata resolve the runtime libssh version even when
+  `pkg-config` is unavailable.
+- Reworked SIGINT/SIGTERM handling into an async-signal-safe self-pipe stop
+  path that closes the listener, interrupts and waits for active/pre-auth SSH
+  workers, then reaps module children before destroying shared room state.
+
+### Fixed
+- Removed unsynchronized module-worker reads of the runtime stop flag and queue
+  length.
+- Prevented a stalled or malicious module from blocking the single runtime
+  worker indefinitely by using non-blocking stdin/stdout I/O with bounded,
+  shutdown-cancellable deadlines.
+- Fixed initial-screen and MOTD update-sequence races that could postpone a
+  room update arriving during the first render.
+- Fixed three shell-test assertions that could report success after their
+  output checks had failed.
+- Enforced case-insensitive display-name uniqueness during the atomic room
+  join, matching the existing nickname collision rule and removing ambiguous
+  private-message recipients.
+- Sized the per-IP rate ledger to the configured global connection ceiling plus
+  a 256-source security reserve, never evicted active accounting or live block
+  records, and reset consecutive authentication failures after a successful
+  login.
+
 ## 1.2.0 - 2026-06-29
 
 ### Added

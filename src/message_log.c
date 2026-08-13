@@ -100,6 +100,8 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     out->username[MAX_USERNAME_LEN - 1] = '\0';
     strncpy(out->content, content, MAX_MESSAGE_LEN - 1);
     out->content[MAX_MESSAGE_LEN - 1] = '\0';
+    out->display_time[0] = '\0';
+    out->display_date[0] = '\0';
     return true;
 }
 

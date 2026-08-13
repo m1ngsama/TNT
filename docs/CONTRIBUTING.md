@@ -19,6 +19,8 @@ make stress-test          # concurrent-client stress test
 make soak-test            # idle/reconnect/control-plane soak
 make slow-client-test     # slow interactive-client backpressure
 make user-lifecycle-test  # two-user TUI lifecycle
+make perf                 # real-client performance report (JSON)
+make perf-smoke           # stable performance budget gate
 ```
 
 ## Debug

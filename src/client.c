@@ -3,15 +3,20 @@
 #include <libssh/callbacks.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 static int client_send_fail(client_t *client) {
     if (client) {
         client->connected = false;
+        client_wake(client);
     }
     return -1;
 }
@@ -186,11 +191,25 @@ int client_flush_output(client_t *client) {
     return rc;
 }
 
+size_t client_pending_output(client_t *client) {
+    size_t pending = 0;
+
+    if (!client) return 0;
+
+    pthread_mutex_lock(&client->io_lock);
+    if (client->outbox && client->outbox_pos < client->outbox_len) {
+        pending = client->outbox_len - client->outbox_pos;
+    }
+    pthread_mutex_unlock(&client->io_lock);
+    return pending;
+}
+
 void client_queue_bell(client_t *client) {
     if (!client) return;
 
     atomic_store(&client->pending_bells, 1);
     client->redraw_pending = true;
+    client_wake(client);
 }
 
 int client_flush_pending_bells(client_t *client) {
@@ -201,6 +220,63 @@ int client_flush_pending_bells(client_t *client) {
     }
 
     return client_send(client, "\a", 1);
+}
+
+static pthread_once_t g_wake_signal_once = PTHREAD_ONCE_INIT;
+static int g_wake_signal_status = -1;
+
+static void client_wake_signal_handler(int sig) {
+    (void)sig;
+}
+
+static void client_wake_install_signal(void) {
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = client_wake_signal_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    if (sigaction(SIGUSR1, &action, NULL) == 0) {
+        g_wake_signal_status = 0;
+    }
+}
+
+int client_wake_init(client_t *client) {
+    sigset_t wake_set;
+    int rc;
+
+    if (!client) return -1;
+
+    rc = pthread_once(&g_wake_signal_once, client_wake_install_signal);
+    if (rc != 0 || g_wake_signal_status != 0) {
+        if (rc != 0) errno = rc;
+        return -1;
+    }
+
+    sigemptyset(&wake_set);
+    sigaddset(&wake_set, SIGUSR1);
+    rc = pthread_sigmask(SIG_BLOCK, &wake_set, NULL);
+    if (rc != 0) {
+        errno = rc;
+        return -1;
+    }
+
+    client->thread = pthread_self();
+    atomic_store(&client->wake_pending, false);
+    atomic_store(&client->wake_ready, true);
+    return 0;
+}
+
+void client_wake(client_t *client) {
+    if (!client || !atomic_load(&client->wake_ready)) return;
+    pthread_mutex_lock(&client->ref_lock);
+    if (atomic_load(&client->wake_ready) &&
+        !atomic_exchange(&client->wake_pending, true)) {
+        if (pthread_kill(client->thread, SIGUSR1) != 0) {
+            atomic_store(&client->wake_pending, false);
+        }
+    }
+    pthread_mutex_unlock(&client->ref_lock);
 }
 
 void client_addref(client_t *client) {
@@ -220,6 +296,7 @@ void client_release(client_t *client) {
 
     if (count == 0) {
         /* Safe to free now */
+        atomic_store(&client->wake_ready, false);
         if (client->channel && client->channel_cb) {
             ssh_remove_channel_callbacks(client->channel, client->channel_cb);
         }
@@ -248,6 +325,14 @@ void client_release(client_t *client) {
 void client_release_session(client_t *client) {
     if (!client) return;
 
+    /* Stop directed wakes before this session thread can terminate.  Other
+     * short-lived references may still keep the object allocated, but its
+     * pthread_t is no longer a valid notification target after this point. */
+    pthread_mutex_lock(&client->ref_lock);
+    atomic_store(&client->wake_ready, false);
+    atomic_store(&client->wake_pending, false);
+    pthread_mutex_unlock(&client->ref_lock);
+
     if (client->channel && client->channel_cb) {
         ssh_remove_channel_callbacks(client->channel, client->channel_cb);
     }
@@ -259,6 +344,36 @@ void client_release_session(client_t *client) {
     if (client->channel_callback_ref) {
         client->channel_callback_ref = false;
         client_release(client);
+    }
+
+    /* With callbacks removed and room references already dropped, temporary
+     * mention/whisper references may delay allocation reclamation but must not
+     * delay or perform libssh cleanup from their foreign thread. */
+    if (client->channel) {
+        if (ssh_channel_is_open(client->channel)) {
+            ssh_channel_close(client->channel);
+        }
+        ssh_channel_free(client->channel);
+        client->channel = NULL;
+    }
+    if (client->session) {
+        int session_fd = ssh_get_fd(client->session);
+        int flags = session_fd >= 0 ? fcntl(session_fd, F_GETFL, 0) : -1;
+        ssh_set_blocking(client->session, 0);
+        if (flags >= 0) {
+            (void)fcntl(session_fd, F_SETFL, flags | O_NONBLOCK);
+        }
+        /* Mark the registry invalid immediately before ssh_disconnect closes
+         * the fd.  Non-blocking mode avoids a blind shutdown wait without
+         * resetting normally departing clients. */
+        if (client->socket_closing) {
+            client->socket_closing(client->socket_closing_userdata);
+            client->socket_closing = NULL;
+            client->socket_closing_userdata = NULL;
+        }
+        ssh_disconnect(client->session);
+        ssh_free(client->session);
+        client->session = NULL;
     }
 
     client_release(client);
@@ -300,6 +415,7 @@ static int client_channel_window_change(ssh_session session, ssh_channel channel
     client->width = w;
     client->height = h;
     client->redraw_pending = true;
+    client_wake(client);
     return SSH_OK;
 }
 
@@ -315,6 +431,7 @@ static void client_channel_eof(ssh_session session, ssh_channel channel,
          * output and an exit status. */
         if (client->exec_command[0] == '\0') {
             client->connected = false;
+            client_wake(client);
         }
     }
 }
@@ -327,6 +444,7 @@ static void client_channel_close(ssh_session session, ssh_channel channel,
     client_t *client = (client_t *)userdata;
     if (client) {
         client->connected = false;
+        client_wake(client);
     }
 }
 

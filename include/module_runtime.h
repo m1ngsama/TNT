@@ -27,4 +27,13 @@ void tnt_module_runtime_shutdown(void);
  * intentionally fire-and-forget so basic chat never depends on module health. */
 void tnt_module_runtime_publish_message_created(const message_t *msg);
 
+#ifdef TNT_TESTING
+/* Pipe-level test seams for deterministic backpressure/deadline coverage. */
+int tnt_module_runtime_test_write_fd(int fd, const char *data, size_t len,
+                                     int timeout_ms, bool cancel_on_stop);
+int tnt_module_runtime_test_read_fd(int fd, char *line, size_t line_size,
+                                    int timeout_ms, bool cancel_on_stop);
+void tnt_module_runtime_test_reset_stop(void);
+#endif
+
 #endif /* MODULE_RUNTIME_H */

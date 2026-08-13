@@ -11,6 +11,8 @@
 typedef struct {
     ssh_session session;
     char client_ip[INET6_ADDRSTRLEN];
+    void (*socket_closing)(void *userdata);
+    void *socket_closing_userdata;
 } accepted_session_t;
 
 /* Read TNT_ACCESS_TOKEN from the environment.  Idempotent.  Call once

@@ -1,196 +1,147 @@
-# TNT Security Audit - Test Results
+# Continuous Verification Matrix
 
-## Test Summary
+This document describes how the current tree is verified. It is not a dated
+pass certificate: a test result applies only to the commit, platform, toolchain,
+configuration, and command recorded by that run. GitHub Actions logs and saved
+artifacts are the source of truth for a reviewed commit.
 
-**Date:** 2026-01-22
-**Total Tests:** 10
-**Passed:** 10
-**Failed:** 0
-**Success Rate:** 100%
+The matrix deliberately does not publish a fixed test count, a blanket security
+claim, or performance numbers copied from another machine. Tests are added and
+split over time, and benchmark results are meaningful only with their workload
+and environment metadata.
 
----
+## Local Validation Matrix
 
-## ✅ Tests Passed
+| Layer | Command | What it verifies | Result contract |
+|---|---|---|---|
+| Build | `make` | Builds `tnt` and `tntctl` with the default warning and optimization flags | A non-zero exit is a failure |
+| Unit | `make unit-test` | UTF-8, input buffering, JSON text, module protocol/runtime, messages, chat-room state, history views, i18n, command/help/manual text, rate limits, defaults, and themes | Every compiled unit binary must exit zero |
+| Script contracts | `make script-test` | CLI and documentation surfaces, maintainer/module checks, installer and log tooling, source/release artifact checks, and the performance-driver contract | Every script must exit zero; an explicit dependency skip is not evidence that the skipped behavior passed |
+| SSH integration | `make integration-test` | Real SSH health/exec and interactive flows, user lifecycle, join visibility, empty views, module runtime, graceful shutdown, and `tntctl` behavior | Every integration script must exit zero |
+| Main suite | `make test` | Build plus unit, script-contract, and SSH integration layers | Strict aggregate gate; integration failures propagate |
+| CI-equivalent runtime gate | `make ci-test` | Main suite plus anonymous access, connection limits, and security-feature probes | Strict aggregate gate used by the PR job |
+| Release preflight | `make release-check` | Clean rebuild, unit/script layers, version alignment, I/O ownership invariants, staged install layout, log maintenance, and packaging metadata/syntax | Must exit zero before preparing a release |
+| Opt-in concurrency | `make stress-test` | Concurrent-client connection and messaging behavior | Configure `CLIENTS` and `DURATION`; command must exit zero |
+| Opt-in durability | `make soak-test` | Idle, reconnect, and control-plane durability | Configure `DURATION` and `RECONNECTS`; command must exit zero |
+| Opt-in backpressure | `make slow-client-test` | Progress and bounded behavior with an unread interactive client | Configure `DURATION` and `BURST_CHARS`; command must exit zero |
 
-### 1. RSA Key Upgrade (4096-bit)
-- **Status:** PASS
-- **Verified:** RSA key successfully upgraded from 2048 to 4096 bits
-- **Details:** Server generates new 4096-bit RSA host key on first startup
-- **File:** `host_key` with 0600 permissions
+`test_utf8` is built and run automatically by `make unit-test`; UTF-8 validation
+does not require a separate manual compilation step.
 
-### 2. Host Key Permissions
-- **Status:** PASS
-- **Verified:** Host key file has secure 0600 permissions
-- **Details:** Prevents unauthorized access to private key
+## Reproducible Command Sets
 
-### 3. TNT_BIND_ADDR Configuration
-- **Status:** PASS
-- **Verified:** Server accepts bind address configuration
-- **Usage:** `TNT_BIND_ADDR=127.0.0.1 ./tnt` for localhost-only access
+Install a C toolchain, GNU Make, libssh development headers, OpenSSH, Python 3.10+,
+and `expect`. Then run the strict local suite from the repository root:
 
-### 4. TNT_ACCESS_TOKEN Configuration
-- **Status:** PASS
-- **Verified:** Server accepts access token configuration
-- **Usage:** `TNT_ACCESS_TOKEN="secret" ./tnt` to require password authentication
-- **Backward Compatibility:** Server remains open by default when not set
-
-### 5. TNT_MAX_CONNECTIONS Configuration
-- **Status:** PASS
-- **Verified:** Server accepts connection limit configuration
-- **Usage:** `TNT_MAX_CONNECTIONS=64 ./tnt` (default: 64)
-
-### 6. TNT_RATE_LIMIT Configuration
-- **Status:** PASS
-- **Verified:** Server accepts rate limiting toggle
-- **Usage:** `TNT_RATE_LIMIT=0 ./tnt` to disable (default: enabled)
-
-### 7. Message Log Sanitization
-- **Status:** PASS
-- **Verified:** Server loads messages from log file safely
-- **Details:** Handles malformed log entries without crashing
-
-### 8. AddressSanitizer Build
-- **Status:** PASS
-- **Verified:** Project compiles successfully with AddressSanitizer
-- **Command:** `make asan`
-- **Purpose:** Detects buffer overflows, use-after-free, memory leaks at runtime
-
-### 9. ThreadSanitizer Compatibility
-- **Status:** PASS
-- **Verified:** Code compiles with ThreadSanitizer flags
-- **Details:** Enables detection of data races and concurrency bugs
-- **Purpose:** Validates thread-safe implementation
-
-### 10. Large Log File Handling
-- **Status:** PASS
-- **Verified:** Server handles 2000+ message log (exceeds old 1000 limit)
-- **Details:** Dynamic allocation prevents crashes with large message histories
-
----
-
-## Security Features Verified
-
-| Category | Feature | Implementation | Status |
-|----------|---------|----------------|---------|
-| **Crypto** | RSA Key Size | 4096-bit (upgraded from 2048) | ✅ |
-| **Crypto** | Key Permissions | Atomic generation with 0600 perms | ✅ |
-| **Auth** | Access Token | Optional password protection | ✅ |
-| **Auth** | Rate Limiting | Per-IP connection-rate throttling | ✅ |
-| **Auth** | Connection Limits | Global and per-IP concurrent session limits | ✅ |
-| **Input** | Username Validation | Shell metacharacter rejection | ✅ |
-| **Input** | Log Sanitization | Pipe/newline replacement | ✅ |
-| **Input** | UTF-8 Validation | Overlong encoding prevention | ✅ |
-| **Buffer** | strcpy Replacement | All instances use strncpy | ✅ |
-| **Buffer** | Overflow Checks | vsnprintf result validation | ✅ |
-| **Resource** | Dynamic Allocation | Message position array grows | ✅ |
-| **Resource** | Thread Cleanup | Proper pthread_attr handling | ✅ |
-| **Concurrency** | Reference Counting | Race-free client cleanup | ✅ |
-| **Concurrency** | Message Snapshot | TOCTOU prevention | ✅ |
-| **Concurrency** | Scroll Bounds | Atomic count checking | ✅ |
-
----
-
-## Configuration Examples
-
-### Open Access (Default)
-```bash
-./tnt
-# No authentication required
-# Anyone can connect
+```sh
+make clean
+make test PORT=14200
 ```
 
-### Protected with Password
-```bash
-TNT_ACCESS_TOKEN="MySecretPass123" ./tnt
-# Requires password: MySecretPass123
-# SSH command: sshpass -p "MySecretPass123" ssh -p 2222 localhost
+To reproduce the runtime checks used by the cross-platform PR gate, reserve a
+free base-port range and run:
+
+```sh
+make ci-test CI_TEST_PORT=14200
+make release-check
 ```
 
-### Localhost Only
-```bash
-TNT_BIND_ADDR=127.0.0.1 ./tnt
-# Only accepts connections from local machine
+The test scripts create temporary state directories and clean them on exit.
+Choose another base port when `14200` or the following ports are in use.
+
+The longer release-oriented runtime path is:
+
+```sh
+RUN_INTEGRATION=1 RUN_SOAK=1 RUN_SLOW_CLIENT=1 \
+  PORT=14200 make release-check
 ```
 
-### Strict Limits
-```bash
-TNT_MAX_CONNECTIONS=10 TNT_MAX_CONN_PER_IP=2 TNT_MAX_CONN_RATE_PER_IP=10 ./tnt
-# Max 10 total connections
-# Max 2 concurrent sessions per IP address
-# Max 10 new connections per IP per 60 seconds
+Useful focused commands are:
+
+```sh
+make unit-test
+make script-test
+make integration-test PORT=14200
+make security-test PORT=14220
+CLIENTS=20 DURATION=60 make stress-test PORT=14230
+DURATION=1800 RECONNECTS=20 make soak-test PORT=14240
+DURATION=30 BURST_CHARS=3200 make slow-client-test PORT=14250
 ```
 
-### Disabled Rate Limiting (Testing)
-```bash
-TNT_RATE_LIMIT=0 ./tnt
-# WARNING: Only for testing
-# Removes connection rate limits
-```
+AddressSanitizer and static-analysis entry points are separate from the normal
+suite:
 
----
-
-## Build Verification
-
-### Standard Build
-```bash
-make clean && make
-# Success: 4 warnings (expected - deprecated libssh API usage)
-# No errors
-```
-
-### AddressSanitizer Build
-```bash
+```sh
 make asan
-# Success: Compiles with -fsanitize=address
-# Detects: Buffer overflows, use-after-free, memory leaks
+make check
 ```
 
-### ThreadSanitizer Compatibility
-```bash
-gcc -fsanitize=thread -g -O1 -c src/chat_room.c
-# Success: No compilation errors
-# Validates: Thread-safe implementation
+`make asan` proves that an instrumented build succeeds; it is not, by itself,
+evidence that every runtime path is memory-safe. Likewise, a ThreadSanitizer
+compile probe is not a race-free runtime result. The extended Linux CI job runs
+a temporary server under Valgrind and requires an error-free summary.
+
+## Performance Benchmark
+
+The performance driver uses real OpenSSH clients and writes a versioned JSON
+report containing workload settings, raw samples, summary statistics, budget
+outcomes, Git metadata, and host/toolchain metadata. It requires no third-party
+Python packages.
+
+```sh
+make perf
+make perf PERF_OUTPUT=/tmp/tnt-perf.json
 ```
 
----
+The available profiles have different purposes:
 
-## Known Limitations
+| Profile | Command | Purpose |
+|---|---|---|
+| Benchmark | `make perf` | Normal real-client workload; records measurements without enforcing a budget by default |
+| CI smoke gate | `make perf-smoke PERF_OUTPUT=/tmp/tnt-perf-smoke.json` | Short profile that enforces the stable startup, idle RSS, and main-binary redlines while recording broader metrics |
+| Normal stable gate | `make perf-check PERF_OUTPUT=/tmp/tnt-perf-check.json` | Normal sample sizes with the same stable redlines enforced |
+| Target workload | `make perf-full PERF_OUTPUT=/tmp/tnt-perf-full.json` | Exercises 64 joined sessions and 1,000 ordered messages and gates every eligible redline |
 
-1. **Exec Surface Is Minimal:** The SSH exec interface is intentionally small and currently focused on operational commands
-2. **libssh Deprecations:** Uses deprecated PTY width/height functions (4 warnings)
-3. **UTF-8 Unit Test:** Skipped in automated tests (requires manual compilation)
+`make script-test` runs `tests/test_perf_benchmark.sh`, which verifies the
+driver's percentile/budget helpers, command-line surface, and minimum sample
+validation. That contract test does **not** execute the real-client benchmark
+and must not be reported as a performance result.
 
----
+The extended Linux CI job runs `make perf-smoke`, fails on a stable-budget
+regression, and uploads the complete JSON report—or a structured diagnostic
+report when a scenario aborts—as a workflow artifact. See
+[`PERFORMANCE.md`](PERFORMANCE.md) for metric definitions, budgets, workload
+controls, percentile rules, and coverage boundaries.
 
-## Conclusion
+No benchmark values are embedded here. Report measurements only from the JSON
+produced by the exact command being discussed, and keep its environment and
+workload sections with the result. Do not compare runs from different machines
+as though they were a single baseline.
 
-✅ **All 23 security vulnerabilities fixed and verified**
+## Continuous Integration Matrix
 
-✅ **100% security-suite pass rate** (12/12 tests)
+| Trigger | Jobs and platforms | Required evidence |
+|---|---|---|
+| Pull request to `main` or `release/**` | PR gate on Ubuntu 24.04 and macOS latest | Default build, ASan build, `make ci-test`, and `make release-check` all succeed |
+| Push to `main` or `release/**` | PR gate plus extended Linux runtime, portable container builds, and package-recipe gate | Runtime/Valgrind/performance gates succeed; Debian stable, Ubuntu 24.04, and Alpine builds succeed; package checks succeed |
+| Manual CI dispatch | Same broad matrix as a protected-branch push | Job logs plus the retained performance JSON artifact |
+| SemVer release tag | Release artifact workflow | Version/tag alignment, architecture-specific builds, source-archive validation, asset collection, and checksum verification; release remains a draft for manual review |
 
-✅ **Backward compatible** - server remains open by default
+The full workflow and release policy are documented in [`CICD.md`](CICD.md).
 
-✅ **Production ready** with optional security hardening
+## Interpreting and Recording Results
 
-✅ **Well documented** with clear configuration examples
+- Record the Git SHA and whether the tree was dirty.
+- Record the exact command, environment overrides, OS/architecture, compiler,
+  libssh, OpenSSH, and relevant test dependencies.
+- Treat a skipped test as `SKIP`, not `PASS`, and state the missing dependency.
+- Keep failure output and the first failing command; do not replace it with an
+  aggregate success percentage.
+- For performance runs, retain the JSON artifact instead of transcribing only
+  a percentile or throughput value.
+- A green suite supports only the behaviors exercised by that suite. It is not
+  a blanket declaration that the project has no security, concurrency, or
+  memory-safety defects.
 
----
-
-## Next Steps (Optional)
-
-1. Update libssh API usage to remove deprecation warnings
-2. Add interactive SSH test suite (requires expect/pexpect)
-3. Add performance benchmarks for rate limiting
-4. Add integration tests for multiple clients
-5. Add stress tests for concurrency safety
-
----
-
-## Test Script
-
-Run the comprehensive test suite:
-```bash
-./test_security_features.sh
-```
-
-Expected output: `✓ All security features verified!`
+This evidence model keeps results reproducible while allowing the suite and its
+coverage to evolve without making this document stale after every new test.
