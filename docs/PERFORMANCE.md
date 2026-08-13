@@ -101,23 +101,26 @@ On a dedicated Linux reference host, constrain only the TNT server (not the
 OpenSSH load generators) and record the constraint in the report:
 
 ```sh
-make perf-full \
-  PERF_SERVER_WRAPPER='systemd-run --user --scope --quiet -p AllowedCPUs=0 -p MemoryMax=128M -p MemorySwapMax=0'
-make perf-soak \
-  PERF_SOAK_SERVER_WRAPPER='systemd-run --user --scope --quiet -p AllowedCPUs=0 -p MemoryMax=128M -p MemorySwapMax=0'
+taskset -c 1 make perf-full \
+  PERF_SERVER_WRAPPER='taskset -c 0 systemd-run --user --scope --quiet -p AllowedCPUs=0 -p MemoryMax=128M -p MemorySwapMax=0' \
+  PERF_EXPECT_SERVER_CPUS=0 \
+  PERF_EXPECT_MEMORY_MAX_BYTES=134217728 \
+  PERF_EXPECT_MEMORY_SWAP_MAX_BYTES=0
+taskset -c 1 make perf-soak \
+  PERF_SOAK_SERVER_WRAPPER='taskset -c 0 systemd-run --user --scope --quiet -p AllowedCPUs=0 -p MemoryMax=128M -p MemorySwapMax=0' \
+  PERF_SOAK_EXPECT_SERVER_CPUS=0 \
+  PERF_SOAK_EXPECT_MEMORY_MAX_BYTES=134217728 \
+  PERF_SOAK_EXPECT_MEMORY_SWAP_MAX_BYTES=0
 ```
 
-This transient user scope constrains TNT and its module children as one cgroup
-to CPU 0, 128 MiB of memory, and zero swap. Use it only on a dedicated host
-where CPU 0 belongs to the test and the user systemd manager supports these
-properties. The wrapper is stored verbatim in JSON. It does not constrain the
-benchmark driver or its OpenSSH client processes.
-
-On a two-CPU measurement host, the driver and its OpenSSH children can be kept
-off the server CPU with `taskset -c 1 make perf-full ...`. Reports record the
-driver's effective CPU affinity plus the TNT process's allowed CPU list,
-effective cgroup cpuset, memory limit, and swap limit. These fields distinguish
-an enforced target profile from a wrapper string that the host ignored.
+The inner `taskset` pins TNT to CPU 0, while the transient user scope constrains
+TNT and its module children to 128 MiB of memory and zero swap. The outer
+`taskset` keeps the driver and its OpenSSH children on CPU 1. Use this only on a
+dedicated two-CPU-or-larger host where those CPUs belong to the test and the user
+systemd manager supports the memory properties. The wrapper is stored verbatim
+in JSON and does not include the load generators. Reports record both sides'
+effective affinity plus TNT's cgroup limits; the `PERF_EXPECT_*` arguments make
+the run fail if the host ignored any requested server constraint.
 
 Every latency distribution uses at least five samples and reports the raw
 samples plus min, mean, p50, p95, p99, and max. Percentiles use the nearest-rank

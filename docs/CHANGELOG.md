@@ -23,6 +23,9 @@
   other joined TUI receiver. The broader fresh-SSH-exec measurement remains in
   reports as an ungated diagnostic instead of charging handshake time to room
   fan-out; the benchmark report schema is now version 3.
+- Added optional expected CPU, memory, and swap constraints to full and soak
+  drivers, so a target-host run fails instead of silently accepting a wrapper
+  that the local cgroup manager did not enforce.
 
 ## 1.3.0 - 2026-08-13
 

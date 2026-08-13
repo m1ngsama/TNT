@@ -30,6 +30,7 @@ from perf_benchmark import (
     matching_persisted_messages,
     process_constraints,
     process_resources,
+    require_process_constraints,
     ssh_exec,
     start_server,
     summarize,
@@ -74,6 +75,11 @@ def validate_args(args: argparse.Namespace) -> None:
             raise BenchmarkError(f"--{name.replace('_', '-')} must be positive")
     if args.progress_interval < 0:
         raise BenchmarkError("--progress-interval cannot be negative")
+    if args.expect_server_cpus is not None and not args.expect_server_cpus.strip():
+        raise BenchmarkError("--expect-server-cpus must not be empty")
+    for field in ("expect_memory_max_bytes", "expect_memory_swap_max_bytes"):
+        if getattr(args, field) is not None and getattr(args, field) < 0:
+            raise BenchmarkError(f"--{field.replace('_', '-')} cannot be negative")
     if expected_message_count(args.duration, args.message_interval) < args.clients:
         raise BenchmarkError(
             "duration/message interval must emit at least one message per client"
@@ -113,6 +119,12 @@ def run_soak(args: argparse.Namespace) -> dict[str, Any]:
         try:
             wait_for_health(server.port)
             server_constraints = process_constraints(server.process.pid)
+            require_process_constraints(
+                server_constraints,
+                cpu_list=args.expect_server_cpus,
+                memory_max_bytes=args.expect_memory_max_bytes,
+                memory_swap_max_bytes=args.expect_memory_swap_max_bytes,
+            )
             for index in range(args.clients):
                 clients.append(
                     InteractiveClient(server.port, f"soak-{run_id}-{index:03d}")
@@ -272,6 +284,11 @@ def run_soak(args: argparse.Namespace) -> dict[str, Any]:
                     "resource_sample_interval_seconds": args.sample_interval,
                     "server_wrapper": args.server_wrapper,
                     "server_wrapper_argv": server_wrapper,
+                    "expect_server_cpus": args.expect_server_cpus,
+                    "expect_memory_max_bytes": args.expect_memory_max_bytes,
+                    "expect_memory_swap_max_bytes": (
+                        args.expect_memory_swap_max_bytes
+                    ),
                 },
                 "metrics": {
                     "server_constraints": server_constraints,
@@ -338,6 +355,9 @@ def failure_report(
             "resource_sample_interval_seconds": args.sample_interval,
             "server_wrapper": args.server_wrapper,
             "server_wrapper_argv": None,
+            "expect_server_cpus": args.expect_server_cpus,
+            "expect_memory_max_bytes": args.expect_memory_max_bytes,
+            "expect_memory_swap_max_bytes": args.expect_memory_swap_max_bytes,
         },
         "metrics_complete": False,
     }
@@ -364,6 +384,9 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--sample-interval", type=float, default=10.0)
     parser.add_argument("--progress-interval", type=float, default=60.0)
     parser.add_argument("--server-wrapper")
+    parser.add_argument("--expect-server-cpus")
+    parser.add_argument("--expect-memory-max-bytes", type=int)
+    parser.add_argument("--expect-memory-swap-max-bytes", type=int)
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv)
 

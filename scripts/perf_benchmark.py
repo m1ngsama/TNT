@@ -676,6 +676,27 @@ def process_constraints(pid: int) -> dict[str, Any]:
     return constraints
 
 
+def require_process_constraints(
+    constraints: dict[str, Any],
+    *,
+    cpu_list: str | None,
+    memory_max_bytes: int | None,
+    memory_swap_max_bytes: int | None,
+) -> None:
+    """Fail when an explicitly requested target constraint was not applied."""
+    expected = {
+        "cpu_allowed_list": cpu_list,
+        "memory_max_bytes": memory_max_bytes,
+        "memory_swap_max_bytes": memory_swap_max_bytes,
+    }
+    for field, wanted in expected.items():
+        if wanted is not None and constraints.get(field) != wanted:
+            raise BenchmarkError(
+                f"server constraint mismatch for {field}: "
+                f"expected {wanted!r}, observed {constraints.get(field)!r}"
+            )
+
+
 def direct_child_pids(pid: int) -> list[int]:
     """Return direct child PIDs without relying on platform-specific pgrep flags."""
     try:
@@ -1543,6 +1564,9 @@ def failure_report(
             "module_paths_configured": bool(args.module_paths),
             "server_wrapper": args.server_wrapper,
             "server_wrapper_argv": None,
+            "expect_server_cpus": args.expect_server_cpus,
+            "expect_memory_max_bytes": args.expect_memory_max_bytes,
+            "expect_memory_swap_max_bytes": args.expect_memory_swap_max_bytes,
             "percentile_method": "nearest-rank",
             "enforce": args.enforce,
         },
@@ -1584,6 +1608,11 @@ def validate_args(args: argparse.Namespace) -> None:
         )
     if args.idle_seconds <= 0:
         raise BenchmarkError("--idle-seconds must be positive")
+    if args.expect_server_cpus is not None and not args.expect_server_cpus.strip():
+        raise BenchmarkError("--expect-server-cpus must not be empty")
+    for field in ("expect_memory_max_bytes", "expect_memory_swap_max_bytes"):
+        if getattr(args, field) is not None and getattr(args, field) < 0:
+            raise BenchmarkError(f"--{field.replace('_', '-')} cannot be negative")
     if args.enforce == "all" and args.clients != 64:
         raise BenchmarkError("--enforce all requires exactly --clients 64")
     if args.module_paths:
@@ -1676,6 +1705,12 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 wait_for_health(server.port)
                 metrics["server_constraints"] = process_constraints(
                     server.process.pid
+                )
+                require_process_constraints(
+                    metrics["server_constraints"],
+                    cpu_list=args.expect_server_cpus,
+                    memory_max_bytes=args.expect_memory_max_bytes,
+                    memory_swap_max_bytes=args.expect_memory_swap_max_bytes,
                 )
                 metrics["idle_server"] = process_resources(server.process.pid)
                 metrics["ssh_health_handshake_ms"] = summarize(
@@ -1828,6 +1863,9 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             "module_paths_configured": bool(module_paths),
             "server_wrapper": args.server_wrapper,
             "server_wrapper_argv": server_wrapper,
+            "expect_server_cpus": args.expect_server_cpus,
+            "expect_memory_max_bytes": args.expect_memory_max_bytes,
+            "expect_memory_swap_max_bytes": args.expect_memory_swap_max_bytes,
             "percentile_method": "nearest-rank",
             "enforce": args.enforce,
         },
@@ -1890,6 +1928,27 @@ def self_test() -> int:
     assert metric_status(10, redline=10, higher_is_better=True) == "pass"
     assert metric_status(9, redline=10, higher_is_better=True) == "fail"
     assert metric_status(None, redline=10) == "not_measured"
+    require_process_constraints(
+        {
+            "cpu_allowed_list": "0",
+            "memory_max_bytes": 128 * MIB,
+            "memory_swap_max_bytes": 0,
+        },
+        cpu_list="0",
+        memory_max_bytes=128 * MIB,
+        memory_swap_max_bytes=0,
+    )
+    try:
+        require_process_constraints(
+            {"cpu_allowed_list": "1"},
+            cpu_list="0",
+            memory_max_bytes=None,
+            memory_swap_max_bytes=None,
+        )
+    except BenchmarkError:
+        pass
+    else:
+        raise AssertionError("constraint mismatch was not rejected")
     missing_report = {
         "budget_evaluation": {
             name: {"status": "not_measured" if name == "idle_rss_kib" else "pass"}
@@ -1924,6 +1983,20 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--server-wrapper",
         help="shell-like exec prefix for target-host constraints (for example taskset/prlimit)",
+    )
+    parser.add_argument(
+        "--expect-server-cpus",
+        help="require the TNT process Cpus_allowed_list to equal this value",
+    )
+    parser.add_argument(
+        "--expect-memory-max-bytes",
+        type=int,
+        help="require the TNT cgroup-v2 memory.max value",
+    )
+    parser.add_argument(
+        "--expect-memory-swap-max-bytes",
+        type=int,
+        help="require the TNT cgroup-v2 memory.swap.max value",
     )
     parser.add_argument(
         "--enforce",

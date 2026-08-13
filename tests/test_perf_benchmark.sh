@@ -51,6 +51,7 @@ if HELP_OUTPUT=$("$SCRIPT" --help 2>&1) &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--history-records' &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--storm-clients' &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--module-paths' &&
+   printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--expect-server-cpus' &&
    printf '%s\n' "$HELP_OUTPUT" | grep -q -- '--slow-client-characters'; then
     pass "benchmark exposes budget and full-scenario controls"
 else

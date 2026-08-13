@@ -50,6 +50,9 @@ PERF_MODULE_PATHS ?=
 PERF_MODULE_CLIENTS ?= 8
 PERF_MODULE_MESSAGES ?= 100
 PERF_SERVER_WRAPPER ?=
+PERF_EXPECT_SERVER_CPUS ?=
+PERF_EXPECT_MEMORY_MAX_BYTES ?=
+PERF_EXPECT_MEMORY_SWAP_MAX_BYTES ?=
 PERF_ENFORCE ?= none
 PERF_OUTPUT ?=
 
@@ -60,6 +63,9 @@ PERF_SOAK_MESSAGE_INTERVAL ?= 10
 PERF_SOAK_SAMPLE_INTERVAL ?= 10
 PERF_SOAK_PROGRESS_INTERVAL ?= 60
 PERF_SOAK_SERVER_WRAPPER ?=
+PERF_SOAK_EXPECT_SERVER_CPUS ?=
+PERF_SOAK_EXPECT_MEMORY_MAX_BYTES ?=
+PERF_SOAK_EXPECT_MEMORY_SWAP_MAX_BYTES ?=
 PERF_SOAK_OUTPUT ?=
 
 .PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
@@ -237,6 +243,9 @@ perf: all
 		--module-clients "$(PERF_MODULE_CLIENTS)" \
 		--module-messages "$(PERF_MODULE_MESSAGES)" \
 		$(if $(strip $(PERF_SERVER_WRAPPER)),--server-wrapper "$(PERF_SERVER_WRAPPER)",) \
+		$(if $(strip $(PERF_EXPECT_SERVER_CPUS)),--expect-server-cpus "$(PERF_EXPECT_SERVER_CPUS)",) \
+		$(if $(strip $(PERF_EXPECT_MEMORY_MAX_BYTES)),--expect-memory-max-bytes "$(PERF_EXPECT_MEMORY_MAX_BYTES)",) \
+		$(if $(strip $(PERF_EXPECT_MEMORY_SWAP_MAX_BYTES)),--expect-memory-swap-max-bytes "$(PERF_EXPECT_MEMORY_SWAP_MAX_BYTES)",) \
 		$(if $(strip $(PERF_MODULE_PATHS)),--module-paths "$(PERF_MODULE_PATHS)",) \
 		$(if $(strip $(PERF_OUTPUT)),--output "$(PERF_OUTPUT)",) \
 		--enforce "$(PERF_ENFORCE)"
@@ -283,6 +292,9 @@ perf-soak: all
 		--sample-interval "$(PERF_SOAK_SAMPLE_INTERVAL)" \
 		--progress-interval "$(PERF_SOAK_PROGRESS_INTERVAL)" \
 		$(if $(strip $(PERF_SOAK_SERVER_WRAPPER)),--server-wrapper "$(PERF_SOAK_SERVER_WRAPPER)",) \
+		$(if $(strip $(PERF_SOAK_EXPECT_SERVER_CPUS)),--expect-server-cpus "$(PERF_SOAK_EXPECT_SERVER_CPUS)",) \
+		$(if $(strip $(PERF_SOAK_EXPECT_MEMORY_MAX_BYTES)),--expect-memory-max-bytes "$(PERF_SOAK_EXPECT_MEMORY_MAX_BYTES)",) \
+		$(if $(strip $(PERF_SOAK_EXPECT_MEMORY_SWAP_MAX_BYTES)),--expect-memory-swap-max-bytes "$(PERF_SOAK_EXPECT_MEMORY_SWAP_MAX_BYTES)",) \
 		$(if $(strip $(PERF_SOAK_OUTPUT)),--output "$(PERF_SOAK_OUTPUT)",)
 
 perf-soak-smoke: PERF_SOAK_CLIENTS = 5
