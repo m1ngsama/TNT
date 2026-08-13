@@ -5,6 +5,17 @@
 ### Changed
 - Pinned the Arch and Homebrew recipes to the published v1.3.0 source archive
   checksum and moved release artifact actions to their Node 24 generations.
+- Completed the performance-charter coverage with synchronized real-client
+  connection storms, every-receiver fan-out, best-effort per-file cold-history
+  opening, measured slow-client pressure, and explicit tnt-modules on/off
+  comparison in the versioned JSON benchmark.
+- Added `make perf-soak`, a 64-session/30-minute functional durability gate with
+  rotating senders, all-peer delivery, ordered persistence, process survival,
+  and bounded RSS, plus a weekly/manual CI workflow that retains full and soak
+  evidence for 90 days.
+- Added an optional, recorded server exec wrapper so reference-host runs can
+  constrain TNT and module children to a one-CPU, 128-MiB, no-swap cgroup
+  without constraining or miscounting the OpenSSH load generators.
 
 ## 1.3.0 - 2026-08-13
 

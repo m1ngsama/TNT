@@ -621,21 +621,25 @@ gprof tnt gmon.out > profile.txt
 ### Benchmarking
 
 ```sh
-# Reproducible startup, history, handshake, real-session RSS/idle CPU,
-# interactive fan-out, ordered ingest, and capacity-rejection report
+# Reproducible startup, history, storm, handshake, RSS/idle CPU,
+# all-receiver fan-out, slow-client, ordered ingest, and capacity report
 make perf
 
 # Stable redline gate used by extended Linux CI
 make perf-smoke
 
-# Reference concurrency workload
+# Reference concurrency and all-redline workload
 make perf-full
+
+# 64-session, 30-minute functional durability workload
+make perf-soak
 ```
 
 Do not use the username prompt as evidence that an interactive client joined
 the room, and do not use a sparse file made from zero bytes as a valid history
 fixture. The benchmark's measurement definitions, target budgets, JSON schema,
-and remaining coverage gaps are documented in `docs/PERFORMANCE.md`.
+scenario boundaries, and reviewed evidence are documented in
+`docs/PERFORMANCE.md`.
 
 ---
 

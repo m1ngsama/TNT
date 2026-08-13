@@ -1,0 +1,82 @@
+name: Performance charter
+
+on:
+  schedule:
+    - cron: '17 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      durability_seconds:
+        description: Functional durability duration in seconds
+        required: false
+        default: '1800'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: performance-charter-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  target-profile:
+    name: 64-session budget and durability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+
+    steps:
+    - name: Check out TNT
+      uses: actions/checkout@v6
+      with:
+        path: tnt
+
+    - name: Check out reference modules
+      uses: actions/checkout@v6
+      with:
+        repository: m1ngsama/tnt-modules
+        ref: v0.3.0
+        path: tnt-modules
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libssh-dev
+
+    - name: Run full 64-session performance contract
+      id: full_performance
+      working-directory: tnt
+      run: |
+        set -eu
+        MODULE_PATHS=$(find "$GITHUB_WORKSPACE/tnt-modules/modules" \
+          -mindepth 1 -maxdepth 1 -type d -name '*-module' -print | \
+          sort | paste -sd: -)
+        test -n "$MODULE_PATHS"
+        make perf-full \
+          PERF_MODULE_PATHS="$MODULE_PATHS" \
+          PERF_OUTPUT="$RUNNER_TEMP/perf-full.json"
+
+    - name: Run 64-session functional durability contract
+      id: durability
+      if: ${{ always() && steps.full_performance.outcome == 'success' }}
+      working-directory: tnt
+      env:
+        REQUESTED_DURATION: ${{ inputs.durability_seconds }}
+      run: |
+        set -eu
+        DURATION=${REQUESTED_DURATION:-1800}
+        make perf-soak \
+          PERF_SOAK_DURATION="$DURATION" \
+          PERF_SOAK_OUTPUT="$RUNNER_TEMP/perf-soak.json"
+
+    - name: Preserve performance evidence
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: performance-charter-${{ github.run_id }}
+        path: |
+          ${{ runner.temp }}/perf-full.json
+          ${{ runner.temp }}/perf-soak.json
+        if-no-files-found: error
+        retention-days: 90

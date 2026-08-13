@@ -24,6 +24,8 @@ and environment metadata.
 | Opt-in concurrency | `make stress-test` | Concurrent-client connection and messaging behavior | Configure `CLIENTS` and `DURATION`; command must exit zero |
 | Opt-in durability | `make soak-test` | Idle, reconnect, and control-plane durability | Configure `DURATION` and `RECONNECTS`; command must exit zero |
 | Opt-in backpressure | `make slow-client-test` | Progress and bounded behavior with an unread interactive client | Configure `DURATION` and `BURST_CHARS`; command must exit zero |
+| Target performance | `make perf-full` | 64 joins/storm, all-receiver delivery, ordered ingest, memory, slow-client, capacity, and optional module comparison | Every correctness check and performance redline must pass |
+| Functional durability | `make perf-soak` | 64 real sessions for 30 minutes with rotating senders, all-peer delivery, ordered persistence, survival, and memory sampling | Every acceptance field in the JSON report must be true |
 
 `test_utf8` is built and run automatically by `make unit-test`; UTF-8 validation
 does not require a separate manual compilation step.
@@ -66,6 +68,7 @@ make security-test PORT=14220
 CLIENTS=20 DURATION=60 make stress-test PORT=14230
 DURATION=1800 RECONNECTS=20 make soak-test PORT=14240
 DURATION=30 BURST_CHARS=3200 make slow-client-test PORT=14250
+make perf-soak PERF_SOAK_OUTPUT=/tmp/tnt-perf-soak.json
 ```
 
 AddressSanitizer and static-analysis entry points are separate from the normal
@@ -101,6 +104,7 @@ The available profiles have different purposes:
 | CI smoke gate | `make perf-smoke PERF_OUTPUT=/tmp/tnt-perf-smoke.json` | Short profile that enforces the stable startup, idle RSS, and main-binary redlines while recording broader metrics |
 | Normal stable gate | `make perf-check PERF_OUTPUT=/tmp/tnt-perf-check.json` | Normal sample sizes with the same stable redlines enforced |
 | Target workload | `make perf-full PERF_OUTPUT=/tmp/tnt-perf-full.json` | Exercises 64 joined sessions and 1,000 ordered messages and gates every eligible redline |
+| 30-minute durability | `make perf-soak PERF_SOAK_OUTPUT=/tmp/tnt-perf-soak.json` | Keeps 64 functional sessions joined for 1,800 seconds and gates correctness, survival, peak RSS, and RSS growth |
 
 `make script-test` runs `tests/test_perf_benchmark.sh`, which verifies the
 driver's percentile/budget helpers, command-line surface, and minimum sample

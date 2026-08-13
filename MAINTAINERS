@@ -83,7 +83,7 @@ F: docs/CICD.md
 TESTING
 S: Maintained
 F: tests/**
-F: scripts/perf_benchmark.py
+F: scripts/perf_*.py
 
 DOCUMENTATION
 S: Maintained

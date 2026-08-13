@@ -38,14 +38,31 @@ CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 PERF_STARTUP_SAMPLES ?= 21
 PERF_HANDSHAKE_SAMPLES ?= 11
 PERF_FANOUT_SAMPLES ?= 11
+PERF_STORM_CLIENTS ?= 8
 PERF_CLIENTS ?= 8
 PERF_IDLE_SECONDS ?= 2
 PERF_MESSAGES ?= 100
 PERF_HISTORY_RECORDS ?= 100000
+PERF_SLOW_CLIENT_SAMPLES ?= 5
+PERF_SLOW_CLIENT_CHARACTERS ?= 3200
+PERF_SLOW_CLIENT_MESSAGES ?= 16
+PERF_MODULE_PATHS ?=
+PERF_MODULE_CLIENTS ?= 8
+PERF_MODULE_MESSAGES ?= 100
+PERF_SERVER_WRAPPER ?=
 PERF_ENFORCE ?= none
 PERF_OUTPUT ?=
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full info
+PERF_SOAK_CLIENTS ?= 64
+PERF_SOAK_DURATION ?= 1800
+PERF_SOAK_WARMUP ?= 1
+PERF_SOAK_MESSAGE_INTERVAL ?= 10
+PERF_SOAK_SAMPLE_INTERVAL ?= 10
+PERF_SOAK_PROGRESS_INTERVAL ?= 60
+PERF_SOAK_SERVER_WRAPPER ?=
+PERF_SOAK_OUTPUT ?=
+
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
 
 all: $(TARGETS)
 
@@ -209,10 +226,19 @@ perf: all
 		--startup-samples "$(PERF_STARTUP_SAMPLES)" \
 		--handshake-samples "$(PERF_HANDSHAKE_SAMPLES)" \
 		--fanout-samples "$(PERF_FANOUT_SAMPLES)" \
+		--storm-clients "$(PERF_STORM_CLIENTS)" \
 		--clients "$(PERF_CLIENTS)" \
 		--idle-seconds "$(PERF_IDLE_SECONDS)" \
 		--messages "$(PERF_MESSAGES)" \
-		--history-records "$(PERF_HISTORY_RECORDS)" $(if $(strip $(PERF_OUTPUT)),--output "$(PERF_OUTPUT)",) \
+		--history-records "$(PERF_HISTORY_RECORDS)" \
+		--slow-client-samples "$(PERF_SLOW_CLIENT_SAMPLES)" \
+		--slow-client-characters "$(PERF_SLOW_CLIENT_CHARACTERS)" \
+		--slow-client-messages "$(PERF_SLOW_CLIENT_MESSAGES)" \
+		--module-clients "$(PERF_MODULE_CLIENTS)" \
+		--module-messages "$(PERF_MODULE_MESSAGES)" \
+		$(if $(strip $(PERF_SERVER_WRAPPER)),--server-wrapper "$(PERF_SERVER_WRAPPER)",) \
+		$(if $(strip $(PERF_MODULE_PATHS)),--module-paths "$(PERF_MODULE_PATHS)",) \
+		$(if $(strip $(PERF_OUTPUT)),--output "$(PERF_OUTPUT)",) \
 		--enforce "$(PERF_ENFORCE)"
 
 # Short CI workload; 21 startup samples keep nearest-rank p95 from collapsing
@@ -220,10 +246,12 @@ perf: all
 perf-smoke: PERF_STARTUP_SAMPLES = 21
 perf-smoke: PERF_HANDSHAKE_SAMPLES = 11
 perf-smoke: PERF_FANOUT_SAMPLES = 5
+perf-smoke: PERF_STORM_CLIENTS = 5
 perf-smoke: PERF_CLIENTS = 2
 perf-smoke: PERF_IDLE_SECONDS = 1
 perf-smoke: PERF_MESSAGES = 20
 perf-smoke: PERF_HISTORY_RECORDS = 1000
+perf-smoke: PERF_SLOW_CLIENT_MESSAGES = 4
 perf-smoke: PERF_ENFORCE = stable
 perf-smoke: perf
 
@@ -231,13 +259,36 @@ perf-smoke: perf
 perf-check: PERF_ENFORCE = stable
 perf-check: perf
 
-# Exercise the issue #66 target concurrency. Longer 30-minute durability
-# remains the responsibility of make soak-test with an explicit duration.
+# Exercise and enforce the issue #66 target concurrency and all-receiver load.
 perf-full: PERF_CLIENTS = 64
+perf-full: PERF_STORM_CLIENTS = 64
 perf-full: PERF_IDLE_SECONDS = 10
 perf-full: PERF_MESSAGES = 1000
 perf-full: PERF_ENFORCE = all
 perf-full: perf
+
+# Long-duration functional contract for issue #66. Every one of 64 real
+# sessions sends, every marker must persist in order and render everywhere,
+# and RSS/virtual memory are sampled for the full 30-minute default duration.
+perf-soak: all
+	@./scripts/perf_soak.py \
+		--binary ./tnt \
+		--clients "$(PERF_SOAK_CLIENTS)" \
+		--duration "$(PERF_SOAK_DURATION)" \
+		--warmup "$(PERF_SOAK_WARMUP)" \
+		--message-interval "$(PERF_SOAK_MESSAGE_INTERVAL)" \
+		--sample-interval "$(PERF_SOAK_SAMPLE_INTERVAL)" \
+		--progress-interval "$(PERF_SOAK_PROGRESS_INTERVAL)" \
+		$(if $(strip $(PERF_SOAK_SERVER_WRAPPER)),--server-wrapper "$(PERF_SOAK_SERVER_WRAPPER)",) \
+		$(if $(strip $(PERF_SOAK_OUTPUT)),--output "$(PERF_SOAK_OUTPUT)",)
+
+perf-soak-smoke: PERF_SOAK_CLIENTS = 5
+perf-soak-smoke: PERF_SOAK_DURATION = 2
+perf-soak-smoke: PERF_SOAK_WARMUP = 0.1
+perf-soak-smoke: PERF_SOAK_MESSAGE_INTERVAL = 0.2
+perf-soak-smoke: PERF_SOAK_SAMPLE_INTERVAL = 0.2
+perf-soak-smoke: PERF_SOAK_PROGRESS_INTERVAL = 0
+perf-soak-smoke: perf-soak
 
 ci-test:
 	@$(MAKE) test PORT=$(CI_TEST_PORT)

@@ -9,7 +9,7 @@ A minimalist terminal chat server with Vim-style interface over SSH.
 - **Vim-style UI** - Modal editing (INSERT/NORMAL/COMMAND)
 - **UTF-8 native** - Full Unicode support
 - **Measured performance** - Reproducible startup, RSS, handshake,
-  post-to-render, and ingest benchmark with machine-readable reports
+  all-receiver fan-out, ingest, backpressure, module, and durability reports
 - **Secure** - Rate limiting, auth failure protection, input validation
 - **Persistent** - Auto-saves chat history
 - **Elegant** - Flicker-free TUI rendering
@@ -306,7 +306,8 @@ make slow-client-test # run slow interactive-client backpressure test
 make user-lifecycle-test # run a two-user TUI lifecycle test
 make perf          # write a reproducible real-client JSON benchmark
 make perf-smoke    # run the short, minimum-sample stable budget gate
-make perf-full     # exercise the 64-session target workload
+make perf-full     # gate the complete 64-session target workload
+make perf-soak     # hold 64 functional sessions for 30 minutes
 make ci-test       # run the same checks as GitHub Actions
 
 # Individual tests
@@ -523,6 +524,8 @@ Delete `motd.txt` to disable the MOTD.
 - [CI/CD](docs/CICD.md) - Continuous integration setup
 - [Performance Contract](docs/PERFORMANCE.md) - Reproducible benchmark,
   budgets, measurement semantics, and coverage boundaries
+- [Reviewed Performance Evidence](docs/performance/README.md) - Versioned,
+  machine-readable full-load and 30-minute durability baselines
 - [Quick Reference](docs/QUICKREF.md) - Command cheat sheet
 
 ## Performance
@@ -532,9 +535,17 @@ OpenSSH clients, requires at least five samples for latency distributions,
 verifies that interactive clients actually joined the room, checks message
 completeness and ordering, and writes a machine-readable JSON report.
 
+The latest reviewed measurements are the linked
+[64-session full profile](docs/performance/full-linux-x86_64-1cpu-128m.json) and
+[30-minute functional durability profile](docs/performance/soak-linux-x86_64-1cpu-128m.json).
+They include their exact commit, hardware, runtime, module revision, raw samples,
+percentiles, correctness results, and memory observations; they are evidence for
+that recorded host rather than universal numbers.
+
 The reference budgets include 20 ms existing-key startup, 8 MiB idle RSS,
-64 sessions within 80 MiB RSS, a 50 ms local handshake p95, 5 ms interactive
-post-to-render p99, 1,000 persisted messages/second, and a 256 KiB main binary.
+64 sessions within 80 MiB RSS, a 50 ms local handshake p95, 5 ms conservative
+exec-post-to-all-receivers p99, 1,000 persisted messages/second, and a 256 KiB
+main binary.
 These are ideal targets; separate regression redlines and exact metric definitions
 are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Run the benchmark
 on the deployment class you care about instead of extrapolating from another
