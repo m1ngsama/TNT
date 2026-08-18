@@ -1,0 +1,306 @@
+.TH TNT-CHAT 7 "2026-08-18" "TNT 1.3.0"
+.SH NAME
+tnt-chat \- use the TNT interactive terminal interface
+.SH DESCRIPTION
+The TNT interactive interface is a shared chat room presented through an
+SSH terminal session.
+It has INSERT, NORMAL, and COMMAND modes.
+A new session starts in INSERT mode after the user chooses a nickname.
+.P
+Public messages are visible to the room and are persisted by the server.
+Private messages are kept only in the participating sessions.
+.SH CONNECTING
+Connect with a terminal and request a PTY:
+.P
+.EX
+ssh \-p 2222 any-user@chat.example.com
+.EE
+.P
+The SSH login name controls authentication.
+It does not select the interactive
+nickname.
+TNT prompts for a nickname after login.
+An empty or invalid nickname becomes
+.BR anonymous .
+Nicknames are limited to 20 Unicode characters.
+They must be unique among active
+sessions without regard to ASCII letter case.
+The names
+.BR * ,
+.BR system ,
+.BR 系统 ,
+and the
+.B module:
+prefix are reserved for internal messages.
+.P
+If the administrator configured an access token,
+enter it as the SSH password.
+The token is shared and does not authenticate the nickname.
+.SH MODES
+.SS INSERT mode
+INSERT mode edits and sends public messages.
+.TP
+.B Enter
+Send the current nonempty message.
+.TP
+.B Esc
+Enter NORMAL mode.
+.TP
+.B Backspace
+Delete the preceding Unicode character.
+.TP
+.B Ctrl-W
+Delete the preceding word.
+.TP
+.B Ctrl-U
+Delete the input line.
+.TP
+.B Up, Down
+Move through this session's last 16 sent messages.
+.TP
+.B Tab
+Complete an online nickname in the trailing
+.B @
+token.
+.TP
+.B Ctrl-C
+Enter NORMAL mode.
+.P
+Bracketed multiline paste is inserted as one message.
+Line breaks in the pasted text become spaces.
+Input that exceeds the message limit or contains invalid UTF-8 is rejected
+with a terminal bell.
+.SS NORMAL mode
+NORMAL mode browses the in-memory room history.
+The view follows new messages until the user scrolls upward.
+.TP
+.B i, a, A, o, O
+Enter INSERT mode.
+.TP
+.B :
+Enter COMMAND mode.
+.TP
+.B /
+Enter COMMAND mode with
+.B search
+preloaded.
+.TP
+.B j, Down
+Scroll one line toward newer messages.
+.TP
+.B k, Up
+Scroll one line toward older messages.
+.TP
+.B Ctrl-D, Ctrl-U
+Scroll half a page down or up.
+.TP
+.B Ctrl-F, Ctrl-B
+Scroll a page down or up.
+.TP
+.B PageDown, PageUp
+Scroll a page down or up.
+.TP
+.B End, Home
+Jump to the newest or oldest visible message.
+.TP
+.B g, G
+Jump to the oldest or newest visible message.
+.TP
+.B ?
+Open the interactive key reference.
+.TP
+.B Ctrl-C
+Disconnect.
+.SS COMMAND mode
+COMMAND mode edits a command without the leading colon shown in command
+documentation.
+.TP
+.B Enter
+Execute the command.
+.TP
+.B Esc
+Cancel the command and enter NORMAL mode.
+.TP
+.B Backspace
+Delete the preceding Unicode character.
+.TP
+.B Ctrl-W
+Delete the preceding word.
+.TP
+.B Ctrl-U
+Delete the command line.
+.TP
+.B Up, Down
+Move through this session's last 16 commands.
+.TP
+.B Tab
+Complete a command name.
+For
+.BR msg ,
+.BR theme ,
+and
+.BR lang ,
+it also completes the first argument.
+.SH MESSAGES
+A public message must be valid UTF-8 and may contain at most 1023 bytes.
+C0 and C1 control characters and DEL are not accepted as message text.
+.TP
+.BI "/me " action
+Send an action message.
+The stored action includes the nickname.
+It must fit the same message limit.
+.TP
+.BI @ nickname
+Mention an online user in a public message.
+The recipient receives a terminal bell and highlight.
+.P
+The room keeps the 100 most recent public messages in memory.
+Use
+.B :last
+or
+.B :search
+to read valid records from the active persistent log.
+.SH COMMANDS
+Commands are introduced by
+.B :
+in NORMAL mode.
+The following aliases have identical behavior.
+.TP
+.B :users, :list, :who
+List active nicknames and connection durations.
+.TP
+.BI ":msg " "user message"
+.TQ
+.BI ":w " "user message"
+Send a private message to an active user.
+Both the sender and recipient receive a session-local inbox copy.
+.TP
+.BI ":reply " message
+.TQ
+.BI ":r " message
+Reply to the most recent private-message peer.
+.TP
+.B :inbox
+Open the private-message inbox, newest first.
+Unread incoming messages are marked and counted until displayed.
+The open inbox refreshes when a new private message arrives.
+.TP
+.B :inbox clear
+Clear the inbox and the current reply target.
+.TP
+.BI ":nick " name
+.TQ
+.BI ":name " name
+Change the current nickname.
+.TP
+.BI ":last " [count]
+Display up to
+.I count
+valid messages from the active log's recent record window.
+The range is 1 through 50; the default is 10.
+.TP
+.BI ":search " keyword
+Search persisted usernames and content without regard to ASCII letter case.
+The last 15 matches are displayed.
+.TP
+.B :mute-joins, :mute
+Toggle display of join and leave notices for this session.
+.TP
+.BI ":theme " [name]
+.TQ
+.BI ":color " [name]
+Show or set the session colour theme.
+Valid names are
+.BR cyan ,
+.BR green ,
+.BR magenta ,
+.BR blue ,
+.BR amber ,
+.BR red ,
+and
+.BR mono .
+The default is
+.BR cyan .
+.TP
+.BI ":lang " [en|zh]
+.TQ
+.BI ":language " [en|zh]
+Show or set the session interface language.
+.TP
+.B :help
+Open the concise interactive manual.
+.TP
+.B :clear, :cls
+Clear the current command output.
+.TP
+.B :q, :quit, :exit
+Disconnect.
+.SH PAGERS
+Command output and help use a pager.
+.TP
+.B q, Esc
+Close the pager.
+.TP
+.B j, k, Down, Up
+Scroll one line down or up.
+.TP
+.B Ctrl-D, Ctrl-U
+Scroll half a page down or up.
+.TP
+.B Ctrl-F, Space
+Scroll a page down.
+.TP
+.B Ctrl-B, b
+Scroll a page up.
+.TP
+.B PageDown, PageUp
+Scroll a page down or up.
+.TP
+.B End, Home
+Jump to the end or beginning.
+.TP
+.B g, G
+Jump to the beginning or end.
+.TP
+.B r, R
+Refresh live inbox output.
+These keys have no effect in other command-output pages.
+.TP
+.B l, L
+Cycle the interface language while the help page is open.
+.SH CAVEATS
+The private inbox holds at most 16 messages per session.
+Older messages are discarded when it fills.
+Private messages are not written to
+.IR messages.log ,
+do not appear in public history or exec output, and are lost at disconnect.
+.P
+Public nicknames are labels, not authenticated identities.
+Another session may reuse a nickname after its owner disconnects.
+.P
+The terminal must support the ANSI control sequences used by the interface.
+.SH EXAMPLES
+Send an action from INSERT mode:
+.P
+.EX
+/me waves
+.EE
+.P
+Send and then answer a private message from COMMAND mode:
+.P
+.EX
+:msg alice hello
+:reply thanks
+.EE
+.P
+Search persistent history:
+.P
+.EX
+:search release
+.EE
+.SH SEE ALSO
+.BR ssh (1),
+.BR tntctl (1),
+.BR tnt\-message\-log (5),
+.BR tnt\-exec (7),
+.BR tnt (8)

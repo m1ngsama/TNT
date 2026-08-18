@@ -260,12 +260,25 @@ int message_save(const message_t *msg) {
     return rc;
 }
 
+static void message_reverse(message_t *messages, int first, int last) {
+    while (first < last) {
+        message_t tmp = messages[first];
+        messages[first++] = messages[last];
+        messages[last--] = tmp;
+    }
+}
+
 /* Search log file for messages whose username or content contains query.
  * Case-insensitive. Returns the last max_results matches (most recent); caller frees *results. */
 int message_search(const char *query, message_t **results, int max_results) {
     char log_path[PATH_MAX];
+    message_t *res;
 
-    message_t *res = calloc(max_results, sizeof(message_t));
+    if (!results) return 0;
+    *results = NULL;
+    if (max_results <= 0) return 0;
+
+    res = calloc((size_t)max_results, sizeof(message_t));
     if (!res) return 0;
 
     if (!query || query[0] == '\0' ||
@@ -284,6 +297,7 @@ int message_search(const char *query, message_t **results, int max_results) {
 
     char line[MESSAGE_LOG_MAX_LINE];
     int count = 0;
+    int next = 0;
     time_t now = time(NULL);
 
     while (fgets(line, sizeof(line), fp)) {
@@ -298,19 +312,20 @@ int message_search(const char *query, message_t **results, int max_results) {
         if (strcasestr(m.username, query) == NULL &&
             strcasestr(m.content, query) == NULL) continue;
 
-        if (count < max_results) {
-            res[count++] = m;
-        } else {
-            memmove(&res[0], &res[1], (max_results - 1) * sizeof(message_t));
-            res[max_results - 1] = m;
-            /* count stays at max_results */
-        }
+        res[next++] = m;
+        if (next == max_results) next = 0;
+        if (count < max_results) count++;
     }
 
     fclose(fp);
     pthread_mutex_unlock(&g_message_file_lock);
+    if (count == max_results && next != 0) {
+        message_reverse(res, 0, next - 1);
+        message_reverse(res, next, max_results - 1);
+        message_reverse(res, 0, max_results - 1);
+    }
     *results = res;
-    return (count < max_results) ? count : max_results;
+    return count;
 }
 
 int message_dump_text(char **output, size_t *output_len, int max_records) {

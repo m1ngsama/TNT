@@ -35,6 +35,9 @@ F: src/exec*.c
 F: src/tntctl*.c
 F: tests/test_exec_mode.sh
 F: tests/test_tntctl_cli.sh
+F: tests/test_completions.sh
+F: tnt-exec.7
+F: tntctl.1
 
 INTERACTIVE TUI
 S: Maintained
@@ -46,6 +49,7 @@ F: src/tui*.c
 F: src/history_view.c
 F: tests/test_interactive_input.sh
 F: tests/test_user_lifecycle.sh
+F: tnt-chat.7
 
 MESSAGE STORAGE
 S: Maintained
@@ -54,7 +58,7 @@ F: src/message*.c
 F: scripts/logrotate.sh
 F: tests/test_message_log_tool.sh
 F: tests/test_logrotate.sh
-F: docs/MESSAGE_LOG.md
+F: tnt-message-log.5
 
 MODULE CORE INTERFACE
 S: Maintained
@@ -64,8 +68,7 @@ F: scripts/module_check.sh
 F: scripts/install_wizard.sh
 F: tests/test_module_*.sh
 F: tests/test_install_wizard.sh
-F: docs/MODULE_PROTOCOL.md
-F: docs/INSTALL_LIFECYCLE.md
+F: tnt-module-protocol.7
 
 PACKAGING AND RELEASE
 S: Maintained
@@ -77,18 +80,15 @@ F: scripts/release_check.sh
 F: scripts/setup_cron.sh
 F: tests/test_release_artifact_gate.sh
 F: tests/test_source_archive.sh
-F: docs/DEPLOYMENT.md
-F: docs/CICD.md
 
 TESTING
 S: Maintained
 F: tests/**
 F: scripts/perf_*.py
 
-DOCUMENTATION
+MANUAL PAGES
 S: Maintained
-F: README.md
-F: SECURITY.md
-F: docs/**
-F: tnt.1
-F: tntctl.1
+F: tnt*.1
+F: tnt*.5
+F: tnt*.7
+F: tnt*.8

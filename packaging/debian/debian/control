@@ -5,6 +5,7 @@ Maintainer: M1ng <contact@m1ng.space>
 Build-Depends:
  debhelper-compat (= 13),
  libssh-dev,
+ mandoc,
  make,
  gcc
 Standards-Version: 4.7.0
@@ -16,7 +17,8 @@ Architecture: any
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
- adduser
+ adduser,
+ openssh-client
 Description: SSH-native terminal chat server
  TNT is a minimalist terminal chat server accessed over SSH. It provides a
  Vim-style terminal interface, anonymous access by default, persistent message

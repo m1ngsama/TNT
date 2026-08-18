@@ -136,17 +136,17 @@ TEST(utf8_remove_last_char) {
 
     /* Test ASCII */
     strcpy(buffer, "Hello");
-    utf8_remove_last_char(buffer);
+    assert(utf8_remove_last_char(buffer, 5) == 4);
     assert(strcmp(buffer, "Hell") == 0);
 
     /* Test empty string */
     strcpy(buffer, "");
-    utf8_remove_last_char(buffer);
+    assert(utf8_remove_last_char(buffer, 0) == 0);
     assert(strcmp(buffer, "") == 0);
 
     /* Test single char */
     strcpy(buffer, "A");
-    utf8_remove_last_char(buffer);
+    assert(utf8_remove_last_char(buffer, 1) == 0);
     assert(strcmp(buffer, "") == 0);
 }
 
@@ -155,12 +155,12 @@ TEST(utf8_remove_last_char_multibyte) {
 
     /* Test 2-byte UTF-8 */
     strcpy(buffer, "café");
-    utf8_remove_last_char(buffer);
+    assert(utf8_remove_last_char(buffer, strlen(buffer)) == 3);
     assert(strcmp(buffer, "caf") == 0);
 
     /* Test 3-byte UTF-8 (CJK) */
     strcpy(buffer, "你好");
-    utf8_remove_last_char(buffer);
+    assert(utf8_remove_last_char(buffer, strlen(buffer)) == 3);
     assert(strcmp(buffer, "你") == 0);
 }
 
@@ -170,27 +170,27 @@ TEST(utf8_remove_last_word) {
 
     /* Test simple case */
     strcpy(buffer, "hello world");
-    utf8_remove_last_word(buffer);
+    assert(utf8_remove_last_word(buffer, 11) == 6);
     assert(strcmp(buffer, "hello ") == 0);
 
     /* Test multiple words */
     strcpy(buffer, "one two three");
-    utf8_remove_last_word(buffer);
+    assert(utf8_remove_last_word(buffer, 13) == 8);
     assert(strcmp(buffer, "one two ") == 0);
 
     /* Test trailing spaces */
     strcpy(buffer, "hello   ");
-    utf8_remove_last_word(buffer);
+    assert(utf8_remove_last_word(buffer, 8) == 0);
     assert(strcmp(buffer, "") == 0);
 
     /* Test single word */
     strcpy(buffer, "word");
-    utf8_remove_last_word(buffer);
+    assert(utf8_remove_last_word(buffer, 4) == 0);
     assert(strcmp(buffer, "") == 0);
 
     /* Test empty string */
     strcpy(buffer, "");
-    utf8_remove_last_word(buffer);
+    assert(utf8_remove_last_word(buffer, 0) == 0);
     assert(strcmp(buffer, "") == 0);
 }
 
@@ -209,6 +209,16 @@ TEST(utf8_is_valid_sequence) {
     assert(utf8_is_valid_sequence("", 0) == false);
     assert(utf8_is_valid_sequence("ABCDE", 5) == false);  /* Too long */
     assert(utf8_is_valid_sequence(NULL, 1) == false);
+}
+
+TEST(utf8_control_character_detection) {
+    assert(!utf8_contains_control("plain text 中"));
+    assert(!utf8_contains_control(NULL));
+    assert(utf8_contains_control("line\nnext"));
+    assert(utf8_contains_control("\033[2J"));
+    assert(utf8_contains_control("delete\x7f"));
+    assert(utf8_contains_control("next\xC2\x85line"));
+    assert(utf8_contains_control("osc\xC2\x9Dpayload"));
 }
 
 /* Test boundary cases */
@@ -250,6 +260,7 @@ int main(void) {
     RUN_TEST(utf8_remove_last_char_multibyte);
     RUN_TEST(utf8_remove_last_word);
     RUN_TEST(utf8_is_valid_sequence);
+    RUN_TEST(utf8_control_character_detection);
     RUN_TEST(utf8_boundary_cases);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);

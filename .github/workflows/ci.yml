@@ -33,15 +33,19 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y cpio expect libssh-dev ruby
+        sudo apt-get install -y cpio expect fish libssh-dev mandoc ruby zsh
 
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install libssh coreutils
+        brew install libssh coreutils fish
 
     - name: Build with AddressSanitizer
       run: make asan
+
+    - name: Run UndefinedBehaviorSanitizer gate
+      if: runner.os == 'Linux'
+      run: make ubsan-test PORT=13680
 
     - name: Run comprehensive tests (macOS)
       if: runner.os == 'macOS'
@@ -140,6 +144,52 @@ jobs:
           exit 1
         fi
 
+    - name: Run constrained performance gate
+      run: |
+        set -eu
+        GROUP_NAME="tnt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        GROUP="/sys/fs/cgroup/$GROUP_NAME"
+        REPORT="$RUNNER_TEMP/tnt-constrained.json"
+        cleanup() {
+          status=$?
+          trap - EXIT
+          if [ -d "$GROUP" ]; then
+            if [ -f "$GROUP/cgroup.kill" ]; then
+              echo 1 | sudo tee "$GROUP/cgroup.kill" >/dev/null || true
+            fi
+            for _ in $(seq 1 50); do
+              grep -q '^populated 0$' "$GROUP/cgroup.events" && break
+              sleep 0.1
+            done
+            if ! sudo rmdir "$GROUP"; then
+              status=1
+            fi
+          fi
+          if ! rm -f "$REPORT"; then
+            status=1
+          fi
+          exit "$status"
+        }
+        trap cleanup EXIT
+        sudo mkdir "$GROUP"
+        echo 33554432 | sudo tee "$GROUP/memory.max" >/dev/null
+        echo 0 | sudo tee "$GROUP/memory.swap.max" >/dev/null
+        echo 16 | sudo tee "$GROUP/pids.max" >/dev/null
+        echo '50000 100000' | sudo tee "$GROUP/cpu.max" >/dev/null
+        make perf-smoke \
+          PERF_SERVER_WRAPPER="./tests/cgroup_exec.sh $GROUP" \
+          PERF_OUTPUT="$REPORT"
+        python3 - "$REPORT" "$GROUP_NAME" <<'PY'
+        import json
+        import sys
+
+        report = json.load(open(sys.argv[1], encoding="utf-8"))
+        limits = report["metrics"]["server_constraints"]
+        assert limits["cgroup_v2_path"] == "/" + sys.argv[2], limits
+        assert limits["memory_max_bytes"] == 33554432, limits
+        assert limits["memory_swap_max_bytes"] == 0, limits
+        PY
+
   portable-container-builds:
     name: Portable build (${{ matrix.name }})
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
@@ -168,6 +218,9 @@ jobs:
           cd /work
           make clean
           make
+          ./tnt --version
+          ./tntctl --version
+          make small
           ./tnt --version
           ./tntctl --version
         '

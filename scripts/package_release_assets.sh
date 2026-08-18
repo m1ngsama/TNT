@@ -88,9 +88,12 @@ verify_asset() {
                 fail "source archive is not a readable tar.gz: $name"
             require_archive_entry "TNT-$VERSION/LICENSE" "LICENSE"
             require_archive_entry "TNT-$VERSION/src/tntctl.c" "src/tntctl.c"
-            require_archive_entry "TNT-$VERSION/packaging/README.md" "packaging/README.md"
-            require_archive_entry "TNT-$VERSION/tnt.1" "tnt.1"
             require_archive_entry "TNT-$VERSION/tntctl.1" "tntctl.1"
+            require_archive_entry "TNT-$VERSION/tnt-message-log.5" "tnt-message-log.5"
+            require_archive_entry "TNT-$VERSION/tnt-chat.7" "tnt-chat.7"
+            require_archive_entry "TNT-$VERSION/tnt-exec.7" "tnt-exec.7"
+            require_archive_entry "TNT-$VERSION/tnt-module-protocol.7" "tnt-module-protocol.7"
+            require_archive_entry "TNT-$VERSION/tnt.8" "tnt.8"
             ;;
         *)
             fail "unexpected release artifact: $name"

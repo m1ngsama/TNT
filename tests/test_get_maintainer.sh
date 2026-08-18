@@ -28,12 +28,12 @@ else
     printf '%s\n' "$MODULE_OUTPUT"
 fi
 
-DOC_OUTPUT=$("$ROOT/scripts/get_maintainer.sh" docs/MODULE_PROTOCOL.md)
+DOC_OUTPUT=$("$ROOT/scripts/get_maintainer.sh" tnt-module-protocol.7)
 if printf '%s\n' "$DOC_OUTPUT" |
-       awk -F'\t' '$2 == "MODULE CORE INTERFACE" { module = 1 } $2 == "DOCUMENTATION" { docs = 1 } END { exit module && docs ? 0 : 1 }'; then
-    pass "module protocol maps to module and documentation areas"
+       awk -F'\t' '$2 == "MODULE CORE INTERFACE" { module = 1 } $2 == "MANUAL PAGES" { manual = 1 } END { exit module && manual ? 0 : 1 }'; then
+    pass "module protocol maps to module and manual page areas"
 else
-    fail_case "module protocol maps to module and documentation areas"
+    fail_case "module protocol maps to module and manual page areas"
     printf '%s\n' "$DOC_OUTPUT"
 fi
 

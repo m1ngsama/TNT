@@ -9,3 +9,10 @@ override_dh_auto_build:
 override_dh_auto_install:
 	$(MAKE) DESTDIR=$(CURDIR)/debian/tnt-chat PREFIX=/usr install
 	$(MAKE) DESTDIR=$(CURDIR)/debian/tnt-chat PREFIX=/usr install-systemd
+
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+override_dh_auto_test:
+	$(MAKE) package-test
+else
+override_dh_auto_test:
+endif

@@ -137,6 +137,8 @@ int env_int(const char *name, int fallback, int min_val, int max_val) {
 }
 
 bool is_valid_username(const char *username) {
+    size_t length;
+
     if (!username || username[0] == '\0') {
         return false;
     }
@@ -145,16 +147,25 @@ bool is_valid_username(const char *username) {
     if (username[0] == ' ' || username[0] == '.' || username[0] == '-') {
         return false;
     }
+    if (strcmp(username, "*") == 0 || strcmp(username, "system") == 0 ||
+        strcmp(username, "系统") == 0 ||
+        strncmp(username, "module:", sizeof("module:") - 1) == 0) {
+        return false;
+    }
 
     /* Check for illegal characters that could cause injection */
     const char *illegal_chars = "|;&$`\n\r<>(){}[]'\"\\";
-    for (size_t i = 0; i < strlen(username); i++) {
-        /* Reject control characters (except tab) */
-        if (username[i] < 32 && username[i] != 9) {
+    length = strlen(username);
+    for (size_t i = 0; i < length; i++) {
+        unsigned char c = (unsigned char)username[i];
+
+        if (c < 0x20 || c == 0x7F ||
+            (c == 0xC2 && i + 1 < length &&
+             (unsigned char)username[i + 1] >= 0x80 &&
+             (unsigned char)username[i + 1] <= 0x9F)) {
             return false;
         }
-        /* Reject shell metacharacters */
-        if (strchr(illegal_chars, username[i])) {
+        if (strchr(illegal_chars, (int)c)) {
             return false;
         }
     }

@@ -83,7 +83,9 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
         strlen(content) >= MAX_MESSAGE_LEN) {
         return false;
     }
-    if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content)) {
+    if (!utf8_is_valid_string(username) || !utf8_is_valid_string(content) ||
+        utf8_contains_control(username) ||
+        utf8_contains_control(content)) {
         return false;
     }
 
@@ -110,7 +112,10 @@ int message_log_format_record(const message_t *msg, char *buffer,
     char timestamp[64];
     int needed;
 
-    if (!msg) {
+    if (!msg || !utf8_is_valid_string(msg->username) ||
+        !utf8_is_valid_string(msg->content) ||
+        utf8_contains_control(msg->username) ||
+        utf8_contains_control(msg->content)) {
         return -1;
     }
 

@@ -1,0 +1,350 @@
+.TH TNT 8 "2026-08-18" "TNT 1.3.0"
+.SH NAME
+tnt \- run the TNT SSH chat server
+.SH SYNOPSIS
+.SY tnt
+.RB [ \-p | \-\-port
+.IR port ]
+.RB [ \-d | \-\-state\-dir
+.IR directory ]
+.RB [ \-\-bind
+.IR address ]
+.RB [ \-\-public\-host
+.IR host ]
+.RB [ \-\-max\-connections
+.IR count ]
+.RB [ \-\-max\-conn\-per\-ip
+.IR count ]
+.RB [ \-\-max\-conn\-rate\-per\-ip
+.IR count ]
+.RB [ \-\-rate\-limit
+.BR 0 | 1 ]
+.RB [ \-\-idle\-timeout
+.IR seconds ]
+.RB [ \-\-ssh\-log\-level
+.IR level ]
+.YS
+.SY tnt
+.B \-\-log\-check
+.I file
+.YS
+.SY tnt
+.B \-\-log\-recover
+.I file
+.YS
+.SY tnt
+.BR \-h | \-\-help
+.YS
+.SY tnt
+.BR \-V | \-\-version
+.YS
+.SH DESCRIPTION
+.B tnt
+is a foreground SSH server that provides one shared terminal chat room.
+Clients use a standard SSH client for an interactive terminal or for a
+non-interactive exec request.
+See
+.BR tnt\-chat (7)
+for the terminal interface and
+.BR tnt\-exec (7)
+for the exec protocol.
+.P
+Public messages are appended to
+.I messages.log
+in the state directory.
+The most recent valid records are loaded when the server starts.
+.P
+The server writes its connection hint to standard output and diagnostics to
+standard error.
+It does not detach or create a PID file.
+.SH OPTIONS
+.TP
+.BI "\-p, \-\-port " port
+Listen on
+.IR port .
+The valid range is 1 through 65535; the default is 2222.
+This option overrides
+.BR PORT .
+.TP
+.BI "\-d, \-\-state\-dir " directory
+Use
+.I directory
+for persistent state.
+Missing directories are created with mode 0700.
+This option overrides
+.BR TNT_STATE_DIR .
+.TP
+.BI "\-\-bind " address
+Bind the SSH listener to
+.IR address .
+The default is
+.BR 0.0.0.0 .
+This option overrides
+.BR TNT_BIND_ADDR .
+.TP
+.BI "\-\-public\-host " host
+Use
+.I host
+in the startup connection hint.
+The default is
+.BR localhost .
+This option overrides
+.BR TNT_PUBLIC_HOST .
+.TP
+.BI "\-\-max\-connections " count
+Set the global concurrent connection limit.
+The valid range is 1 through 1024; the default is 64.
+This option overrides
+.BR TNT_MAX_CONNECTIONS .
+.TP
+.BI "\-\-max\-conn\-per\-ip " count
+Set the concurrent connection limit for one source IP address.
+The valid range is 1 through 1024; the default is 5.
+This option overrides
+.BR TNT_MAX_CONN_PER_IP .
+.TP
+.BI "\-\-max\-conn\-rate\-per\-ip " count
+Set the accepted connection count for one source IP address in each
+60-second window.
+The valid range is 1 through 1024; the default is 10.
+This option overrides
+.BR TNT_MAX_CONN_RATE_PER_IP .
+.TP
+.BI "\-\-rate\-limit " 0|1
+Enable or disable connection-rate and authentication-failure blocking.
+Global and per-IP concurrent limits remain active when this is 0.
+The default is 1.
+This option overrides
+.BR TNT_RATE_LIMIT .
+.TP
+.BI "\-\-idle\-timeout " seconds
+Disconnect an inactive interactive session after
+.I seconds
+seconds.
+The valid range is 0 through 86400; 0 disables this timeout.
+The default is 1800.
+This option overrides
+.BR TNT_IDLE_TIMEOUT .
+.TP
+.BI "\-\-ssh\-log\-level " level
+Set the libssh log level.
+The valid range is 0 through 4; the default is 1.
+This option overrides
+.BR TNT_SSH_LOG_LEVEL .
+.TP
+.BI "\-\-log\-check " file
+Validate a TNT message log without starting the server.
+A summary is written to standard output.
+The command returns 1 if a record is invalid or the file cannot be read.
+See
+.BR tnt\-message\-log (5).
+.TP
+.BI "\-\-log\-recover " file
+Write valid, canonical records from
+.I file
+to standard output and a summary to standard error.
+The source file is not modified.
+The command returns 1 if any record is skipped or an I/O operation fails.
+.P
+.B \-\-log\-check
+and
+.B \-\-log\-recover
+are mutually exclusive.
+.TP
+.BR \-V ", " \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print usage and exit.
+.SH EXIT STATUS
+.TP
+.B 0
+The server shut down cleanly, or a maintenance command succeeded.
+.TP
+.B 1
+Initialization, server operation, log validation, or log recovery failed.
+.TP
+.B 64
+An option or option argument was invalid.
+.SH ENVIRONMENT
+Command-line options take precedence over their corresponding variables.
+An unset, empty, nonnumeric, or out-of-range numeric variable uses its
+documented default.
+.TP
+.B PORT
+Default listening port.
+The range is 1 through 65535; the default is 2222.
+.TP
+.B TNT_STATE_DIR
+State directory.
+The default is the current working directory.
+.TP
+.B TNT_BIND_ADDR
+Listener address.
+The default is
+.BR 0.0.0.0 .
+.TP
+.B TNT_PUBLIC_HOST
+Host name in the startup connection hint.
+The default is
+.BR localhost .
+.TP
+.B TNT_ACCESS_TOKEN
+Require this shared token as the SSH password.
+When it is unset or empty, passwordless, password, and signed public-key
+authentication are accepted.
+When it is nonempty,
+passwordless and public-key authentication are rejected.
+Only the first 255 bytes are effective.
+.TP
+.B TNT_LANG
+Set the default interface and diagnostic language.
+Values beginning with
+.B en
+or
+.B zh
+select English or Chinese.
+An invalid explicit value selects English.
+.TP
+.BR LC_ALL ,
+.BR LC_MESSAGES ,
+.B LANG
+Select the language when
+.B TNT_LANG
+is unset, in the precedence shown.
+.TP
+.B TNT_MAX_CONNECTIONS
+Global connection limit.
+The range is 1 through 1024; the default is 64.
+.TP
+.B TNT_MAX_CONN_PER_IP
+Concurrent connection limit per source IP address.
+The range is 1 through 1024; the default is 5.
+.TP
+.B TNT_MAX_CONN_RATE_PER_IP
+Accepted connections per source IP address in each 60-second window.
+The range is 1 through 1024; the default is 10.
+.TP
+.B TNT_RATE_LIMIT
+Set to 0 to disable connection-rate and authentication-failure blocking.
+Set to 1 to enable it; 1 is the default.
+.TP
+.B TNT_IDLE_TIMEOUT
+Interactive idle timeout in seconds.
+The range is 0 through 86400; the default is 1800.
+.TP
+.B TNT_SSH_LOG_LEVEL
+libssh log level from 0 through 4.
+The default is 1.
+.TP
+.B TNT_MODULE_PATHS
+Colon-separated module directories.
+An unset or empty value disables modules.
+See
+.BR tnt\-module\-protocol (7).
+.SH SIGNALS
+.TP
+.B SIGINT
+Stop accepting connections, disconnect active clients, stop modules, and
+exit after session workers have finished.
+.TP
+.B SIGTERM
+Behave as for
+.BR SIGINT .
+.TP
+.B SIGPIPE
+Ignored.
+.SH FILES
+Relative state paths below are resolved in
+.BR TNT_STATE_DIR .
+.TP
+.I host_key
+The RSA host key.
+It is generated with 4096 bits when absent and written with mode 0600.
+.TP
+.I messages.log
+The active public message log.
+See
+.BR tnt\-message\-log (5).
+.TP
+.I messages.log.1
+The previous log produced by automatic rotation.
+.TP
+.I motd.txt
+Optional text displayed before the chat screen for each new interactive
+session.
+Any key closes the display.
+.TP
+.I /etc/default/tnt
+Optional environment file read by the supplied systemd service unit.
+.TP
+.I tnt.service
+The supplied systemd service unit, when installed in a systemd unit search
+path.
+.SH CAVEATS
+The default listener address exposes the service on every IPv4 interface.
+The default authentication mode admits anonymous clients.
+Set an access token and an appropriate bind address before exposing the
+service to an untrusted network.
+.P
+An access token is one shared secret.
+It does not associate an SSH login name or chat nickname with a person.
+.P
+Five authentication failures from one source IP address cause a five-minute
+block when rate limiting is enabled.
+Exceeding the configured connection rate also causes a five-minute block.
+.P
+The default state directory is the current working directory.
+Set an explicit directory for service operation and restrict access to it.
+.P
+External modules execute as the server account.
+They are not operating-system sandboxes.
+See
+.BR tnt\-module\-protocol (7).
+.SH BUGS
+Report ordinary defects at the
+.UR https://github.com/m1ngsama/TNT/issues
+TNT issue tracker
+.UE .
+.P
+Report suspected security vulnerabilities privately through
+.UR https://github.com/m1ngsama/TNT/security/advisories/new
+GitHub private vulnerability reporting
+.UE
+or by email to
+.BR contact@m1ng.space .
+Do not disclose a suspected vulnerability in a public issue.
+.SH EXAMPLES
+Start a server with explicit state and listener settings:
+.P
+.EX
+tnt \-p 3000 \-d /var/lib/tnt \-\-bind 127.0.0.1
+.EE
+.P
+Require a shared access token:
+.P
+.EX
+TNT_ACCESS_TOKEN=s3cret tnt \-d /var/lib/tnt
+.EE
+.P
+Connect from another machine:
+.P
+.EX
+ssh \-p 2222 user@chat.example.com
+.EE
+.P
+Enable and start the supplied systemd service:
+.P
+.EX
+systemctl enable \-\-now tnt.service
+.EE
+.SH SEE ALSO
+.BR ssh (1),
+.BR systemctl (1),
+.BR tntctl (1),
+.BR systemd.service (5),
+.BR tnt\-message\-log (5),
+.BR tnt\-chat (7),
+.BR tnt\-exec (7),
+.BR tnt\-module\-protocol (7),
+.BR sshd (8)

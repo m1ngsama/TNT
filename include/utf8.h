@@ -1,7 +1,9 @@
 #ifndef UTF8_H
 #define UTF8_H
 
-#include "common.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* UTF-8 character width calculation */
 int utf8_char_width(uint32_t codepoint);
@@ -29,15 +31,18 @@ void utf8_ansi_truncate(const char *src, char *dst, size_t dst_size,
 int utf8_strlen(const char *str);
 
 /* Remove last UTF-8 character from string */
-void utf8_remove_last_char(char *str);
+size_t utf8_remove_last_char(char *str, size_t len);
 
 /* Remove last word from string (mimic Ctrl+W) */
-void utf8_remove_last_word(char *str);
+size_t utf8_remove_last_word(char *str, size_t len);
 
 /* Validate a UTF-8 byte sequence */
 bool utf8_is_valid_sequence(const char *bytes, int len);
 
 /* Validate an entire NUL-terminated UTF-8 string */
 bool utf8_is_valid_string(const char *str);
+
+bool utf8_is_control_sequence(const char *bytes, int len);
+bool utf8_contains_control(const char *str);
 
 #endif /* UTF8_H */

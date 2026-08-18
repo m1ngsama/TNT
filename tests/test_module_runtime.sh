@@ -1,5 +1,4 @@
 #!/bin/sh
-# Module runtime regression tests for TNT.
 
 PORT=${PORT:-12352}
 PASS=0
@@ -9,6 +8,8 @@ STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-module-test.XXXXXX")
 MODULE_DIR="$STATE_DIR/echo-module"
 FLOOD_MODULE_DIR="$STATE_DIR/flood-module"
 INVALID_MODULE_DIR="$STATE_DIR/invalid-module"
+TIMEOUT_MODULE_DIR="$STATE_DIR/timeout-module"
+ISOLATION_MODULE_ROOT="$STATE_DIR/isolation-modules"
 SERVER_PID=""
 
 stop_server() {
@@ -19,8 +20,42 @@ stop_server() {
     fi
 }
 
+start_server() {
+    module_paths=$1
+    log_file=$2
+    shift 2
+    env TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 \
+        TNT_MAX_CONNECTIONS=256 TNT_MODULE_PATHS="$module_paths" "$@" \
+        "$BIN" -p "$PORT" -d "$STATE_DIR" >"$log_file" 2>&1 &
+    SERVER_PID=$!
+}
+
+wait_for_health() {
+    log_file=$1
+    label=$2
+    HEALTH_OUTPUT=""
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            echo "x $label failed to start"
+            sed -n '1,220p' "$log_file"
+            exit 1
+        fi
+        HEALTH_OUTPUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
+        [ "$HEALTH_OUTPUT" = "ok" ] && return
+        sleep 1
+    done
+    return 1
+}
+
 cleanup() {
     stop_server
+    if [ -f "$TIMEOUT_MODULE_DIR/helper.pid" ]; then
+        HELPER_PID=$(sed -n '1p' "$TIMEOUT_MODULE_DIR/helper.pid")
+        case "$HELPER_PID" in
+            ''|*[!0-9]*) ;;
+            *) kill -KILL "$HELPER_PID" 2>/dev/null || true ;;
+        esac
+    fi
     rm -rf "$STATE_DIR"
 }
 
@@ -47,6 +82,12 @@ JSON
 
 cat >"$MODULE_DIR/echo-module.sh" <<'SH'
 #!/bin/sh
+if [ "${TNT_ACCESS_TOKEN+x}" = x ]; then
+  exit 70
+fi
+if [ -n "${TNT_MODULE_ENV_MARKER:-}" ]; then
+  : > "$TNT_MODULE_ENV_MARKER"
+fi
 json_escape() {
   printf '%s' "$1" | awk '
     BEGIN { ORS = "" }
@@ -69,7 +110,7 @@ while IFS= read -r line; do
     fi
   elif printf '%s\n' "$line" | grep -q '"type"[[:space:]]*:[[:space:]]*"message.created"' && [ -n "$plain_text" ]; then
     escaped=$(json_escape "echo: $plain_text")
-    printf '{"type":"message.create","plain_text":"%s"}\n' "$escaped"
+    printf '{"type":"message.create","plain_text":"%s"}\n{"type":"event.ok"}\n' "$escaped"
   else
     printf '{"type":"event.ok"}\n'
   fi
@@ -139,23 +180,165 @@ done
 SH
 chmod +x "$INVALID_MODULE_DIR/invalid-module.sh"
 
+mkdir -p "$TIMEOUT_MODULE_DIR"
+cat >"$TIMEOUT_MODULE_DIR/tnt-module.json" <<'JSON'
+{
+  "protocol": "tnt.module.v1",
+  "name": "timeout-module",
+  "version": "0.1.0",
+  "entrypoint": "./timeout-module.sh",
+  "permissions": ["message:read", "message:create"],
+  "events": ["message.created"]
+}
+JSON
+
+cat >"$TIMEOUT_MODULE_DIR/timeout-module.sh" <<'SH'
+#!/bin/sh
+sleep 30 &
+helper_pid=$!
+printf '%s\n' "$helper_pid" > helper.pid
+
+finish() {
+  wait "$helper_pid" 2>/dev/null || true
+  exit 0
+}
+trap finish HUP INT TERM
+
+while :; do
+  if ! IFS= read -r line; then
+    wait "$helper_pid" 2>/dev/null || true
+    exit 0
+  fi
+  case "$line" in
+    *'"type":"handshake"'*)
+      printf '{"type":"handshake.ok","protocol":"tnt.module.v1","module":{"name":"timeout-module","version":"0.1.0"}}\n'
+      ;;
+    *'"type":"message.created"'*)
+      printf '{"type":"message.create","plain_text":"deadline one"}\n'
+      sleep 0.04
+      printf '{"type":"message.create","plain_text":"deadline two"}\n'
+      sleep 0.04
+      printf '{"type":"message.create","plain_text":"deadline three"}\n'
+      sleep 0.04
+      printf '{"type":"event.ok"}\n'
+      ;;
+    *)
+      printf '{"type":"event.ok"}\n'
+      ;;
+  esac
+done
+SH
+chmod +x "$TIMEOUT_MODULE_DIR/timeout-module.sh"
+
+mkdir -p "$ISOLATION_MODULE_ROOT"
+ISOLATION_MODULE_PATHS=""
+module_index=1
+while [ "$module_index" -le 8 ]; do
+    isolation_dir="$ISOLATION_MODULE_ROOT/isolation-$module_index"
+    mkdir -p "$isolation_dir"
+    cat >"$isolation_dir/tnt-module.json" <<JSON
+{
+  "protocol": "tnt.module.v1",
+  "name": "isolation-$module_index",
+  "version": "0.1.0",
+  "entrypoint": "./isolation-module.sh",
+  "permissions": ["message:read", "message:create"],
+  "events": ["message.created"]
+}
+JSON
+    cat >"$isolation_dir/isolation-module.sh" <<'SH'
+#!/bin/sh
+module_name=${PWD##*/}
+module_index=${module_name##*-}
+event_number=0
+
+while IFS= read -r line; do
+  case "$line" in
+    *'"type":"handshake"'*)
+      printf '{"type":"handshake.ok","protocol":"tnt.module.v1","module":{"name":"%s","version":"0.1.0"}}\n' "$module_name"
+      ;;
+    *'"type":"message.created"'*)
+      event_number=$((event_number + 1))
+      if [ "$event_number" -eq 1 ]; then
+        marker="$TNT_MODULE_COORD_FILE.event-1"
+        if [ "$module_index" -eq 1 ]; then
+          attempts=0
+          while [ ! -f "$marker" ] && [ "$attempts" -lt 200 ]; do
+            sleep 0.01
+            attempts=$((attempts + 1))
+          done
+          if [ -f "$marker" ]; then
+            printf '{"type":"message.create","plain_text":"event 1 isolation-1"}\n'
+          fi
+        elif [ "$module_index" -eq 8 ]; then
+          : > "$marker"
+          printf '{"type":"message.create","plain_text":"event 1 isolation-8"}\n'
+        fi
+      elif [ "$event_number" -eq 2 ]; then
+        marker="$TNT_MODULE_COORD_FILE.event-2"
+        if [ "$module_index" -eq 1 ]; then
+          : > "$marker"
+          printf '{"type":"message.create","plain_text":"event 2 isolation-1"}\n'
+        elif [ "$module_index" -eq 8 ]; then
+          attempts=0
+          while [ ! -f "$marker" ] && [ "$attempts" -lt 200 ]; do
+            sleep 0.01
+            attempts=$((attempts + 1))
+          done
+          if [ -f "$marker" ]; then
+            printf '{"type":"message.create","plain_text":"event 2 isolation-8"}\n'
+          fi
+        fi
+      fi
+      printf '{"type":"event.ok"}\n'
+      ;;
+    *)
+      printf '{"type":"event.ok"}\n'
+      ;;
+  esac
+done
+SH
+    chmod +x "$isolation_dir/isolation-module.sh"
+    if [ -z "$ISOLATION_MODULE_PATHS" ]; then
+        ISOLATION_MODULE_PATHS=$isolation_dir
+    else
+        ISOLATION_MODULE_PATHS="$ISOLATION_MODULE_PATHS:$isolation_dir"
+    fi
+    module_index=$((module_index + 1))
+done
+ISOLATION_COORD_FILE="$ISOLATION_MODULE_ROOT/last-worker-ready"
+
 echo "=== TNT Module Runtime Tests ==="
 
-TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MODULE_PATHS="$MODULE_DIR" \
-    TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
-SERVER_PID=$!
+SECRET_MARKER="$STATE_DIR/module-secret-not-inherited"
+start_server "$MODULE_DIR" "$STATE_DIR/secret-server.log" \
+    TNT_ACCESS_TOKEN=module-runtime-secret \
+    TNT_MODULE_ENV_MARKER="$SECRET_MARKER"
 
-HEALTH_OUTPUT=""
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "x server failed to start"
-        sed -n '1,160p' "$STATE_DIR/server.log"
-        exit 1
+SECRET_STRIPPED=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -f "$SECRET_MARKER" ] &&
+       grep -q 'module runtime: enabled echo-module' \
+           "$STATE_DIR/secret-server.log"; then
+        SECRET_STRIPPED=1
+        break
     fi
-    HEALTH_OUTPUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
-    [ "$HEALTH_OUTPUT" = "ok" ] && break
-    sleep 1
+    sleep 0.1
 done
+
+if [ "$SECRET_STRIPPED" -eq 1 ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "✓ module child does not inherit TNT_ACCESS_TOKEN"
+    PASS=$((PASS + 1))
+else
+    echo "x module child inherited the server access token"
+    sed -n '1,180p' "$STATE_DIR/secret-server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+stop_server
+
+start_server "$MODULE_DIR" "$STATE_DIR/server.log"
+wait_for_health "$STATE_DIR/server.log" "server"
 
 if [ "$HEALTH_OUTPUT" = "ok" ]; then
     echo "✓ server starts with module runtime"
@@ -186,7 +369,7 @@ for _ in 1 2 3 4 5; do
 done
 
 if [ "$FOUND" -eq 1 ]; then
-    echo "✓ module response is persisted and visible"
+    echo "✓ batched module responses are persisted and visible"
     PASS=$((PASS + 1))
 else
     echo "x module response missing"
@@ -197,21 +380,138 @@ fi
 
 stop_server
 
-TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MODULE_PATHS="$FLOOD_MODULE_DIR" \
-    TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/flood-server.log" 2>&1 &
-SERVER_PID=$!
+start_server "$TIMEOUT_MODULE_DIR" "$STATE_DIR/timeout-server.log"
+wait_for_health "$STATE_DIR/timeout-server.log" "timeout server"
 
-HEALTH_OUTPUT=""
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "x flood server failed to start"
-        sed -n '1,160p' "$STATE_DIR/flood-server.log"
-        exit 1
+if [ "$HEALTH_OUTPUT" = "ok" ] &&
+   [ -s "$TIMEOUT_MODULE_DIR/helper.pid" ]; then
+    echo "✓ server starts with timeout module and helper"
+    PASS=$((PASS + 1))
+else
+    echo "x timeout module or helper failed to start"
+    sed -n '1,200p' "$STATE_DIR/timeout-server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+POST_OUTPUT=$(ssh $SSH_OPTS erin@localhost post "trigger timeout" 2>/dev/null || true)
+if [ "$POST_OUTPUT" = "posted" ]; then
+    echo "✓ timeout trigger post succeeds"
+    PASS=$((PASS + 1))
+else
+    echo "x timeout trigger post failed: $POST_OUTPUT"
+    FAIL=$((FAIL + 1))
+fi
+
+TIMEOUT_DISABLED=0
+for _ in 1 2 3 4 5; do
+    if grep -q 'disabling timeout-module after response timeout' \
+        "$STATE_DIR/timeout-server.log"; then
+        TIMEOUT_DISABLED=1
+        break
     fi
-    HEALTH_OUTPUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
-    [ "$HEALTH_OUTPUT" = "ok" ] && break
     sleep 1
 done
+
+HELPER_PID=$(sed -n '1p' "$TIMEOUT_MODULE_DIR/helper.pid")
+HELPER_STOPPED=0
+for _ in 1 2 3 4 5; do
+    if ! kill -0 "$HELPER_PID" 2>/dev/null; then
+        HELPER_STOPPED=1
+        break
+    fi
+    sleep 1
+done
+
+if [ "$TIMEOUT_DISABLED" -eq 1 ] && [ "$HELPER_STOPPED" -eq 1 ]; then
+    echo "✓ response timeout disables module and terminates its process group"
+    PASS=$((PASS + 1))
+else
+    echo "x response timeout did not fully stop the module process group"
+    sed -n '1,240p' "$STATE_DIR/timeout-server.log"
+    kill -KILL "$HELPER_PID" 2>/dev/null || true
+    FAIL=$((FAIL + 1))
+fi
+rm -f "$TIMEOUT_MODULE_DIR/helper.pid"
+
+TIMEOUT_COUNT=$(grep -c 'disabling timeout-module after response timeout' \
+    "$STATE_DIR/timeout-server.log" || true)
+POST_OUTPUT=$(ssh $SSH_OPTS frank@localhost post "after timeout disable" 2>/dev/null || true)
+sleep 1
+TIMEOUT_COUNT_AFTER=$(grep -c 'disabling timeout-module after response timeout' \
+    "$STATE_DIR/timeout-server.log" || true)
+HEALTH_OUTPUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
+if [ "$POST_OUTPUT" = "posted" ] &&
+   [ "$HEALTH_OUTPUT" = "ok" ] &&
+   [ "$TIMEOUT_COUNT_AFTER" = "$TIMEOUT_COUNT" ]; then
+    echo "✓ timed-out module stays disabled while server remains healthy"
+    PASS=$((PASS + 1))
+else
+    echo "x timed-out module isolation failed"
+    sed -n '1,260p' "$STATE_DIR/timeout-server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+stop_server
+
+rm -f "$ISOLATION_COORD_FILE.event-1" "$ISOLATION_COORD_FILE.event-2"
+start_server "$ISOLATION_MODULE_PATHS" "$STATE_DIR/isolation-server.log" \
+    TNT_MODULE_COORD_FILE="$ISOLATION_COORD_FILE"
+wait_for_health "$STATE_DIR/isolation-server.log" "isolation server"
+
+ISOLATION_ENABLED=$(grep -c 'module runtime: enabled isolation-' \
+    "$STATE_DIR/isolation-server.log" || true)
+if [ "$HEALTH_OUTPUT" = "ok" ] && [ "$ISOLATION_ENABLED" -eq 8 ]; then
+    echo "✓ server starts eight isolated module workers"
+    PASS=$((PASS + 1))
+else
+    echo "x eight-module isolation server failed to start"
+    sed -n '1,240p' "$STATE_DIR/isolation-server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+POST_ONE=$(ssh $SSH_OPTS grace@localhost post "trigger isolation one" 2>/dev/null || true)
+POST_TWO=$(ssh $SSH_OPTS grace@localhost post "trigger isolation two" 2>/dev/null || true)
+if [ "$POST_ONE" = "posted" ] && [ "$POST_TWO" = "posted" ]; then
+    echo "✓ bidirectional isolation trigger posts succeed"
+    PASS=$((PASS + 1))
+else
+    echo "x isolation trigger post failed: $POST_ONE / $POST_TWO"
+    FAIL=$((FAIL + 1))
+fi
+
+ISOLATED_RESPONSES=0
+for _ in 1 2 3 4 5; do
+    TAIL_OUTPUT=$(ssh $SSH_OPTS localhost "tail -n 50" 2>/dev/null || true)
+    if printf '%s\n' "$TAIL_OUTPUT" | \
+           grep -q 'module:isolation-1.*event 1 isolation-1' &&
+       printf '%s\n' "$TAIL_OUTPUT" | \
+           grep -q 'module:isolation-8.*event 1 isolation-8' &&
+       printf '%s\n' "$TAIL_OUTPUT" | \
+           grep -q 'module:isolation-1.*event 2 isolation-1' &&
+       printf '%s\n' "$TAIL_OUTPUT" | \
+           grep -q 'module:isolation-8.*event 2 isolation-8'; then
+        ISOLATED_RESPONSES=1
+        break
+    fi
+    sleep 1
+done
+
+if [ "$ISOLATED_RESPONSES" -eq 1 ] &&
+   ! grep -Eq 'disabling isolation-(1|8) after response timeout' \
+       "$STATE_DIR/isolation-server.log"; then
+    echo "✓ module workers resolve both forward and reverse dependencies"
+    PASS=$((PASS + 1))
+else
+    echo "x module workers were serialized or an endpoint timed out"
+    printf '%s\n' "$TAIL_OUTPUT"
+    sed -n '1,280p' "$STATE_DIR/isolation-server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+stop_server
+
+start_server "$FLOOD_MODULE_DIR" "$STATE_DIR/flood-server.log"
+wait_for_health "$STATE_DIR/flood-server.log" "flood server"
 
 if [ "$HEALTH_OUTPUT" = "ok" ]; then
     echo "✓ server starts with flood module"
@@ -267,21 +567,8 @@ fi
 
 stop_server
 
-TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MODULE_PATHS="$INVALID_MODULE_DIR" \
-    TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/invalid-server.log" 2>&1 &
-SERVER_PID=$!
-
-HEALTH_OUTPUT=""
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "x invalid-response server failed to start"
-        sed -n '1,160p' "$STATE_DIR/invalid-server.log"
-        exit 1
-    fi
-    HEALTH_OUTPUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
-    [ "$HEALTH_OUTPUT" = "ok" ] && break
-    sleep 1
-done
+start_server "$INVALID_MODULE_DIR" "$STATE_DIR/invalid-server.log"
+wait_for_health "$STATE_DIR/invalid-server.log" "invalid-response server"
 
 if [ "$HEALTH_OUTPUT" = "ok" ]; then
     echo "✓ server starts with invalid-response module"

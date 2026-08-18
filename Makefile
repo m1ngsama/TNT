@@ -1,19 +1,35 @@
 # TNT - TNT's Not Tunnel
 # High-performance terminal chat server written in C
 
-CC = gcc
-CFLAGS = -Wall -Wextra -O2 -std=c11 -D_XOPEN_SOURCE=700
-LDFLAGS = -pthread -lssh
-CTL_LDFLAGS =
-INCLUDES = -Iinclude
+CC ?= cc
+CPPFLAGS ?=
+CFLAGS ?= -Wall -Wextra -O2 -std=c11
+LDFLAGS ?=
+LDLIBS ?=
+STRIP ?= strip
+CPPCHECK ?= cppcheck
+CLANG_TIDY ?= clang-tidy
+SMALL_CFLAGS ?= -Os -DNDEBUG -ffunction-sections -fdata-sections
+
+ifeq ($(shell uname),Darwin)
+SMALL_LDFLAGS ?= -Wl,-dead_strip
+else
+SMALL_LDFLAGS ?= -Wl,--gc-sections
+endif
+
+PROJECT_CPPFLAGS = -D_XOPEN_SOURCE=700 -Iinclude
+PROJECT_LDFLAGS =
+PROJECT_LDLIBS = -pthread -lssh
+BUILD_CFLAGS =
+BUILD_LDFLAGS =
 DEPFLAGS = -MMD -MP
 
 # Detect libssh location (homebrew on macOS)
 ifeq ($(shell uname), Darwin)
     LIBSSH_PREFIX := $(shell brew --prefix libssh 2>/dev/null)
     ifneq ($(LIBSSH_PREFIX),)
-        INCLUDES += -I$(LIBSSH_PREFIX)/include
-        LDFLAGS += -L$(LIBSSH_PREFIX)/lib
+        PROJECT_CPPFLAGS += -I$(LIBSSH_PREFIX)/include
+        PROJECT_LDFLAGS += -L$(LIBSSH_PREFIX)/lib
     endif
 endif
 
@@ -32,6 +48,13 @@ TARGETS = $(TARGET) $(CTL_TARGET)
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man
+MAN1DIR ?= $(MANDIR)/man1
+MAN5DIR ?= $(MANDIR)/man5
+MAN7DIR ?= $(MANDIR)/man7
+MAN8DIR ?= $(MANDIR)/man8
+BASH_COMPLETION_DIR ?= $(PREFIX)/share/bash-completion/completions
+ZSH_COMPLETION_DIR ?= $(PREFIX)/share/zsh/site-functions
+FISH_COMPLETION_DIR ?= $(PREFIX)/share/fish/vendor_completions.d
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 CI_TEST_PORT ?= $(if $(PORT),$(PORT),2222)
 
@@ -54,20 +77,20 @@ PERF_SERVER_WRAPPER ?=
 PERF_ENFORCE ?= none
 PERF_OUTPUT ?=
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release release-check release-check-strict package-publish-check debian-source-package asan valgrind check test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release small release-smoke release-check release-check-strict package-publish-check debian-source-package asan ubsan ubsan-test valgrind check check-cppcheck check-clang-tidy test package-test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
 
 all: $(TARGETS)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
+	$(CC) $(LDFLAGS) $(PROJECT_LDFLAGS) $(BUILD_LDFLAGS) $(OBJECTS) -o $@ $(PROJECT_LDLIBS) $(LDLIBS)
 	@echo "Build complete: $(TARGET)"
 
 $(CTL_TARGET): $(CTL_OBJECTS)
-	$(CC) $(CTL_OBJECTS) -o $@ $(CTL_LDFLAGS)
+	$(CC) $(LDFLAGS) $(PROJECT_LDFLAGS) $(BUILD_LDFLAGS) $(CTL_OBJECTS) -o $@ $(LDLIBS)
 	@echo "Build complete: $(CTL_TARGET)"
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) $(DEPFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(BUILD_CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
@@ -81,9 +104,22 @@ install: $(TARGETS)
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/
 	install -m 755 $(CTL_TARGET) $(DESTDIR)$(BINDIR)/
-	install -d $(DESTDIR)$(MANDIR)/man1
-	install -m 644 tnt.1 $(DESTDIR)$(MANDIR)/man1/
-	install -m 644 tntctl.1 $(DESTDIR)$(MANDIR)/man1/
+	install -d $(DESTDIR)$(MAN1DIR) $(DESTDIR)$(MAN5DIR)
+	install -d $(DESTDIR)$(MAN7DIR) $(DESTDIR)$(MAN8DIR)
+	install -m 644 tntctl.1 $(DESTDIR)$(MAN1DIR)/
+	install -m 644 tnt-message-log.5 $(DESTDIR)$(MAN5DIR)/
+	install -m 644 tnt-chat.7 tnt-exec.7 tnt-module-protocol.7 \
+		$(DESTDIR)$(MAN7DIR)/
+	install -m 644 tnt.8 $(DESTDIR)$(MAN8DIR)/
+	install -d $(DESTDIR)$(BASH_COMPLETION_DIR)
+	install -m 644 packaging/completions/tntctl.bash \
+		$(DESTDIR)$(BASH_COMPLETION_DIR)/tntctl
+	install -d $(DESTDIR)$(ZSH_COMPLETION_DIR)
+	install -m 644 packaging/completions/_tntctl \
+		$(DESTDIR)$(ZSH_COMPLETION_DIR)/_tntctl
+	install -d $(DESTDIR)$(FISH_COMPLETION_DIR)
+	install -m 644 packaging/completions/tntctl.fish \
+		$(DESTDIR)$(FISH_COMPLETION_DIR)/tntctl.fish
 
 install-systemd:
 	install -d $(DESTDIR)$(SYSTEMD_UNIT_DIR)
@@ -93,20 +129,53 @@ install-systemd:
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
 	rm -f $(DESTDIR)$(BINDIR)/$(CTL_TARGET)
-	rm -f $(DESTDIR)$(MANDIR)/man1/tnt.1
-	rm -f $(DESTDIR)$(MANDIR)/man1/tntctl.1
+	rm -f $(DESTDIR)$(MAN1DIR)/tntctl.1
+	rm -f $(DESTDIR)$(MAN5DIR)/tnt-message-log.5
+	rm -f $(DESTDIR)$(MAN7DIR)/tnt-chat.7
+	rm -f $(DESTDIR)$(MAN7DIR)/tnt-exec.7
+	rm -f $(DESTDIR)$(MAN7DIR)/tnt-module-protocol.7
+	rm -f $(DESTDIR)$(MAN8DIR)/tnt.8
+	rm -f $(DESTDIR)$(BASH_COMPLETION_DIR)/tntctl
+	rm -f $(DESTDIR)$(ZSH_COMPLETION_DIR)/_tntctl
+	rm -f $(DESTDIR)$(FISH_COMPLETION_DIR)/tntctl.fish
 
 uninstall-systemd:
 	rm -f $(DESTDIR)$(SYSTEMD_UNIT_DIR)/tnt.service
 
 # Development targets
-debug: CFLAGS += -g -DDEBUG
-debug: clean $(TARGETS)
+debug:
+	+$(MAKE) clean
+	+$(MAKE) BUILD_CFLAGS="-g -DDEBUG" $(TARGETS)
 
-release: CFLAGS += -O3 -DNDEBUG
-release: clean $(TARGETS)
-	strip $(TARGET)
-	strip $(CTL_TARGET)
+release:
+	+$(MAKE) clean
+	+$(MAKE) BUILD_CFLAGS="-O3 -DNDEBUG" $(TARGETS)
+	$(STRIP) $(TARGET)
+	$(STRIP) $(CTL_TARGET)
+	+$(MAKE) BUILD_CFLAGS="-O3 -DNDEBUG" release-smoke
+
+small:
+	+$(MAKE) clean
+	+$(MAKE) BUILD_CFLAGS="$(SMALL_CFLAGS)" \
+		BUILD_LDFLAGS="$(SMALL_LDFLAGS)" $(TARGETS)
+	$(STRIP) $(TARGET)
+	$(STRIP) $(CTL_TARGET)
+	+$(MAKE) BUILD_CFLAGS="$(SMALL_CFLAGS)" \
+		BUILD_LDFLAGS="$(SMALL_LDFLAGS)" release-smoke
+
+release-smoke: $(TARGETS)
+	@version=$$(sed -n 's/^#define TNT_VERSION "\([^"]*\)".*/\1/p' include/common.h); \
+	[ -n "$$version" ] || { echo "release-smoke: could not read TNT_VERSION" >&2; exit 1; }; \
+	[ "$$(./tnt --version)" = "tnt $$version" ] || { echo "release-smoke: tnt version mismatch" >&2; exit 1; }; \
+	[ "$$(./tntctl --version)" = "tntctl $$version" ] || { echo "release-smoke: tntctl version mismatch" >&2; exit 1; }; \
+	tmpdir=$$(mktemp -d "$${TMPDIR:-/tmp}/tnt-release-smoke.XXXXXX") || exit 1; \
+	trap 'rm -rf "$$tmpdir"' EXIT HUP INT TERM; \
+	timestamp=$$(date -u '+%Y-%m-%dT%H:%M:%SZ') || exit 1; \
+	printf '%s|smoke|release\n' "$$timestamp" > "$$tmpdir/messages.log"; \
+	./tnt --log-check "$$tmpdir/messages.log" > "$$tmpdir/log-check.out" || \
+		{ echo "release-smoke: tnt --log-check failed" >&2; exit 1; }; \
+	grep -q '^valid_records 1$$' "$$tmpdir/log-check.out" || { echo "release-smoke: log check failed" >&2; exit 1; }; \
+	echo "Release smoke passed: tnt $$version"
 
 release-check:
 	./scripts/release_check.sh
@@ -120,22 +189,52 @@ package-publish-check:
 debian-source-package:
 	./scripts/package_debian_source.sh $${OUT_DIR:-dist/debian-source}
 
-asan: CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
-asan: LDFLAGS += -fsanitize=address
-asan: CTL_LDFLAGS += -fsanitize=address
-asan: clean $(TARGETS)
+asan:
+	+$(MAKE) clean
+	+$(MAKE) BUILD_CFLAGS="-g -fsanitize=address -fno-omit-frame-pointer" BUILD_LDFLAGS="-fsanitize=address" $(TARGETS)
 	@echo "AddressSanitizer build complete. Run with: ASAN_OPTIONS=detect_leaks=1 ./tnt"
+
+ubsan:
+	+$(MAKE) clean
+	+$(MAKE) BUILD_CFLAGS="-g -fsanitize=undefined -fno-sanitize-recover=undefined" \
+		BUILD_LDFLAGS="-fsanitize=undefined" $(TARGETS)
+
+ubsan-test: ubsan
+	+$(MAKE) -C tests/unit clean
+	+UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+		$(MAKE) -C tests/unit run \
+		CFLAGS="-Wall -Wextra -std=c11 -g -fsanitize=undefined -fno-sanitize-recover=undefined" \
+		LDFLAGS="-fsanitize=undefined"
+	@UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+		$(MAKE) module-runtime-test PORT=$${PORT:-13680} \
+		BUILD_CFLAGS="-g -fsanitize=undefined -fno-sanitize-recover=undefined" \
+		BUILD_LDFLAGS="-fsanitize=undefined"
 
 valgrind: debug
 	@echo "Run: valgrind --leak-check=full --track-origins=yes ./tnt"
 
 # Static analysis
-check:
-	@command -v cppcheck >/dev/null 2>&1 && cppcheck --enable=warning,performance --quiet src/ || echo "cppcheck not installed"
-	@command -v clang-tidy >/dev/null 2>&1 && clang-tidy src/*.c -- -Iinclude $(INCLUDES) || echo "clang-tidy not installed"
+check: check-cppcheck check-clang-tidy
+
+check-cppcheck:
+	@command -v "$(CPPCHECK)" >/dev/null 2>&1 || { echo "check: $(CPPCHECK) not found" >&2; exit 127; }; \
+	echo "Running cppcheck..."; \
+	"$(CPPCHECK)" --enable=warning,performance --error-exitcode=1 --quiet src/
+
+check-clang-tidy:
+	@command -v "$(CLANG_TIDY)" >/dev/null 2>&1 || { echo "check: $(CLANG_TIDY) not found" >&2; exit 127; }; \
+	echo "Running clang-tidy..."; \
+	"$(CLANG_TIDY)" --warnings-as-errors='*' src/*.c -- $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS)
 
 # Test
 test: all unit-test script-test integration-test
+
+package-test: all unit-test
+	@cd tests && ./test_cli_options.sh
+	@cd tests && ./test_manpages.sh
+	@cd tests && ./test_completions.sh
+	@cd tests && ./test_module_check.sh
+	@cd tests && ./test_message_log_tool.sh
 
 test-advisory: all unit-test
 	@echo "Running integration tests..."
@@ -151,11 +250,13 @@ unit-test:
 script-test: all
 	@echo "Running script tests..."
 	@cd tests && ./test_cli_options.sh
-	@cd tests && ./test_docs_help_surface.sh
+	@cd tests && ./test_manpages.sh
+	@cd tests && ./test_completions.sh
 	@cd tests && ./test_get_maintainer.sh
 	@cd tests && ./test_check_maintainers.sh
 	@cd tests && ./test_module_check.sh
 	@cd tests && ./test_install_wizard.sh
+	@cd tests && ./test_installer.sh
 	@cd tests && ./test_logrotate.sh
 	@cd tests && ./test_message_log_tool.sh
 	@cd tests && ./test_source_archive.sh
@@ -298,7 +399,10 @@ ci-test:
 # Show build info
 info:
 	@echo "Compiler: $(CC)"
-	@echo "Flags: $(CFLAGS)"
+	@echo "CPPFLAGS: $(CPPFLAGS) $(PROJECT_CPPFLAGS)"
+	@echo "CFLAGS: $(CFLAGS)"
+	@echo "LDFLAGS: $(LDFLAGS) $(PROJECT_LDFLAGS)"
+	@echo "LDLIBS: $(PROJECT_LDLIBS) $(LDLIBS)"
 	@echo "Sources: $(SOURCES)"
 	@echo "Objects: $(OBJECTS)"
 

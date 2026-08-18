@@ -66,8 +66,8 @@ typedef struct client {
     char last_whisper_peer[MAX_USERNAME_LEN];  /* Most recent private-message peer */
     int theme_index;                 /* Per-session colour theme (see theme.h) */
     char *outbox;                    /* Bounded queued output for interactive writes */
+    size_t outbox_head;
     size_t outbox_len;
-    size_t outbox_pos;
     size_t outbox_capacity;
     char *render_buffer;             /* Reused main-screen render buffer */
     size_t render_buffer_capacity;

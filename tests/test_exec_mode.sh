@@ -190,12 +190,83 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+ACTION_FIT_FILL=$(awk 'BEGIN { for (i = 0; i < 998; i++) printf "a" }')
+ACTION_FIT_MARKER="action-fit-${ACTION_FIT_FILL}中"
+ACTION_FIT_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post \
+    "/me $ACTION_FIT_MARKER" 2>/dev/null)
+ACTION_FIT_RECORD=$(tail -n 1 "$STATE_DIR/messages.log")
+ACTION_FIT_CONTENT=${ACTION_FIT_RECORD#*|}
+ACTION_FIT_CONTENT=${ACTION_FIT_CONTENT#*|}
+ACTION_FIT_LEN=$(printf '%s' "$ACTION_FIT_CONTENT" | wc -c | tr -d ' ')
+case "$ACTION_FIT_CONTENT" in
+    *中) ACTION_FIT_UTF8=0 ;;
+    *) ACTION_FIT_UTF8=1 ;;
+esac
+if [ "$ACTION_FIT_OUTPUT" = "posted" ] &&
+   [ "$ACTION_FIT_LEN" -eq 1023 ] && [ "$ACTION_FIT_UTF8" -eq 0 ]; then
+    echo "✓ exact-fit /me expansion preserves complete UTF-8"
+    PASS=$((PASS + 1))
+else
+    echo "✗ exact-fit /me expansion unexpected"
+    FAIL=$((FAIL + 1))
+fi
+
 POST_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "hello from exec" 2>/dev/null || true)
 if [ "$POST_OUTPUT" = "posted" ]; then
     echo "✓ post publishes a message"
     PASS=$((PASS + 1))
 else
     echo "✗ post failed: $POST_OUTPUT"
+    FAIL=$((FAIL + 1))
+fi
+
+CONTROL_MARKER="control-character-marker"
+CONTROL_MESSAGE=$(printf '%s\033[2J' "$CONTROL_MARKER")
+CONTROL_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "$CONTROL_MESSAGE" 2>/dev/null)
+CONTROL_STATUS=$?
+printf '%s\n' "$CONTROL_OUTPUT" | grep -q '控制字符'
+CONTROL_ERROR=$?
+CONTROL_TAIL=$(ssh $SSH_OPTS localhost "tail -n 5" 2>/dev/null || true)
+printf '%s\n' "$CONTROL_TAIL" | grep -q "$CONTROL_MARKER"
+CONTROL_VISIBLE=$?
+C1_MARKER="c1-control-marker"
+C1_MESSAGE=$(printf '%s\302\23331m' "$C1_MARKER")
+C1_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "$C1_MESSAGE" 2>/dev/null)
+C1_STATUS=$?
+C1_TAIL=$(ssh $SSH_OPTS localhost "tail -n 5" 2>/dev/null || true)
+printf '%s\n' "$C1_TAIL" | grep -q "$C1_MARKER"
+C1_VISIBLE=$?
+if [ "$CONTROL_STATUS" -eq 1 ] && [ "$C1_STATUS" -eq 1 ] &&
+   [ "$CONTROL_ERROR" -eq 0 ] &&
+   [ "$CONTROL_VISIBLE" -ne 0 ] && [ "$C1_VISIBLE" -ne 0 ]; then
+    echo "✓ post rejects terminal control characters without persistence"
+    PASS=$((PASS + 1))
+else
+    echo "✗ post control-character handling unexpected"
+    printf '%s\n' "$CONTROL_OUTPUT"
+    echo "exit status: $CONTROL_STATUS"
+    FAIL=$((FAIL + 1))
+fi
+
+ACTION_FILL=$(awk 'BEGIN { for (i = 0; i < 994; i++) printf "a" }')
+ACTION_MARKER="action-boundary-${ACTION_FILL}中"
+ACTION_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "/me $ACTION_MARKER" \
+    2>/dev/null)
+ACTION_STATUS=$?
+printf '%s\n' "$ACTION_OUTPUT" | grep -q '消息过长'
+ACTION_ERROR=$?
+ACTION_TAIL=$(ssh $SSH_OPTS localhost "tail -n 5" 2>/dev/null || true)
+printf '%s\n' "$ACTION_TAIL" | grep -q 'action-boundary-'
+ACTION_VISIBLE=$?
+if [ "$ACTION_STATUS" -eq 64 ] &&
+   [ "$ACTION_ERROR" -eq 0 ] &&
+   [ "$ACTION_VISIBLE" -ne 0 ]; then
+    echo "✓ overlong /me expansion is rejected before UTF-8 truncation"
+    PASS=$((PASS + 1))
+else
+    echo "✗ /me expansion boundary handling unexpected"
+    printf '%s\n' "$ACTION_OUTPUT"
+    echo "exit status: $ACTION_STATUS"
     FAIL=$((FAIL + 1))
 fi
 

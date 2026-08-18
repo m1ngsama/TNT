@@ -61,9 +61,12 @@ fi
 ARCHIVE_LISTING=$(tar -tzf "$ARCHIVE" 2>&1)
 if listing_has_entry "TNT-$VER/LICENSE" &&
    listing_has_entry "TNT-$VER/src/tntctl.c" &&
-   listing_has_entry "TNT-$VER/packaging/README.md" &&
-   listing_has_entry "TNT-$VER/tnt.1" &&
-   listing_has_entry "TNT-$VER/tntctl.1"; then
+   listing_has_entry "TNT-$VER/tntctl.1" &&
+   listing_has_entry "TNT-$VER/tnt-message-log.5" &&
+   listing_has_entry "TNT-$VER/tnt-chat.7" &&
+   listing_has_entry "TNT-$VER/tnt-exec.7" &&
+   listing_has_entry "TNT-$VER/tnt-module-protocol.7" &&
+   listing_has_entry "TNT-$VER/tnt.8"; then
     pass "source archive contains required release files"
 else
     fail "source archive required files" "$(printf '%s\n' "$ARCHIVE_LISTING" | sed -n '1,40p')"

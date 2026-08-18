@@ -79,6 +79,12 @@ TEST(parse_message_create_rejects_empty_or_control_text) {
     assert(!tnt_module_parse_message_create(
         "{\"type\":\"message.create\",\"plain_text\":\"line\\nnext\"}",
         &response));
+    assert(!tnt_module_parse_message_create(
+        "{\"type\":\"message.create\",\"plain_text\":\"\\u001b[2J\"}",
+        &response));
+    assert(!tnt_module_parse_message_create(
+        "{\"type\":\"message.create\",\"plain_text\":\"next \xC2\x9B"
+        "31m\"}", &response));
 }
 
 TEST(parse_message_create_rejects_invalid_utf8_text) {

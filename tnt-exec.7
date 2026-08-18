@@ -1,0 +1,242 @@
+.TH TNT-EXEC 7 "2026-08-18" "TNT 1.3.0"
+.SH NAME
+tnt-exec \- TNT SSH exec command and output protocol
+.SH DESCRIPTION
+TNT accepts non-interactive commands through an SSH exec request.
+The same command set is exposed by
+.BR tntctl (1).
+The maximum exec command string is 1023 bytes.
+.P
+Command output is written to the SSH channel.
+The server then sends an SSH exit status and closes the channel.
+Human-readable help and diagnostics may be localized and are not a parsing
+interface.
+.SH INVOCATION
+With a standard SSH client:
+.P
+.EX
+ssh \-p 2222 user@chat.example.com health
+ssh \-p 2222 user@chat.example.com stats \-\-json
+ssh \-p 2222 user@chat.example.com "tail \-n 20"
+.EE
+.P
+With the TNT wrapper:
+.P
+.EX
+tntctl chat.example.com health
+tntctl chat.example.com stats \-\-json
+tntctl chat.example.com tail \-n 20
+.EE
+.SH COMMANDS
+.SS help
+.SY help
+.YS
+.SY \-\-help
+.YS
+Print a localized command summary for people.
+The wording and layout are not stable for parsers.
+.SS health
+.SY health
+.YS
+Write the following line:
+.P
+.EX
+ok
+.EE
+.SS users
+.SY users
+.RB [ \-\-json ]
+.YS
+Without
+.BR \-\-json ,
+write one active nickname per line.
+With it, write one JSON array of strings followed by a newline.
+An empty room is represented as
+.BR [] .
+.SS stats
+.SY stats
+.RB [ \-\-json ]
+.YS
+Without
+.BR \-\-json ,
+write one space-separated key and value per line:
+.P
+.EX
+status ok
+online_users 0
+message_count 0
+client_capacity 64
+active_connections 1
+uptime_seconds 12
+.EE
+.P
+With
+.BR \-\-json ,
+write one JSON object followed by a newline.
+The object has these members:
+.TP
+.B status
+String value
+.BR ok .
+.TP
+.B online_users
+Integer count of interactive users in the room.
+.TP
+.B message_count
+Integer count of messages in the live in-memory history.
+.TP
+.B client_capacity
+Integer room client capacity.
+.TP
+.B active_connections
+Integer count of admitted SSH connections.
+.TP
+.B uptime_seconds
+Integer server uptime in seconds.
+.SS tail
+.SY tail
+.RI [ count ]
+.YS
+.SY tail
+.B \-n
+.I count
+.YS
+Write recent live in-memory messages in chronological order.
+The default
+.I count
+is 20; the valid range is 1 through 100.
+.P
+Each message is one tab-separated line:
+.P
+.EX
+2026-05-25T12:00:00Z<TAB>alice<TAB>hello
+.EE
+.P
+The three fields are an RFC 3339 UTC timestamp, sender, and content.
+.B tail
+does not read the complete persistent log.
+.SS dump
+.SY dump
+.RI [ count ]
+.YS
+.SY dump
+.B \-n
+.I count
+.YS
+.SY dump
+.B \-\-all
+.YS
+Write valid records from the active persistent message log in chronological
+order.
+The output is the exact format defined by
+.BR tnt\-message\-log (5).
+.P
+Without an argument,
+.B dump
+writes the last 100 valid records.
+The valid
+.I count
+range is 1 through 10000.
+.B \-\-all
+writes every valid record in the active log.
+Malformed records are skipped.
+A missing log produces no output and succeeds.
+.SS post
+.SY post
+.I message
+.YS
+The complete exec request,
+including the command name and separating whitespace,
+must fit the 1023-byte exec limit.
+The server removes leading and trailing whitespace from
+.IR message .
+The result must be nonempty valid UTF-8.
+It cannot contain a C0 or C1 control character or DEL.
+The final stored content must contain at most 1023 bytes.
+On success,
+.B post
+writes:
+.P
+.EX
+posted
+.EE
+.P
+The sender is the SSH login name when that value is a valid TNT nickname;
+otherwise it is
+.BR anonymous .
+The displayed name is limited to 20 Unicode characters.
+.P
+A message beginning with
+.B "/me "
+creates an action.
+The stored content consists of the sender, one space, and the action text,
+and must fit the same stored-content limit.
+.SS exit
+.SY exit
+.YS
+Produce no output and succeed.
+.SH EXIT STATUS
+.TP
+.B 0
+The command succeeded.
+.TP
+.B 1
+A runtime, allocation, I/O, or persistence operation failed.
+.B post
+also returns 1 for invalid UTF-8 or a prohibited control character.
+.TP
+.B 64
+The command name, argument shape, count, or message length was invalid.
+.P
+.BR tntctl (1)
+uses additional local statuses for SSH transport and wrapper failures.
+.SH COMPATIBILITY
+The documented command names, argument forms, exit statuses, and JSON
+member
+names and scalar types are stable throughout TNT 1.x.
+.P
+A minor release may append text statistics keys or JSON object members.
+Consumers must ignore keys and object members they do not recognize.
+No such extension changes the type of an existing JSON member.
+.P
+Text intended for people, including
+.B help
+and error wording, is not stable.
+.SH CAVEATS
+In anonymous-access mode, the SSH login name used by
+.B post
+is not authenticated.
+A shared access token authenticates possession of the token.
+It does not establish ownership of
+the login name.
+.P
+.B tail
+reads the bounded live buffer, whereas
+.B dump
+reads the active on-disk log.
+Their results can differ during rotation or after invalid persisted records
+have been skipped.
+.SH EXAMPLES
+List users as JSON:
+.P
+.EX
+ssh \-p 2222 chat.example.com users \-\-json
+.EE
+.P
+Export every valid active-log record:
+.P
+.EX
+tntctl chat.example.com dump \-\-all
+.EE
+.P
+Post an action:
+.P
+.EX
+tntctl \-l operator chat.example.com post "/me deploys v2"
+.EE
+.SH SEE ALSO
+.BR ssh (1),
+.BR tntctl (1),
+.BR tnt\-message\-log (5),
+.BR tnt\-chat (7),
+.BR tnt (8)

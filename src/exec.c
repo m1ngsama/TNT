@@ -68,6 +68,7 @@ static void resolve_exec_username(const client_t *client, char *buffer,
     }
 
     if (client && client->ssh_login[0] != '\0' &&
+        utf8_is_valid_string(client->ssh_login) &&
         is_valid_username(client->ssh_login)) {
         snprintf(buffer, buf_size, "%s", client->ssh_login);
     } else {
@@ -399,15 +400,31 @@ static int exec_command_post(client_t *client, const char *args) {
         return TNT_EXIT_ERROR;
     }
 
+    if (utf8_contains_control(content)) {
+        client_printf(client, "%s",
+                      i18n_text(client->ui_lang,
+                                I18N_EXEC_POST_ASCII_CONTROL));
+        return TNT_EXIT_ERROR;
+    }
+
     resolve_exec_username(client, username, sizeof(username));
 
     if (strncmp(content, "/me ", 4) == 0 && content[4] != '\0') {
+        size_t username_len = strlen(username);
+        size_t action_len = strlen(content + 4);
+
+        if (username_len + 1 + action_len >= sizeof(msg.content)) {
+            client_printf(client, "%s",
+                          i18n_text(client->ui_lang,
+                                    I18N_EXEC_POST_TOO_LONG));
+            return TNT_EXIT_USAGE;
+        }
         msg.username[0] = '*';
         msg.username[1] = '\0';
-        int n = snprintf(msg.content, sizeof(msg.content), "%s %s", username, content + 4);
-        if (n >= (int)sizeof(msg.content)) {
-            msg.content[sizeof(msg.content) - 1] = '\0';
-        }
+        memcpy(msg.content, username, username_len);
+        msg.content[username_len] = ' ';
+        memcpy(msg.content + username_len + 1, content + 4,
+               action_len + 1);
     } else {
         strncpy(msg.username, username, sizeof(msg.username) - 1);
         msg.username[sizeof(msg.username) - 1] = '\0';

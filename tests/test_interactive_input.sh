@@ -139,6 +139,41 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+CONTROL_SCRIPT="$STATE_DIR/control-input.expect"
+cat >"$CONTROL_SCRIPT" <<EOF
+set timeout 10
+set c1 [binary format H* c29b]
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+fconfigure \$spawn_id -encoding binary -translation binary
+sleep 1
+send -- "c1"
+send -- \$c1
+send -- "user\r"
+expect "Esc NORMAL"
+send -- "\033\[200~"
+send -- "safe"
+send -- \$c1
+send -- "tail"
+send -- "\033\[201~"
+send -- "\r"
+sleep 1
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$CONTROL_SCRIPT" >"$STATE_DIR/control-input.log" 2>&1 &&
+   grep -q '|c1user|safetail$' "$STATE_DIR/messages.log"; then
+    echo "✓ C1 terminal controls are dropped from username and paste"
+    PASS=$((PASS + 1))
+else
+    echo "x C1 terminal control filtering failed"
+    sed -n '1,120p' "$STATE_DIR/control-input.log" 2>/dev/null || true
+    cat "$STATE_DIR/messages.log" 2>/dev/null || true
+    FAIL=$((FAIL + 1))
+fi
+
 LONG_SCRIPT="$STATE_DIR/long-paste.expect"
 cat >"$LONG_SCRIPT" <<EOF
 set timeout 10
@@ -178,6 +213,54 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+ACTION_SCRIPT="$STATE_DIR/action-boundary.expect"
+cat >"$ACTION_SCRIPT" <<EOF
+set timeout 10
+set suffix [binary format H* e4b8ad]
+set accepted [format "action-fit-%s%s" [string repeat a 1003] \$suffix]
+set rejected [format "action-reject-%s%s" [string repeat a 1001] \$suffix]
+spawn ssh $SSH_OPTS anonymous@127.0.0.1
+fconfigure \$spawn_id -encoding binary -translation binary
+sleep 1
+send -- "actor\r"
+expect "Esc NORMAL"
+send -- "/me \$accepted\r"
+sleep 1
+send -- "/me \$rejected\r"
+sleep 1
+send -- "\025"
+send -- "after-action\r"
+sleep 1
+send -- "\003"
+sleep 0.2
+send -- "\003"
+expect eof
+EOF
+
+if expect "$ACTION_SCRIPT" >"$STATE_DIR/action-boundary.log" 2>&1; then
+    action_line=$(grep 'actor action-fit-' "$STATE_DIR/messages.log" | tail -1)
+    action_content=${action_line#*|}
+    action_content=${action_content#*|}
+    action_len=$(printf '%s' "$action_content" | wc -c | tr -d ' ')
+    case "$action_content" in
+        *中) action_utf8=0 ;;
+        *) action_utf8=1 ;;
+    esac
+    if [ "$action_len" -eq 1023 ] && [ "$action_utf8" -eq 0 ] &&
+       ! grep -q 'action-reject-' "$STATE_DIR/messages.log" &&
+       grep -q '|actor|after-action$' "$STATE_DIR/messages.log"; then
+        echo "✓ /me accepts exact fit and rejects expansion overflow"
+        PASS=$((PASS + 1))
+    else
+        echo "x /me action boundary handling failed"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    echo "x /me action boundary client failed"
+    sed -n '1,120p' "$STATE_DIR/action-boundary.log"
+    FAIL=$((FAIL + 1))
+fi
+
 HELP_SCRIPT="$STATE_DIR/help.expect"
 cat >"$HELP_SCRIPT" <<EOF
 set timeout 10
@@ -190,7 +273,7 @@ expect "NORMAL"
 send -- ":"
 expect ":"
 send -- ":help\r"
-expect "TNT\\(1\\) 帮助"
+expect "tnt-chat\\(7\\) 帮助"
 expect "Tab 补全 @mention"
 expect "q:关闭"
 send -- "q"

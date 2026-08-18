@@ -169,6 +169,19 @@ TEST(message_save_basic) {
     cleanup_test_log();
 }
 
+TEST(message_save_rejects_control_characters) {
+    message_t msg = { .timestamp = time(NULL) };
+
+    setup_state_dir();
+    strcpy(msg.username, "testuser");
+    strcpy(msg.content, "unsafe \033[2J text");
+
+    assert(message_save(&msg) == -1);
+    strcpy(msg.content, "unsafe \xC2\x9B" "31m text");
+    assert(message_save(&msg) == -1);
+    cleanup_state_dir();
+}
+
 TEST(message_load_skips_malformed_records) {
     char ts[64];
     char log_path[PATH_MAX];
@@ -185,6 +198,7 @@ TEST(message_load_skips_malformed_records) {
     fprintf(fp, "%s||empty user\n", ts);
     fprintf(fp, "%s|mallory|extra|pipe\n", ts);
     fprintf(fp, "%s|badutf|bad \xC3\x28\n", ts);
+    fprintf(fp, "%s|control|bad \033[2J\n", ts);
     fprintf(fp, "%s|partial|truncated record", ts);
     fclose(fp);
 
@@ -216,6 +230,30 @@ TEST(message_search_skips_malformed_records) {
     assert(count == 1);
     assert(strcmp(results[0].username, "alice") == 0);
     assert(strcmp(results[0].content, "needle valid") == 0);
+    free(results);
+    cleanup_state_dir();
+}
+
+TEST(message_search_keeps_last_matches_in_order) {
+    char ts[64];
+    char log_path[PATH_MAX];
+    message_t *results = NULL;
+
+    setup_state_dir();
+    format_rfc3339_now(ts, sizeof(ts));
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+
+    FILE *fp = fopen(log_path, "wb");
+    assert(fp != NULL);
+    for (int i = 0; i < 5; i++) {
+        fprintf(fp, "%s|user%d|needle %d\n", ts, i, i);
+    }
+    fclose(fp);
+
+    assert(message_search("needle", &results, 3) == 3);
+    assert(strcmp(results[0].username, "user2") == 0);
+    assert(strcmp(results[1].username, "user3") == 0);
+    assert(strcmp(results[2].username, "user4") == 0);
     free(results);
     cleanup_state_dir();
 }
@@ -361,8 +399,10 @@ int main(void) {
     RUN_TEST(message_format_unicode);
     RUN_TEST(message_format_width_limits);
     RUN_TEST(message_save_basic);
+    RUN_TEST(message_save_rejects_control_characters);
     RUN_TEST(message_load_skips_malformed_records);
     RUN_TEST(message_search_skips_malformed_records);
+    RUN_TEST(message_search_keeps_last_matches_in_order);
     RUN_TEST(message_dump_exports_valid_records);
     RUN_TEST(message_edge_cases);
     RUN_TEST(message_special_characters);
