@@ -67,46 +67,52 @@ static int client_write_direct_locked(client_t *client, const char *data,
 }
 
 static int client_flush_output_locked(client_t *client, size_t budget) {
-    size_t pending;
-    int sent;
+    size_t remaining_budget = budget;
 
-    if (!client->outbox || client->outbox_pos >= client->outbox_len) {
+    if (!client->outbox || client->outbox_len == 0) {
         if (client->outbox) {
-            client->outbox_pos = 0;
-            client->outbox_len = 0;
+            client->outbox_head = 0;
         }
         return 0;
     }
 
-    pending = client->outbox_len - client->outbox_pos;
-    sent = client_write_direct_locked(client, client->outbox + client->outbox_pos,
-                                      pending, budget, false);
-    if (sent < 0) {
-        return -1;
+    while (client->outbox_len > 0) {
+        size_t contiguous = client->outbox_capacity - client->outbox_head;
+        size_t write_budget = budget == 0 ? 0 : remaining_budget;
+        int sent;
+
+        if (contiguous > client->outbox_len) {
+            contiguous = client->outbox_len;
+        }
+
+        sent = client_write_direct_locked(
+            client, client->outbox + client->outbox_head,
+            contiguous, write_budget, false);
+        if (sent < 0) {
+            return -1;
+        }
+        if (sent == 0) {
+            break;
+        }
+
+        client->outbox_head =
+            (client->outbox_head + (size_t)sent) % client->outbox_capacity;
+        client->outbox_len -= (size_t)sent;
+        if (client->outbox_len == 0) {
+            client->outbox_head = 0;
+            break;
+        }
+        if ((size_t)sent < contiguous) {
+            break;
+        }
+        if (budget > 0) {
+            remaining_budget -= (size_t)sent;
+            if (remaining_budget == 0) {
+                break;
+            }
+        }
     }
 
-    client->outbox_pos += (size_t)sent;
-    if (client->outbox_pos >= client->outbox_len) {
-        client->outbox_pos = 0;
-        client->outbox_len = 0;
-    }
-
-    return 0;
-}
-
-static int client_compact_outbox(client_t *client) {
-    if (!client->outbox || client->outbox_pos == 0) {
-        return 0;
-    }
-
-    if (client->outbox_pos < client->outbox_len) {
-        memmove(client->outbox, client->outbox + client->outbox_pos,
-                client->outbox_len - client->outbox_pos);
-        client->outbox_len -= client->outbox_pos;
-    } else {
-        client->outbox_len = 0;
-    }
-    client->outbox_pos = 0;
     return 0;
 }
 
@@ -126,16 +132,25 @@ static int client_enqueue_output_locked(client_t *client, const char *data,
             return client_send_fail(client);
         }
         client->outbox_capacity = CLIENT_OUTBOX_CAPACITY;
+        client->outbox_head = 0;
         client->outbox_len = 0;
-        client->outbox_pos = 0;
     }
 
-    client_compact_outbox(client);
-    if (client->outbox_len + len > client->outbox_capacity) {
+    if (len > client->outbox_capacity - client->outbox_len) {
         return client_send_fail(client);
     }
 
-    memcpy(client->outbox + client->outbox_len, data, len);
+    size_t tail = (client->outbox_head + client->outbox_len) %
+                  client->outbox_capacity;
+    size_t first = client->outbox_capacity - tail;
+    if (first > len) {
+        first = len;
+    }
+
+    memcpy(client->outbox + tail, data, first);
+    if (first < len) {
+        memcpy(client->outbox, data + first, len - first);
+    }
     client->outbox_len += len;
     return 0;
 }
@@ -196,8 +211,8 @@ size_t client_pending_output(client_t *client) {
     if (!client) return 0;
 
     pthread_mutex_lock(&client->io_lock);
-    if (client->outbox && client->outbox_pos < client->outbox_len) {
-        pending = client->outbox_len - client->outbox_pos;
+    if (client->outbox) {
+        pending = client->outbox_len;
     }
     pthread_mutex_unlock(&client->io_lock);
     return pending;

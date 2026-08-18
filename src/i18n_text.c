@@ -251,6 +251,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "post: invalid UTF-8 input\n",
         "post: 输入不是有效 UTF-8\n"
     ),
+    [I18N_EXEC_POST_ASCII_CONTROL] = I18N_STRING(
+        "post: terminal control characters are not allowed\n",
+        "post: 不允许终端控制字符\n"
+    ),
     [I18N_EXEC_POST_TOO_LONG] = I18N_STRING(
         "post: message too long\n",
         "post: 消息过长\n"

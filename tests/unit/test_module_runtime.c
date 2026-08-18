@@ -269,8 +269,20 @@ TEST(rejects_invalid_module_names) {
         "\"events\":[\"message.created\"]}");
     assert(tnt_module_manifest_load(module_dir, &manifest) < 0);
 
-    memset(long_name, 'a', sizeof(long_name) - 1);
-    long_name[sizeof(long_name) - 1] = '\0';
+    memset(long_name, 'a', TNT_MODULE_NAME_MAX);
+    long_name[TNT_MODULE_NAME_MAX] = '\0';
+    snprintf(body, sizeof(body),
+             "{\"protocol\":\"tnt.module.v1\",\"name\":\"%s\","
+             "\"entrypoint\":\"./echo.sh\","
+             "\"permissions\":[\"message:read\",\"message:create\"],"
+             "\"events\":[\"message.created\"]}",
+             long_name);
+    write_manifest(body);
+    assert(tnt_module_manifest_load(module_dir, &manifest) == 0);
+    assert(strlen(manifest.name) == TNT_MODULE_NAME_MAX);
+
+    long_name[TNT_MODULE_NAME_MAX] = 'a';
+    long_name[TNT_MODULE_NAME_MAX + 1] = '\0';
     snprintf(body, sizeof(body),
              "{\"protocol\":\"tnt.module.v1\",\"name\":\"%s\","
              "\"entrypoint\":\"./echo.sh\","
@@ -386,6 +398,80 @@ TEST(module_stdout_drip_feed_cannot_extend_deadline) {
     close(fds[1]);
 }
 
+TEST(module_stdout_preserves_buffered_records) {
+    static const char records[] =
+        "{\"type\":\"message.create\"}\n{\"type\":\"event.ok\"}\n";
+    int fds[2];
+    char first[64];
+    char second[64];
+    int result;
+
+    assert(pipe(fds) == 0);
+    assert(write(fds[1], records, sizeof(records) - 1) ==
+           (ssize_t)(sizeof(records) - 1));
+    close(fds[1]);
+
+    result = tnt_module_runtime_test_read_pair_fd(
+        fds[0], first, sizeof(first), second, sizeof(second), 1000);
+
+    assert(strcmp(first, "{\"type\":\"message.create\"}") == 0);
+    assert(strcmp(second, "{\"type\":\"event.ok\"}") == 0);
+    assert(result == (int)strlen(second));
+    close(fds[0]);
+}
+
+TEST(module_stdout_enforces_record_limit) {
+    char record[4097];
+    char line[4096];
+    int fds[2];
+    int result;
+
+    memset(record, 'x', 4094);
+    record[4094] = '\n';
+    assert(pipe(fds) == 0);
+    assert(write(fds[1], record, 4095) == 4095);
+    result = tnt_module_runtime_test_read_fd(
+        fds[0], line, sizeof(line), 1000, false);
+    assert(result == 4094);
+    assert(line[4093] == 'x');
+    close(fds[0]);
+    close(fds[1]);
+
+    memset(record, 'x', 4095);
+    record[4095] = '\n';
+    assert(pipe(fds) == 0);
+    assert(write(fds[1], record, 4096) == 4096);
+    result = tnt_module_runtime_test_read_fd(
+        fds[0], line, sizeof(line), 1000, false);
+    assert(result == MODULE_READ_ERROR);
+    close(fds[0]);
+    close(fds[1]);
+}
+
+TEST(module_stdout_rejects_control_and_partial_eof) {
+    static const char invalid[] = "{\"type\":\001}\n";
+    int fds[2];
+    char line[64];
+    int result;
+
+    assert(pipe(fds) == 0);
+    assert(write(fds[1], invalid, sizeof(invalid) - 1) ==
+           (ssize_t)(sizeof(invalid) - 1));
+    result = tnt_module_runtime_test_read_fd(
+        fds[0], line, sizeof(line), 1000, false);
+    assert(result == MODULE_READ_ERROR);
+    close(fds[0]);
+    close(fds[1]);
+
+    assert(pipe(fds) == 0);
+    assert(write(fds[1], "{\"type\":\"event.ok\"}", 19) == 19);
+    close(fds[1]);
+    result = tnt_module_runtime_test_read_fd(
+        fds[0], line, sizeof(line), 1000, false);
+    assert(result == MODULE_READ_ERROR);
+    close(fds[0]);
+}
+
 TEST(shutdown_cancels_waiting_module_read) {
     int fds[2];
     pthread_t thread;
@@ -424,6 +510,9 @@ int main(void) {
     RUN_TEST(module_stdin_write_reports_closed_reader);
     RUN_TEST(shutdown_cancels_backpressured_module_write);
     RUN_TEST(module_stdout_drip_feed_cannot_extend_deadline);
+    RUN_TEST(module_stdout_preserves_buffered_records);
+    RUN_TEST(module_stdout_enforces_record_limit);
+    RUN_TEST(module_stdout_rejects_control_and_partial_eof);
     RUN_TEST(shutdown_cancels_waiting_module_read);
 
     printf("\nAll %d module runtime tests passed.\n", tests_passed);

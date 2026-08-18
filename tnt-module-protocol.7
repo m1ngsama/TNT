@@ -1,0 +1,314 @@
+.TH TNT-MODULE-PROTOCOL 7 "2026-08-18" "TNT 1.3.0"
+.SH NAME
+tnt-module-protocol \- implement an external TNT message module
+.SH DESCRIPTION
+TNT modules are external processes that exchange UTF-8 JSON Lines records
+with the server through standard input and standard output.
+The supported protocol identifier is
+.BR tnt.module.v1 .
+.P
+Modules receive selected public message events and may create public
+plain-text messages.
+The core chat path continues when an individual module is invalid, slow,
+stopped, or saturated.
+.SH ACTIVATION
+Modules are disabled unless
+.B TNT_MODULE_PATHS
+contains a colon-separated list of module directories.
+The combined value must contain at most 4095 bytes.
+TNT enables at most eight successfully loaded modules.
+An oversized combined value makes server initialization fail.
+.P
+For each directory, TNT reads
+.I tnt-module.json
+and starts its declared entrypoint with the module directory as the working
+directory.
+No command-line arguments are supplied.
+.SH MANIFEST
+The manifest is a JSON object of at most 4094 bytes.
+The following fields are required:
+.TP
+.B protocol
+String equal to
+.BR tnt.module.v1 .
+.TP
+.B name
+Stable module identifier of at most 56 ASCII characters.
+It may contain lowercase letters, digits, and hyphens.
+It must start and end
+with a letter or digit.
+.TP
+.B entrypoint
+Nonempty executable path relative to the module directory.
+It must not start with
+.BR / ,
+contain
+.BR .. ,
+contain whitespace or control bytes, or contain any of
+.BR "| ; & ` $ < > \e" .
+.TP
+.B permissions
+Array containing both
+.B message:read
+and
+.BR message:create .
+.TP
+.B events
+Array containing
+.BR message.created .
+.P
+Unknown manifest fields are ignored by the runtime.
+The
+.B version
+field is an unprefixed MAJOR.MINOR.PATCH release identifier used by the
+companion module repository's validation tools.
+The runtime does not inspect it.
+Similarly,
+.B tnt_min_version
+is advisory to deployment tools rather than a runtime compatibility check.
+.P
+A minimal manifest is:
+.P
+.EX
+{
+  "protocol": "tnt.module.v1",
+  "name": "echo",
+  "entrypoint": "./echo-module",
+  "permissions": ["message:read", "message:create"],
+  "events": ["message.created"]
+}
+.EE
+.SH TRANSPORT
+TNT writes protocol records to the module's standard input.
+The module writes response records to standard output and may write
+diagnostics to standard error.
+.P
+Each input or output record is one complete JSON object followed by one
+newline.
+The JSON payload before the newline may contain at most 4094 bytes.
+Standard output must contain no banners, logging, blank lines, or other
+text.
+.P
+Unknown members of a recognized object must be ignored.
+String values use JSON escaping and decode to valid UTF-8.
+.SH HANDSHAKE
+Immediately after starting a module,
+TNT sends one handshake record containing
+these values:
+.TP
+.B type
+String
+.BR handshake .
+.TP
+.B protocol
+String
+.BR tnt.module.v1 .
+.TP
+.B server.name
+String
+.BR tnt .
+.TP
+.B server.version
+The running TNT version string.
+.P
+For TNT 1.3.0, the record is:
+.P
+.EX
+{"type":"handshake","protocol":"tnt.module.v1",\c
+"server":{"name":"tnt","version":"1.3.0"}}
+.EE
+.P
+The module must answer within two seconds with:
+.P
+.EX
+{"type":"handshake.ok","protocol":"tnt.module.v1"}
+.EE
+.P
+Additional members in
+.B handshake.ok
+are ignored.
+Any other response, timeout, or I/O failure prevents that module from being
+enabled.
+.SH EVENTS
+For each eligible public message, TNT sends an object with
+.B type
+set to
+.B message.created
+and a
+.B message
+object containing:
+.TP
+.B id
+An opaque string of the form
+.BR local-N .
+.TP
+.B timestamp
+UTC timestamp in the form
+.BR YYYY-MM-DDTHH:MM:SSZ .
+.TP
+.B sender
+The public message sender string.
+.TP
+.B kind
+String
+.BR text .
+.TP
+.B plain_text
+The public plain-text content.
+.TP
+.B metadata
+An object, currently empty.
+.P
+For example, the following is one JSON Lines record:
+.P
+.EX
+{"type":"message.created","message":{\c
+"id":"local-1","timestamp":"2026-06-04T12:00:00Z",\c
+"sender":"alice","kind":"text","plain_text":"hello",\c
+"metadata":{}}}
+.EE
+.P
+Interactive public messages and exec
+.B post
+messages generate events.
+Private messages, room lifecycle notices, and module-created messages
+produce no events.
+Module-created messages are not fed back into the module set.
+.SH RESPONSES
+For each
+.B message.created
+event, a module may write zero or more
+.B message.create
+records and must finish with one
+.B event.ok
+record.
+.P
+Create a public message with:
+.P
+.EX
+{"type":"message.create","plain_text":"echo: hello"}
+.EE
+.P
+.B plain_text
+must contain 1 through 1023 UTF-8 bytes.
+It must contain no C0 or C1 control character or DEL.
+TNT persists and broadcasts accepted text with sender
+.BI module: name .
+.P
+Finish the event with:
+.P
+.EX
+{"type":"event.ok"}
+.EE
+.P
+At most eight response records are accepted for one event, including the
+final acknowledgement.
+A module can therefore create at most seven messages for one event.
+All responses for the event must arrive within one 100-millisecond
+deadline.
+No record may follow
+.B event.ok
+for that event.
+.P
+An unrecognized response type, invalid JSON, invalid text, blank line, or
+output after the response limit is a protocol failure.
+The protocol has no accepted
+.B error
+response type.
+.SH FAILURE HANDLING
+A handshake failure skips the affected module.
+After activation, a write failure, write timeout, read failure, response
+timeout, or response-count overflow disables the module process.
+.P
+Three invalid responses without an intervening valid response disable a
+module.
+Messages created before a later failure in the same event remain persisted
+and visible.
+.P
+Each module has a queue of 128 pending events.
+When it is full, TNT drops new events for that module and continues serving
+chat traffic.
+.P
+On server shutdown, TNT sends SIGTERM to each module process group.
+After 500 milliseconds, remaining processes are sent SIGKILL.
+.SH LIMITS
+.TP
+.B 8
+Maximum enabled modules.
+.TP
+.B 4094 bytes
+Maximum manifest size and maximum JSON Lines payload size.
+.TP
+.B 2 seconds
+Handshake read and write deadline.
+.TP
+.B 250 milliseconds
+Per-event write deadline from TNT to a module.
+.TP
+.B 100 milliseconds
+Whole response deadline for one event.
+.TP
+.B 8 records
+Maximum responses per event, including
+.BR event.ok .
+.TP
+.B 128 events
+Pending queue capacity per module.
+.SH COMPATIBILITY
+The protocol identifier, required manifest capabilities, event and response
+types, and documented member meanings form the
+.B tnt.module.v1
+contract.
+.P
+Future compatible senders may add members to existing objects.
+Modules must ignore unknown members while continuing to validate required
+members and their types.
+.SH FILES
+.TP
+.I module-directory/tnt-module.json
+Module manifest.
+.TP
+.I module-directory/entrypoint
+Executable selected by the manifest.
+.SH CAVEATS
+A module is not an operating-system sandbox.
+It runs as the TNT service account.
+It can access every resource available to that account.
+Use a dedicated account and operating-system isolation for untrusted
+modules.
+.P
+The child inherits most of the server environment.
+TNT removes
+.BR TNT_ACCESS_TOKEN ,
+.BR LD_PRELOAD ,
+and
+.BR LD_LIBRARY_PATH .
+On macOS it also removes
+.B DYLD_INSERT_LIBRARIES
+and
+.BR DYLD_LIBRARY_PATH .
+Other deployment secrets can remain visible.
+Do not put unrelated secrets in the server environment.
+.P
+Use standard error for module diagnostics.
+Any diagnostic written to standard output corrupts protocol framing and may
+disable the module.
+.SH EXAMPLES
+A module producing no message replies with exactly one line:
+.P
+.EX
+{"type":"event.ok"}
+.EE
+.P
+A module creating two messages replies with three lines:
+.P
+.EX
+{"type":"message.create","plain_text":"first"}
+{"type":"message.create","plain_text":"second"}
+{"type":"event.ok"}
+.EE
+.SH SEE ALSO
+.BR tntctl (1),
+.BR tnt\-message\-log (5),
+.BR tnt\-exec (7),
+.BR tnt (8)

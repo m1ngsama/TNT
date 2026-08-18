@@ -42,10 +42,13 @@ source_tarball=${SOURCE_TARBALL:-${RELEASE_SOURCE_TARBALL:-}}
 source_listing=$(tar -tzf "$source_tarball") ||
     fail "SOURCE_TARBALL is not a readable tar.gz archive"
 require_archive_entry "TNT-$version/LICENSE" "LICENSE"
-require_archive_entry "TNT-$version/packaging/README.md" "packaging/README.md"
 require_archive_entry "TNT-$version/src/tntctl.c" "src/tntctl.c"
-require_archive_entry "TNT-$version/tnt.1" "tnt.1"
 require_archive_entry "TNT-$version/tntctl.1" "tntctl.1"
+require_archive_entry "TNT-$version/tnt-message-log.5" "tnt-message-log.5"
+require_archive_entry "TNT-$version/tnt-chat.7" "tnt-chat.7"
+require_archive_entry "TNT-$version/tnt-exec.7" "tnt-exec.7"
+require_archive_entry "TNT-$version/tnt-module-protocol.7" "tnt-module-protocol.7"
+require_archive_entry "TNT-$version/tnt.8" "tnt.8"
 
 ! grep -R "REPLACE_WITH_EMAIL" packaging/arch packaging/debian >/dev/null ||
     fail "replace maintainer email placeholders before package publishing"

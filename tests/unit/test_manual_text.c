@@ -38,7 +38,7 @@ TEST(interactive_manual_matches_language) {
     manual_text_append_interactive(en, sizeof(en), &en_pos, UI_LANG_EN);
     manual_text_append_interactive(zh, sizeof(zh), &zh_pos, UI_LANG_ZH);
 
-    assert(strstr(en, "TNT(1) help") != NULL);
+    assert(strstr(en, "tnt-chat(7) help") != NULL);
     assert(strstr(en, "Use") != NULL);
     assert(strstr(en, "Commands") != NULL);
     assert(strstr(en, ":lang en|zh") != NULL);
@@ -51,9 +51,9 @@ TEST(interactive_manual_matches_language) {
     memset(en, 0, sizeof(en));
     en_pos = 0;
     manual_text_append_interactive(en, sizeof(en), &en_pos, (ui_lang_t)99);
-    assert(strstr(en, "TNT(1) help") != NULL);
+    assert(strstr(en, "tnt-chat(7) help") != NULL);
 
-    assert(strstr(zh, "TNT(1) 帮助") != NULL);
+    assert(strstr(zh, "tnt-chat(7) 帮助") != NULL);
     assert(strstr(zh, "使用") != NULL);
     assert(strstr(zh, "命令") != NULL);
     assert(strstr(zh, ":lang en|zh") != NULL);

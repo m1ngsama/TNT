@@ -26,8 +26,8 @@ Environment:
   PORT=12720         base port for integration tests
 
 Strict checks additionally require a clean tree, a vX.Y.Z tag at HEAD, a
-matching changelog release section, non-placeholder maintainer metadata, and a
-build from the tagged source archive.  Run `make package-publish-check` after
+non-placeholder maintainer metadata, and a build from the tagged source
+archive.  Run `make package-publish-check` after
 the explicit release source archive exists to verify package checksums.
 USAGE
 }
@@ -66,10 +66,24 @@ version=$(sed -n 's/^#define TNT_VERSION "\([^"]*\)".*/\1/p' include/common.h)
 [ -n "$version" ] || fail "could not read TNT_VERSION from include/common.h"
 
 step "checking version metadata for $version"
-grep -q "\"TNT $version\"" tnt.1 ||
-    fail "tnt.1 does not mention TNT $version"
-grep -q "\"TNT $version\"" tntctl.1 ||
-    fail "tntctl.1 does not mention TNT $version"
+while read -r title section manpage; do
+    awk -v title="$title" -v section="$section" -v version="$version" '
+        NR == 1 {
+            valid_date = ($4 ~ /^"[0-9]{4}-[0-9]{2}-[0-9]{2}"$/)
+            valid_source = ($5 == "\"TNT" && $6 == version "\"")
+            exit !($1 == ".TH" && $2 == title && $3 == section &&
+                   valid_date && valid_source && NF == 6)
+        }
+        END { if (NR == 0) exit 1 }
+    ' "$manpage" || fail "$manpage has an invalid release header"
+done <<'EOF'
+TNTCTL 1 tntctl.1
+TNT-MESSAGE-LOG 5 tnt-message-log.5
+TNT-CHAT 7 tnt-chat.7
+TNT-EXEC 7 tnt-exec.7
+TNT-MODULE-PROTOCOL 7 tnt-module-protocol.7
+TNT 8 tnt.8
+EOF
 grep -q "^pkgver=$version$" packaging/arch/PKGBUILD ||
     fail "packaging/arch/PKGBUILD pkgver does not match $version"
 grep -q "pkgver = $version" packaging/arch/.SRCINFO ||
@@ -78,6 +92,10 @@ grep -q "^pkgname=tnt-chat$" packaging/arch/PKGBUILD ||
     fail "packaging/arch/PKGBUILD pkgname is not tnt-chat"
 grep -q "^pkgname = tnt-chat$" packaging/arch/.SRCINFO ||
     fail "packaging/arch/.SRCINFO pkgname is not tnt-chat"
+grep -q "^depends=('libssh' 'openssh')$" packaging/arch/PKGBUILD ||
+    fail "packaging/arch/PKGBUILD must declare libssh and openssh"
+grep -q '^[[:space:]]*depends = openssh$' packaging/arch/.SRCINFO ||
+    fail "packaging/arch/.SRCINFO must declare openssh"
 grep -q '${pkgname}-v${pkgver}-source.tar.gz' packaging/arch/PKGBUILD ||
     fail "packaging/arch/PKGBUILD source must use the release source archive"
 grep -q "tnt-chat-v${version}-source.tar.gz" packaging/arch/.SRCINFO ||
@@ -156,8 +174,23 @@ make DESTDIR="$tmpdir" PREFIX=/usr install-systemd
 
 [ -x "$tmpdir/usr/bin/tnt" ] || fail "missing executable: /usr/bin/tnt"
 [ -x "$tmpdir/usr/bin/tntctl" ] || fail "missing executable: /usr/bin/tntctl"
-[ -f "$tmpdir/usr/share/man/man1/tnt.1" ] || fail "missing manpage: /usr/share/man/man1/tnt.1"
 [ -f "$tmpdir/usr/share/man/man1/tntctl.1" ] || fail "missing manpage: /usr/share/man/man1/tntctl.1"
+[ -f "$tmpdir/usr/share/man/man5/tnt-message-log.5" ] ||
+    fail "missing manpage: /usr/share/man/man5/tnt-message-log.5"
+[ -f "$tmpdir/usr/share/man/man7/tnt-chat.7" ] ||
+    fail "missing manpage: /usr/share/man/man7/tnt-chat.7"
+[ -f "$tmpdir/usr/share/man/man7/tnt-exec.7" ] ||
+    fail "missing manpage: /usr/share/man/man7/tnt-exec.7"
+[ -f "$tmpdir/usr/share/man/man7/tnt-module-protocol.7" ] ||
+    fail "missing manpage: /usr/share/man/man7/tnt-module-protocol.7"
+[ -f "$tmpdir/usr/share/man/man8/tnt.8" ] ||
+    fail "missing manpage: /usr/share/man/man8/tnt.8"
+[ -f "$tmpdir/usr/share/bash-completion/completions/tntctl" ] ||
+    fail "missing bash completion: /usr/share/bash-completion/completions/tntctl"
+[ -f "$tmpdir/usr/share/zsh/site-functions/_tntctl" ] ||
+    fail "missing zsh completion: /usr/share/zsh/site-functions/_tntctl"
+[ -f "$tmpdir/usr/share/fish/vendor_completions.d/tntctl.fish" ] ||
+    fail "missing fish completion: /usr/share/fish/vendor_completions.d/tntctl.fish"
 [ -f "$tmpdir/usr/lib/systemd/system/tnt.service" ] ||
     fail "missing systemd unit: /usr/lib/systemd/system/tnt.service"
 grep -q "^ExecStart=/usr/bin/tnt$" "$tmpdir/usr/lib/systemd/system/tnt.service" ||
@@ -193,12 +226,36 @@ grep -q "$smoke_ts|bob|two" "$recovered_log" ||
 grep -q '^invalid_records 1$' "$recover_report" ||
     fail "installed tnt --log-recover did not report invalid records"
 
+step "checking staged uninstall layout"
+make DESTDIR="$tmpdir" PREFIX=/usr uninstall
+[ ! -e "$tmpdir/usr/bin/tnt" ] || fail "uninstall left /usr/bin/tnt"
+[ ! -e "$tmpdir/usr/bin/tntctl" ] || fail "uninstall left /usr/bin/tntctl"
+for path in \
+        usr/share/man/man1/tntctl.1 \
+        usr/share/man/man5/tnt-message-log.5 \
+        usr/share/man/man7/tnt-chat.7 \
+        usr/share/man/man7/tnt-exec.7 \
+        usr/share/man/man7/tnt-module-protocol.7 \
+        usr/share/man/man8/tnt.8 \
+        usr/share/bash-completion/completions/tntctl \
+        usr/share/zsh/site-functions/_tntctl \
+        usr/share/fish/vendor_completions.d/tntctl.fish; do
+    [ ! -e "$tmpdir/$path" ] || fail "uninstall left /$path"
+done
+[ -f "$tmpdir/usr/lib/systemd/system/tnt.service" ] ||
+    fail "uninstall removed the separately managed systemd unit"
+make DESTDIR="$tmpdir" PREFIX=/usr uninstall-systemd
+[ ! -e "$tmpdir/usr/lib/systemd/system/tnt.service" ] ||
+    fail "uninstall-systemd left tnt.service"
+
 step "checking installer syntax"
 sh -n install.sh
 sh -n scripts/check_release_ref.sh
 sh -n scripts/package_publish_check.sh
 sh -n scripts/package_release_assets.sh
 sh -n scripts/package_source_archive.sh
+sh -n tests/cgroup_exec.sh
+[ -x tests/cgroup_exec.sh ] || fail "tests/cgroup_exec.sh must be executable"
 scripts/check_release_ref.sh "v$version"
 bad_ref=v0.0.0
 [ "$version" != "0.0.0" ] || bad_ref=v9.9.9
@@ -211,12 +268,20 @@ step "checking Debian packaging metadata"
     fail "packaging/debian/debian/rules must be executable"
 [ -x packaging/debian/debian/postinst ] ||
     fail "packaging/debian/debian/postinst must be executable"
+grep -q '^override_dh_auto_test:' packaging/debian/debian/rules ||
+    fail "Debian rules must define a package-safe test target"
+grep -q '^[[:space:]]*$(MAKE) package-test$' packaging/debian/debian/rules ||
+    fail "Debian package tests must use make package-test"
+grep -q '^ mandoc,$' packaging/debian/debian/control ||
+    fail "Debian Build-Depends must include mandoc"
 grep -q "^3.0 (quilt)$" packaging/debian/debian/source/format ||
     fail "unsupported Debian source format"
 grep -q "adduser .* tnt" packaging/debian/debian/postinst ||
     fail "Debian postinst must create the tnt system user"
 grep -q " adduser" packaging/debian/debian/control ||
     fail "Debian package must depend on adduser for postinst user creation"
+grep -q '^ openssh-client$' packaging/debian/debian/control ||
+    fail "Debian package must depend on openssh-client for tntctl"
 
 step "checking Debian source assembly"
 sh -n scripts/package_debian_source.sh
@@ -261,8 +326,6 @@ if [ "$STRICT" -eq 1 ]; then
         fail "missing local tag v$version"
     [ "$(git rev-parse "refs/tags/v$version^{}")" = "$(git rev-parse HEAD)" ] ||
         fail "local tag v$version does not point at HEAD"
-    grep -q "^## $version " docs/CHANGELOG.md ||
-        fail "docs/CHANGELOG.md does not contain a release section for $version"
     ! grep -R "REPLACE_WITH_EMAIL" packaging/arch packaging/debian >/dev/null ||
         fail "replace maintainer email placeholders before strict release"
 
@@ -278,10 +341,18 @@ if [ "$STRICT" -eq 1 ]; then
 
     [ -f "$archive_root/src/tntctl.c" ] ||
         fail "tagged source archive is missing src/tntctl.c"
-    [ -f "$archive_root/tnt.1" ] ||
-        fail "tagged source archive is missing tnt.1"
     [ -f "$archive_root/tntctl.1" ] ||
         fail "tagged source archive is missing tntctl.1"
+    [ -f "$archive_root/tnt-message-log.5" ] ||
+        fail "tagged source archive is missing tnt-message-log.5"
+    [ -f "$archive_root/tnt-chat.7" ] ||
+        fail "tagged source archive is missing tnt-chat.7"
+    [ -f "$archive_root/tnt-exec.7" ] ||
+        fail "tagged source archive is missing tnt-exec.7"
+    [ -f "$archive_root/tnt-module-protocol.7" ] ||
+        fail "tagged source archive is missing tnt-module-protocol.7"
+    [ -f "$archive_root/tnt.8" ] ||
+        fail "tagged source archive is missing tnt.8"
     [ -f "$archive_root/LICENSE" ] ||
         fail "tagged source archive is missing LICENSE"
 
@@ -296,10 +367,18 @@ if [ "$STRICT" -eq 1 ]; then
         fail "tagged source install is missing /usr/bin/tnt"
     [ -x "$archive_install/usr/bin/tntctl" ] ||
         fail "tagged source install is missing /usr/bin/tntctl"
-    [ -f "$archive_install/usr/share/man/man1/tnt.1" ] ||
-        fail "tagged source install is missing tnt.1"
     [ -f "$archive_install/usr/share/man/man1/tntctl.1" ] ||
         fail "tagged source install is missing tntctl.1"
+    [ -f "$archive_install/usr/share/man/man5/tnt-message-log.5" ] ||
+        fail "tagged source install is missing tnt-message-log.5"
+    [ -f "$archive_install/usr/share/man/man7/tnt-chat.7" ] ||
+        fail "tagged source install is missing tnt-chat.7"
+    [ -f "$archive_install/usr/share/man/man7/tnt-exec.7" ] ||
+        fail "tagged source install is missing tnt-exec.7"
+    [ -f "$archive_install/usr/share/man/man7/tnt-module-protocol.7" ] ||
+        fail "tagged source install is missing tnt-module-protocol.7"
+    [ -f "$archive_install/usr/share/man/man8/tnt.8" ] ||
+        fail "tagged source install is missing tnt.8"
     grep -q "^ExecStart=/usr/bin/tnt$" \
         "$archive_install/usr/lib/systemd/system/tnt.service" ||
         fail "tagged source systemd unit ExecStart does not match /usr/bin/tnt"

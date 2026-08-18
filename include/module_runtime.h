@@ -33,6 +33,9 @@ int tnt_module_runtime_test_write_fd(int fd, const char *data, size_t len,
                                      int timeout_ms, bool cancel_on_stop);
 int tnt_module_runtime_test_read_fd(int fd, char *line, size_t line_size,
                                     int timeout_ms, bool cancel_on_stop);
+int tnt_module_runtime_test_read_pair_fd(int fd, char *first,
+                                         size_t first_size, char *second,
+                                         size_t second_size, int timeout_ms);
 void tnt_module_runtime_test_reset_stop(void);
 #endif
 

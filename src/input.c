@@ -86,22 +86,18 @@ static int read_username(client_t *client) {
             client_printf(client, "\r\033[K%s", prompt);
         } else if (b == 23) {  /* Ctrl+W: delete word */
             if (username[0] != '\0') {
-                utf8_remove_last_word(username);
-                pos = (int)strlen(username);
+                pos = (int)utf8_remove_last_word(username, (size_t)pos);
                 client_printf(client, "\r\033[K%s%s", prompt, username);
             }
         } else if (b == 127 || b == 8) {  /* Backspace */
             if (pos > 0) {
                 /* Compute width of the last character before removing it */
-                int old_pos = pos;
                 int ci = pos - 1;
                 while (ci > 0 && (username[ci] & 0xC0) == 0x80) ci--;
                 int bytes_read;
                 uint32_t cp = utf8_decode(username + ci, &bytes_read);
                 int w = utf8_char_width(cp);
-                utf8_remove_last_char(username);
-                pos = strlen(username);
-                (void)old_pos;
+                pos = (int)utf8_remove_last_char(username, (size_t)pos);
                 for (int j = 0; j < w; j++)
                     client_printf(client, "\b \b");
             }
@@ -131,6 +127,9 @@ static int read_username(client_t *client) {
             }
             /* Validate the complete UTF-8 sequence */
             if (!utf8_is_valid_sequence(buf, len)) {
+                continue;
+            }
+            if (utf8_is_control_sequence(buf, len)) {
                 continue;
             }
             if (pos + len < MAX_USERNAME_LEN - 1) {
@@ -530,9 +529,19 @@ static void command_tab_complete(client_t *client) {
     tui_render_command_hint(client, hint);
 }
 
+static void input_replace(char *input, size_t input_size, size_t *input_len,
+                          const char *value) {
+    size_t len = strnlen(value, input_size - 1);
+
+    memcpy(input, value, len);
+    input[len] = '\0';
+    *input_len = len;
+}
+
 /* Handle a single key press.  Returns true if the key was fully consumed
  * (no further character buffering needed). */
-static bool handle_key(client_t *client, unsigned char key, char *input) {
+static bool handle_key(client_t *client, unsigned char key, char *input,
+                       size_t *input_len, size_t *command_input_len) {
     /* Handle Ctrl+C (Exit or switch to NORMAL) */
     if (key == 3) {
         client_mode_t previous_mode = client->mode;
@@ -548,6 +557,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
         if (previous_mode != MODE_NORMAL) {
             client->mode = MODE_NORMAL;
             client->command_input[0] = '\0';
+            *command_input_len = 0;
             client->show_help = false;
             if (previous_mode == MODE_INSERT) {
                 normal_scroll_to_latest(client);
@@ -618,10 +628,10 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                             if (client->insert_history_count > 0 &&
                                 client->insert_history_pos > 0) {
                                 client->insert_history_pos--;
-                                strncpy(input,
-                                        client->insert_history[client->insert_history_pos],
-                                        MAX_MESSAGE_LEN - 1);
-                                input[MAX_MESSAGE_LEN - 1] = '\0';
+                                input_replace(
+                                    input, MAX_MESSAGE_LEN, input_len,
+                                    client->insert_history[
+                                        client->insert_history_pos]);
                                 tui_render_input(client, input);
                             }
                             return true;
@@ -629,14 +639,15 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                             if (client->insert_history_pos <
                                 client->insert_history_count - 1) {
                                 client->insert_history_pos++;
-                                strncpy(input,
-                                        client->insert_history[client->insert_history_pos],
-                                        MAX_MESSAGE_LEN - 1);
-                                input[MAX_MESSAGE_LEN - 1] = '\0';
+                                input_replace(
+                                    input, MAX_MESSAGE_LEN, input_len,
+                                    client->insert_history[
+                                        client->insert_history_pos]);
                             } else {
                                 client->insert_history_pos =
                                     client->insert_history_count;
                                 input[0] = '\0';
+                                *input_len = 0;
                             }
                             tui_render_input(client, input);
                             return true;
@@ -678,6 +689,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                                             int status =
                                                 tnt_input_append_stream_byte(
                                                     input, MAX_MESSAGE_LEN,
+                                                    input_len,
                                                     &paste_utf8,
                                                     (unsigned char)tail[i],
                                                     true);
@@ -693,8 +705,8 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                                         continue;
                                     }
                                     int status = tnt_input_append_stream_byte(
-                                        input, MAX_MESSAGE_LEN, &paste_utf8,
-                                        (unsigned char)b, true);
+                                        input, MAX_MESSAGE_LEN, input_len,
+                                        &paste_utf8, (unsigned char)b, true);
                                     if (status & TNT_INPUT_APPEND_OVERFLOW) {
                                         overflow = true;
                                     }
@@ -723,6 +735,21 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 return true;
             } else if (key == '\r' || key == '\n') {  /* Enter */
                 if (input[0] != '\0') {
+                    bool is_action = *input_len > 4 &&
+                                     strncmp(input, "/me ", 4) == 0;
+                    size_t action_len = is_action ? *input_len - 4 : 0;
+                    size_t action_username_len = 0;
+
+                    if (is_action) {
+                        action_username_len = strlen(client->username);
+                    }
+                    if (is_action &&
+                        action_username_len + 1 + action_len >=
+                            MAX_MESSAGE_LEN) {
+                        client_send(client, "\a", 1);
+                        return true;
+                    }
+
                     /* Record into the per-client INSERT history ring */
                     int max_hist = (int)(sizeof(client->insert_history) /
                                          sizeof(client->insert_history[0]));
@@ -740,14 +767,14 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                     message_t msg = {
                         .timestamp = time(NULL),
                     };
-                    if (strncmp(input, "/me ", 4) == 0 && input[4] != '\0') {
+                    if (is_action) {
                         msg.username[0] = '*';
                         msg.username[1] = '\0';
-                        int n = snprintf(msg.content, sizeof(msg.content), "%s %s",
-                                         client->username, input + 4);
-                        if (n >= (int)sizeof(msg.content)) {
-                            msg.content[sizeof(msg.content) - 1] = '\0';
-                        }
+                        memcpy(msg.content, client->username,
+                               action_username_len);
+                        msg.content[action_username_len] = ' ';
+                        memcpy(msg.content + action_username_len + 1,
+                               input + 4, action_len + 1);
                     } else {
                         snprintf(msg.username, sizeof(msg.username), "%s", client->username);
                         snprintf(msg.content, sizeof(msg.content), "%s", input);
@@ -760,6 +787,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                         fprintf(stderr, "interactive: failed to persist message\n");
                     }
                     input[0] = '\0';
+                    *input_len = 0;
                 }
                 /* The room update/redraw path at the top of the session loop
                  * owns the post-send repaint.  Deferring it lets a buffered
@@ -769,19 +797,20 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */
                 if (input[0] != '\0') {
-                    utf8_remove_last_char(input);
+                    *input_len = utf8_remove_last_char(input, *input_len);
                     tui_render_input(client, input);
                 }
                 return true;  /* Key consumed */
             } else if (key == 23) { /* Ctrl+W (Delete Word) */
                 if (input[0] != '\0') {
-                    utf8_remove_last_word(input);
+                    *input_len = utf8_remove_last_word(input, *input_len);
                     tui_render_input(client, input);
                 }
                 return true;
             } else if (key == 21) { /* Ctrl+U (Delete Line) */
                 if (input[0] != '\0') {
                     input[0] = '\0';
+                    *input_len = 0;
                     tui_render_input(client, input);
                 }
                 return true;
@@ -791,7 +820,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                  * If found, scan g_room for the first case-insensitive
                  * username prefix-match (cycling past self) and replace
                  * the token. */
-                size_t in_len = strlen(input);
+                size_t in_len = *input_len;
                 ssize_t at_idx = -1;
                 for (ssize_t i = (ssize_t)in_len - 1; i >= 0; i--) {
                     unsigned char c = (unsigned char)input[i];
@@ -803,7 +832,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 }
                 if (at_idx >= 0) {
                     const char *prefix = input + at_idx + 1;
-                    size_t plen = strlen(prefix);
+                    size_t plen = in_len - (size_t)at_idx - 1;
                     char match[MAX_USERNAME_LEN] = "";
                     pthread_rwlock_rdlock(&g_room->lock);
                     for (int i = 0; i < g_room->client_count; i++) {
@@ -823,9 +852,12 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                                        - (size_t)at_idx - 1;
                         size_t mlen = strlen(match);
                         if (mlen + 1 <= avail) {
-                            input[at_idx + 1] = '\0';
-                            strncat(input, match, avail);
-                            strncat(input, " ", 1);
+                            size_t pos = (size_t)at_idx + 1;
+                            memcpy(input + pos, match, mlen);
+                            pos += mlen;
+                            input[pos++] = ' ';
+                            input[pos] = '\0';
+                            *input_len = pos;
                             tui_render_input(client, input);
                         }
                     }
@@ -844,12 +876,14 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
             } else if (key == ':') {
                 client->mode = MODE_COMMAND;
                 client->command_input[0] = '\0';
+                *command_input_len = 0;
                 tui_render_command_input(client);
                 return true;
             } else if (key == '/') {
                 client->mode = MODE_COMMAND;
                 snprintf(client->command_input, sizeof(client->command_input),
                          "search ");
+                *command_input_len = sizeof("search ") - 1;
                 tui_render_command_input(client);
                 return true;
             } else if (key == 'j') {
@@ -946,23 +980,28 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                             if (client->command_history_count > 0 &&
                                 client->command_history_pos > 0) {
                                 client->command_history_pos--;
-                                strncpy(client->command_input,
-                                        client->command_history[client->command_history_pos],
-                                        sizeof(client->command_input) - 1);
-                                client->command_input[sizeof(client->command_input) - 1] = '\0';
+                                input_replace(
+                                    client->command_input,
+                                    sizeof(client->command_input),
+                                    command_input_len,
+                                    client->command_history[
+                                        client->command_history_pos]);
                                 tui_render_command_input(client);
                             }
                             return true;
                         } else if (seq[1] == 'B') {  /* Down arrow */
                             if (client->command_history_pos < client->command_history_count - 1) {
                                 client->command_history_pos++;
-                                strncpy(client->command_input,
-                                        client->command_history[client->command_history_pos],
-                                        sizeof(client->command_input) - 1);
-                                client->command_input[sizeof(client->command_input) - 1] = '\0';
+                                input_replace(
+                                    client->command_input,
+                                    sizeof(client->command_input),
+                                    command_input_len,
+                                    client->command_history[
+                                        client->command_history_pos]);
                             } else {
                                 client->command_history_pos = client->command_history_count;
                                 client->command_input[0] = '\0';
+                                *command_input_len = 0;
                             }
                             tui_render_command_input(client);
                             return true;
@@ -971,31 +1010,39 @@ static bool handle_key(client_t *client, unsigned char key, char *input) {
                 }
                 client->mode = MODE_NORMAL;
                 client->command_input[0] = '\0';
+                *command_input_len = 0;
                 tui_render_screen(client);
                 return true;
             } else if (key == '\r' || key == '\n') {
                 commands_dispatch(client);
+                *command_input_len = 0;
                 return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */
                 if (client->command_input[0] != '\0') {
-                    utf8_remove_last_char(client->command_input);
+                    *command_input_len = utf8_remove_last_char(
+                        client->command_input, *command_input_len);
                     tui_render_command_input(client);
                 }
                 return true;  /* Key consumed */
             } else if (key == 23) { /* Ctrl+W (Delete Word) */
                 if (client->command_input[0] != '\0') {
-                    utf8_remove_last_word(client->command_input);
+                    *command_input_len = utf8_remove_last_word(
+                        client->command_input, *command_input_len);
                     tui_render_command_input(client);
                 }
                 return true;
             } else if (key == 21) { /* Ctrl+U (Delete Line) */
                 if (client->command_input[0] != '\0') {
                     client->command_input[0] = '\0';
+                    *command_input_len = 0;
                     tui_render_command_input(client);
                 }
                 return true;
             } else if (key == 9) { /* Tab: complete command name or argument */
                 command_tab_complete(client);
+                *command_input_len = strnlen(
+                    client->command_input,
+                    sizeof(client->command_input) - 1);
                 return true;
             }
             break;
@@ -1105,6 +1152,8 @@ static int input_flush_client_output(client_t *client) {
 
 void input_run_session(client_t *client) {
     char input[MAX_MESSAGE_LEN] = {0};
+    size_t input_len = 0;
+    size_t command_input_len = 0;
     char buf[4];
     bool joined_room = false;
     bool bracketed_paste_enabled = false;
@@ -1120,6 +1169,7 @@ void input_run_session(client_t *client) {
     client->connected = true;
     client->command_history_count = 0;
     client->command_history_pos = 0;
+    client->command_input[0] = '\0';
     client->command_output_scroll = 0;
     client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
     client->connect_time = time(NULL);
@@ -1454,7 +1504,8 @@ main_loop:
         unsigned char b = buf[0];
 
         /* Handle special keys - returns true if key was consumed */
-        bool key_consumed = handle_key(client, b, input);
+        bool key_consumed = handle_key(client, b, input, &input_len,
+                                       &command_input_len);
 
         /* Only add character to input if not consumed by handle_key */
         if (!key_consumed) {
@@ -1462,8 +1513,8 @@ main_loop:
             if (client->mode == MODE_INSERT && !client->show_help &&
                 client->command_output[0] == '\0') {
                 if (b >= 32 && b < 127) {  /* ASCII printable */
-                    int status = tnt_input_append_ascii(input,
-                                                        MAX_MESSAGE_LEN, b);
+                    int status = tnt_input_append_ascii(
+                        input, MAX_MESSAGE_LEN, &input_len, b);
                     if (status == TNT_INPUT_APPEND_OK) {
                         if (ready <= n) {
                             tui_render_input(client, input);
@@ -1491,7 +1542,7 @@ main_loop:
                         continue;
                     }
                     int status = tnt_input_append_utf8_sequence(
-                        input, MAX_MESSAGE_LEN, buf, char_len);
+                        input, MAX_MESSAGE_LEN, &input_len, buf, char_len);
                     if (status == TNT_INPUT_APPEND_OK) {
                         if (ready <= char_len) {
                             tui_render_input(client, input);
@@ -1505,7 +1556,7 @@ main_loop:
                 if (b >= 32 && b < 127) {  /* ASCII printable */
                     int status = tnt_input_append_ascii(
                         client->command_input, sizeof(client->command_input),
-                        b);
+                        &command_input_len, b);
                     if (status == TNT_INPUT_APPEND_OK) {
                         if (ready <= n) {
                             tui_render_command_input(client);
@@ -1525,7 +1576,7 @@ main_loop:
                     if (!utf8_is_valid_sequence(buf, char_len)) continue;
                     int status = tnt_input_append_utf8_sequence(
                         client->command_input, sizeof(client->command_input),
-                        buf, char_len);
+                        &command_input_len, buf, char_len);
                     if (status == TNT_INPUT_APPEND_OK) {
                         if (ready <= char_len) {
                             tui_render_command_input(client);

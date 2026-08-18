@@ -19,7 +19,7 @@ fail_case() {
 
 echo "=== TNT Maintainer Coverage Tests ==="
 
-if "$ROOT/scripts/check_maintainers.sh" src/module_runtime.c docs/MODULE_PROTOCOL.md >/dev/null; then
+if "$ROOT/scripts/check_maintainers.sh" src/module_runtime.c tnt-module-protocol.7 >/dev/null; then
     pass "known paths are covered"
 else
     fail_case "known paths are covered"
@@ -64,6 +64,23 @@ if (cd "$tmp" && scripts/check_maintainers.sh >/dev/null); then
     pass "source archive fallback ignores generated files"
 else
     fail_case "source archive fallback ignores generated files"
+fi
+
+mkdir -p "$tmp/git/scripts"
+cp "$ROOT/MAINTAINERS" "$tmp/git/MAINTAINERS"
+cp "$ROOT/scripts/check_maintainers.sh" "$tmp/git/scripts/check_maintainers.sh"
+cp "$ROOT/scripts/get_maintainer.sh" "$tmp/git/scripts/get_maintainer.sh"
+chmod +x "$tmp/git/scripts/check_maintainers.sh" \
+    "$tmp/git/scripts/get_maintainer.sh"
+git -C "$tmp/git" init -q
+: > "$tmp/git/retired-uncovered.xyz"
+git -C "$tmp/git" add MAINTAINERS scripts retired-uncovered.xyz
+rm -f "$tmp/git/retired-uncovered.xyz"
+
+if (cd "$tmp/git" && scripts/check_maintainers.sh >/dev/null); then
+    pass "deleted tracked paths are ignored"
+else
+    fail_case "deleted tracked paths are ignored"
 fi
 
 printf '\nPASSED: %d\nFAILED: %d\n' "$PASS" "$FAIL"

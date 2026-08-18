@@ -1,6 +1,6 @@
 [Unit]
 Description=TNT Terminal Chat Server (Anonymous)
-Documentation=https://github.com/m1ngsama/TNT
+Documentation=man:tnt(8) man:tnt-chat(7) man:tnt-exec(7)
 After=network.target
 
 [Service]

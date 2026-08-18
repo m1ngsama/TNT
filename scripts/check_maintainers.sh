@@ -10,7 +10,7 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/check_maintainers.sh [PATH ...]
 
-With no paths, checks git-tracked files plus untracked, non-ignored files.
+With no paths, checks existing tracked and untracked, non-ignored files.
 Fails if any path maps only to UNKNOWN.
 USAGE
 }
@@ -44,7 +44,12 @@ list_repo_files() {
     if [ "${TNT_CHECK_MAINTAINERS_NO_GIT:-0}" != "1" ] &&
        command -v git >/dev/null 2>&1 &&
        git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        git -C "$ROOT" ls-files --cached --others --exclude-standard
+        git -C "$ROOT" -c core.quotepath=false ls-files \
+            --cached --others --exclude-standard |
+            while IFS= read -r path; do
+                [ -e "$ROOT/$path" ] || [ -L "$ROOT/$path" ] || continue
+                printf '%s\n' "$path"
+            done
     else
         find "$ROOT" -type f ! -path "$ROOT/.git/*" |
             sed "s#^$ROOT/##" |

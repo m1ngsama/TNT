@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        For security vulnerabilities, do not open a public issue. See SECURITY.md.
+        For security vulnerabilities, use private reporting or email contact@m1ng.space.
   - type: input
     id: version
     attributes:

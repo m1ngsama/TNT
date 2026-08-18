@@ -9,19 +9,6 @@ static bool append_was_truncated(size_t pos, size_t buf_size) {
     return buf_size == 0 || pos >= buf_size - 1;
 }
 
-static bool has_plain_text_controls(const char *text) {
-    const unsigned char *p = (const unsigned char *)text;
-
-    while (p && *p) {
-        if (*p < 32 || *p == 127) {
-            return true;
-        }
-        p++;
-    }
-
-    return false;
-}
-
 int tnt_module_append_handshake(char *buffer, size_t buf_size, size_t *pos,
                                 const char *server_version) {
     const char *version = server_version ? server_version : TNT_VERSION;
@@ -103,7 +90,7 @@ bool tnt_module_parse_message_create(const char *line,
     if (plain_text[0] == '\0' ||
         strlen(plain_text) >= sizeof(out->plain_text) ||
         !utf8_is_valid_string(plain_text) ||
-        has_plain_text_controls(plain_text)) {
+        utf8_contains_control(plain_text)) {
         return false;
     }
 

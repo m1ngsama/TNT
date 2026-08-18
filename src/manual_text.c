@@ -6,7 +6,7 @@
 void manual_text_append_interactive(char *buffer, size_t buf_size,
                                     size_t *pos, ui_lang_t lang) {
     static const i18n_string_t intro = I18N_STRING(
-        "\033[1;36mTNT(1) help\033[0m\n"
+        "\033[1;36mtnt-chat(7) help\033[0m\n"
         "\n"
         "\033[1;37mName\033[0m\n"
         "  TNT - SSH terminal chat room\n"
@@ -16,7 +16,7 @@ void manual_text_append_interactive(char *buffer, size_t buf_size,
         "  Esc browses; / searches; G latest; i/a/o types; : commands; ? keys\n"
         "\n"
         "\033[1;37mCommands\033[0m\n",
-        "\033[1;36mTNT(1) 帮助\033[0m\n"
+        "\033[1;36mtnt-chat(7) 帮助\033[0m\n"
         "\n"
         "\033[1;37m名称\033[0m\n"
         "  TNT - SSH 终端聊天室\n"

@@ -13,8 +13,18 @@ class TntChat < Formula
 
     bin.install "#{buildpath}/stage#{prefix}/bin/tnt"
     bin.install "#{buildpath}/stage#{prefix}/bin/tntctl"
-    man1.install "#{buildpath}/stage#{prefix}/share/man/man1/tnt.1"
     man1.install "#{buildpath}/stage#{prefix}/share/man/man1/tntctl.1"
+    man5.install "#{buildpath}/stage#{prefix}/share/man/man5/tnt-message-log.5"
+    man7.install "#{buildpath}/stage#{prefix}/share/man/man7/tnt-chat.7"
+    man7.install "#{buildpath}/stage#{prefix}/share/man/man7/tnt-exec.7"
+    man7.install "#{buildpath}/stage#{prefix}/share/man/man7/tnt-module-protocol.7"
+    man8.install "#{buildpath}/stage#{prefix}/share/man/man8/tnt.8"
+    bash_completion.install \
+      "#{buildpath}/stage#{prefix}/share/bash-completion/completions/tntctl"
+    zsh_completion.install \
+      "#{buildpath}/stage#{prefix}/share/zsh/site-functions/_tntctl"
+    fish_completion.install \
+      "#{buildpath}/stage#{prefix}/share/fish/vendor_completions.d/tntctl.fish"
 
     (var/"tnt").mkpath
     (var/"log").mkpath

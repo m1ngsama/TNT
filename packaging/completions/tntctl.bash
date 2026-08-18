@@ -1,9 +1,3 @@
-# bash completion for tntctl
-#
-# Install: source this file from ~/.bashrc, or copy it to
-#   /usr/share/bash-completion/completions/tntctl
-# (or /etc/bash_completion.d/tntctl).
-
 _tntctl() {
     local cur prev opts commands cmd i
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -19,10 +13,9 @@ _tntctl() {
             COMPREPLY=( $(compgen -f -- "$cur") )
             return ;;
         -p|--port|-l|--login)
-            return ;;  # free-form value
+            return ;;
     esac
 
-    # Detect a subcommand already on the line.
     cmd=""
     for ((i = 1; i < COMP_CWORD; i++)); do
         case "${COMP_WORDS[i]}" in
@@ -32,20 +25,20 @@ _tntctl() {
     done
 
     if [[ "$cur" == -* ]]; then
-        local extra=""
         case "$cmd" in
-            users|stats) extra="--json" ;;
+            users|stats) COMPREPLY=( $(compgen -W "--json" -- "$cur") ) ;;
+            tail) COMPREPLY=( $(compgen -W "-n" -- "$cur") ) ;;
+            dump) COMPREPLY=( $(compgen -W "-n --all" -- "$cur") ) ;;
+            '') COMPREPLY=( $(compgen -W "$opts" -- "$cur") ) ;;
+            *) COMPREPLY=() ;;
         esac
-        COMPREPLY=( $(compgen -W "$opts $extra" -- "$cur") )
         return
     fi
 
-    # Positional args after a subcommand are free-form.
     if [[ -n "$cmd" ]]; then
         return
     fi
 
-    # Otherwise offer the known subcommands (typed after the host).
     COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
 }
 complete -F _tntctl tntctl

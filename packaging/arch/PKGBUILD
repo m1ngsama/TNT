@@ -7,7 +7,7 @@ pkgdesc='SSH-native terminal chat server with a Vim-style interface'
 arch=('x86_64' 'aarch64')
 url='https://github.com/m1ngsama/TNT'
 license=('MIT')
-depends=('libssh')
+depends=('libssh' 'openssh')
 makedepends=('gcc' 'make')
 source=("${pkgname}-v${pkgver}-source.tar.gz::${url}/releases/download/v${pkgver}/${pkgname}-v${pkgver}-source.tar.gz"
         "${pkgname}.sysusers")

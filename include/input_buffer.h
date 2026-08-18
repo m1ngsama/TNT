@@ -18,14 +18,17 @@ typedef struct {
 
 void tnt_input_utf8_state_reset(tnt_input_utf8_state_t *state);
 
-int tnt_input_append_ascii(char *input, size_t input_size, unsigned char b);
+int tnt_input_append_ascii(char *input, size_t input_size,
+                           size_t *input_len, unsigned char b);
 int tnt_input_append_utf8_sequence(char *input, size_t input_size,
-                                   const char *bytes, int len);
+                                   size_t *input_len, const char *bytes,
+                                   int len);
 
 /* Append one byte from a terminal stream, validating UTF-8 across calls.
  * In paste mode CR/LF/TAB are normalized to spaces so existing TNT 1.x
  * single-line message semantics are preserved. */
 int tnt_input_append_stream_byte(char *input, size_t input_size,
+                                 size_t *input_len,
                                  tnt_input_utf8_state_t *state,
                                  unsigned char b, bool paste_mode);
 

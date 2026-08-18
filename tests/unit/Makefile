@@ -1,12 +1,23 @@
 # Unit Tests Makefile
-CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -D_XOPEN_SOURCE=700 -I../../include
-LDFLAGS = -pthread
+CC ?= cc
+CPPFLAGS ?=
+CFLAGS ?= -Wall -Wextra -std=c11
+LDFLAGS ?=
+LDLIBS ?=
+
+PROJECT_CPPFLAGS = -D_XOPEN_SOURCE=700 -I../../include
+PROJECT_LDFLAGS =
+PROJECT_LDLIBS = -pthread
 
 # Detect macOS for _DARWIN_C_SOURCE (needed for timegm)
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-CFLAGS += -D_DARWIN_C_SOURCE
+PROJECT_CPPFLAGS += -D_DARWIN_C_SOURCE
+LIBSSH_PREFIX := $(shell brew --prefix libssh 2>/dev/null)
+ifneq ($(LIBSSH_PREFIX),)
+PROJECT_CPPFLAGS += -I$(LIBSSH_PREFIX)/include
+PROJECT_LDFLAGS += -L$(LIBSSH_PREFIX)/lib
+endif
 endif
 
 # Source files
@@ -33,68 +44,75 @@ MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
 THEME_SRC = ../../src/theme.c
 
-TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_config_defaults test_theme
+TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_common test_client_outbox test_config_defaults test_theme
 
 .PHONY: all clean run
 
 all: $(TESTS)
 
 test_utf8: test_utf8.c $(UTF8_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_input_buffer: test_input_buffer.c $(INPUT_BUFFER_SRC) $(UTF8_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_json_text: test_json_text.c $(JSON_TEXT_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_module_protocol: test_module_protocol.c $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_module_runtime: test_module_runtime.c $(MODULE_RUNTIME_SRC) $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -DTNT_TESTING -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) -DTNT_TESTING $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_message: test_message.c $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_chat_room: test_chat_room.c $(CHAT_ROOM_SRC) $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_history_view: test_history_view.c $(HISTORY_VIEW_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_i18n: test_i18n.c $(I18N_SRC) $(I18N_TEXT_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_system_message: test_system_message.c $(SYSTEM_MESSAGE_SRC) $(I18N_SRC) $(I18N_TEXT_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_command_catalog: test_command_catalog.c $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_exec_catalog: test_exec_catalog.c $(EXEC_CATALOG_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_help_text: test_help_text.c $(HELP_TEXT_SRC) $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_manual_text: test_manual_text.c $(MANUAL_TEXT_SRC) $(COMMAND_CATALOG_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_cli_text: test_cli_text.c $(CLI_TEXT_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_tntctl_text: test_tntctl_text.c $(TNTCTL_TEXT_SRC) $(EXEC_CATALOG_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_ratelimit: test_ratelimit.c $(RATELIMIT_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC)
-	$(CC) $(CFLAGS) -DTNT_TESTING -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) -DTNT_TESTING $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
+
+test_common: test_common.c $(COMMON_SRC)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
+
+test_client_outbox: test_client_outbox.c ../../src/client.c $(COMMON_SRC) \
+		../../include/client.h ../../include/ssh_server.h ../../include/common.h
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) $(PROJECT_LDFLAGS) -o $@ $< $(COMMON_SRC) $(PROJECT_LDLIBS) -lssh $(LDLIBS)
 
 test_config_defaults: test_config_defaults.c $(CONFIG_DEFAULTS_SRC) $(COMMON_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_theme: test_theme.c $(THEME_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 run: all
 	@echo "=== Running UTF-8 Tests ==="
@@ -147,6 +165,12 @@ run: all
 	@echo ""
 	@echo "=== Running Rate Limit Tests ==="
 	./test_ratelimit
+	@echo ""
+	@echo "=== Running Common Tests ==="
+	./test_common
+	@echo ""
+	@echo "=== Running Client Outbox Tests ==="
+	./test_client_outbox
 	@echo ""
 	@echo "=== Running Config Defaults Tests ==="
 	./test_config_defaults

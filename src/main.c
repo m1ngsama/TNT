@@ -350,5 +350,5 @@ int main(int argc, char **argv) {
     room_destroy(g_room);
     g_room = NULL;
     close_signal_pipe(shutdown_pipe);
-    return ret;
+    return ret == 0 ? TNT_EXIT_OK : TNT_EXIT_ERROR;
 }

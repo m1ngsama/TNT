@@ -1,4 +1,5 @@
 #include "utf8.h"
+#include "common.h"
 
 /* Get the number of bytes in a UTF-8 character from its first byte */
 int utf8_byte_length(unsigned char first_byte) {
@@ -244,25 +245,22 @@ void utf8_ansi_truncate(const char *src, char *dst, size_t dst_size,
 }
 
 /* Remove last UTF-8 character from string */
-void utf8_remove_last_char(char *str) {
-    int len = strlen(str);
-    if (len == 0) return;
+size_t utf8_remove_last_char(char *str, size_t len) {
+    if (len == 0) return 0;
 
     /* Find the start of the last character by walking backwards */
-    int i = len - 1;
+    size_t i = len - 1;
     while (i > 0 && (str[i] & 0xC0) == 0x80) {
         i--;  /* Continue byte of multi-byte sequence */
     }
 
     str[i] = '\0';
+    return i;
 }
 
 /* Remove last word from string (mimic Ctrl+W) */
-void utf8_remove_last_word(char *str) {
-    int len = strlen(str);
-    if (len == 0) return;
-
-    int i = len;
+size_t utf8_remove_last_word(char *str, size_t len) {
+    size_t i = len;
 
     /* Skip trailing spaces */
     while (i > 0 && str[i - 1] == ' ') {
@@ -275,6 +273,7 @@ void utf8_remove_last_word(char *str) {
     }
 
     str[i] = '\0';
+    return i;
 }
 
 /* Validate a UTF-8 byte sequence */
@@ -356,4 +355,31 @@ bool utf8_is_valid_string(const char *str) {
     }
 
     return true;
+}
+
+bool utf8_is_control_sequence(const char *bytes, int len) {
+    const unsigned char *p = (const unsigned char *)bytes;
+
+    if (!bytes || len <= 0) {
+        return false;
+    }
+    return (len == 1 && (p[0] < 0x20 || p[0] == 0x7F)) ||
+           (len == 2 && p[0] == 0xC2 && p[1] >= 0x80 && p[1] <= 0x9F);
+}
+
+bool utf8_contains_control(const char *str) {
+    if (!str) {
+        return false;
+    }
+
+    for (const unsigned char *p = (const unsigned char *)str; *p; p++) {
+        if (*p < 0x20 || *p == 0x7F) {
+            return true;
+        }
+        if (*p == 0xC2 && p[1] >= 0x80 && p[1] <= 0x9F) {
+            return true;
+        }
+    }
+
+    return false;
 }

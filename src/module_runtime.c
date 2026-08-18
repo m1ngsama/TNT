@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #define TNT_MODULE_LINE_MAX 4096
+#define TNT_MODULE_READ_BUFFER_SIZE 1024
 #define TNT_MODULE_HANDSHAKE_TIMEOUT_MS 2000
 #define TNT_MODULE_RESPONSE_TIMEOUT_MS 100
 #define TNT_MODULE_WRITE_TIMEOUT_MS 250
@@ -26,23 +27,42 @@
 #define TNT_MODULE_MAX_INVALID_RESPONSES 3
 #define TNT_MODULE_STOP_GRACE_MS 500
 #define TNT_MODULE_MAX_OPEN_FILES 64
+#define TNT_MODULE_WORKER_STACK_SIZE (256 * 1024)
 
 struct client;
 void notify_mentions(const char *content, const struct client *sender);
 
+typedef struct module_event {
+    message_t msg;
+    uint64_t event_id;
+} module_event_t;
+
+typedef struct module_read_buffer {
+    char data[TNT_MODULE_READ_BUFFER_SIZE];
+    size_t begin;
+    size_t end;
+} module_read_buffer_t;
+
 typedef struct module_process {
     tnt_module_manifest_t manifest;
     pid_t pid;
+    pid_t pgid;
     int stdin_fd;
     int stdout_fd;
+    module_read_buffer_t output;
     int invalid_responses;
-    bool active;
+    atomic_bool active;
+    pthread_t worker;
+    pthread_mutex_t queue_lock;
+    pthread_cond_t queue_cond;
+    module_event_t *event_queue;
+    size_t queue_read_index;
+    size_t queued_event_count;
+    bool queue_running;
+    bool saturation_reported;
+    bool queue_initialized;
+    bool worker_started;
 } module_process_t;
-
-typedef struct module_event_node {
-    message_t msg;
-    struct module_event_node *next;
-} module_event_node_t;
 
 typedef enum module_response_action {
     MODULE_RESPONSE_CONTINUE,
@@ -62,17 +82,20 @@ typedef enum module_read_result {
     MODULE_READ_STOPPING = -2
 } module_read_result_t;
 
+typedef enum module_queue_push_result {
+    MODULE_QUEUE_PUSHED,
+    MODULE_QUEUE_DROPPED,
+    MODULE_QUEUE_SATURATED
+} module_queue_push_result_t;
+
 static module_process_t g_modules[TNT_MAX_MODULES];
 static int g_module_count = 0;
-static pthread_t g_module_thread;
-static bool g_thread_started = false;
-static bool g_running = false;
+static bool g_accepting = false;
+static uint64_t g_next_event_id = 0;
 static atomic_bool g_stop_requested = ATOMIC_VAR_INIT(true);
-static pthread_mutex_t g_queue_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_queue_cond = PTHREAD_COND_INITIALIZER;
-static module_event_node_t *g_queue_head = NULL;
-static module_event_node_t *g_queue_tail = NULL;
-static int g_queue_len = 0;
+static pthread_mutex_t g_dispatch_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_module_publish_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_lifecycle_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static bool is_safe_relative_entrypoint(const char *entrypoint) {
     if (!entrypoint || entrypoint[0] == '\0' || entrypoint[0] == '/') {
@@ -330,24 +353,46 @@ static module_write_result_t write_module_input(int fd, const char *data,
     return MODULE_WRITE_OK;
 }
 
-/* Read exactly one newline-terminated protocol record within one absolute
- * deadline.  A peer cannot extend the budget indefinitely by drip-feeding a
- * byte before each wait expires.  A partial record at the deadline is a
- * protocol error because continuing would split one JSONL frame across calls. */
-static int read_line_timeout(int fd, char *line, size_t line_size,
-                             int timeout_ms, bool cancel_on_stop) {
+static int read_line_deadline(int fd, module_read_buffer_t *buffer,
+                              char *line, size_t line_size, int64_t deadline,
+                              bool cancel_on_stop) {
     size_t pos = 0;
-    int64_t deadline;
 
-    if (fd < 0 || !line || line_size == 0 || timeout_ms < 0) {
+    if (fd < 0 || !buffer || !line || line_size < 2) {
         return MODULE_READ_ERROR;
     }
     line[0] = '\0';
-    deadline = monotonic_millis() + timeout_ms;
 
-    while (pos + 1 < line_size) {
-        char c;
-        ssize_t n;
+    for (;;) {
+        if (cancel_on_stop &&
+            atomic_load_explicit(&g_stop_requested,
+                                 memory_order_acquire)) {
+            return MODULE_READ_STOPPING;
+        }
+        if (monotonic_millis() >= deadline) {
+            return pos == 0 ? 0 : MODULE_READ_ERROR;
+        }
+
+        while (buffer->begin < buffer->end) {
+            unsigned char c;
+
+            c = (unsigned char)buffer->data[buffer->begin++];
+            if (c == '\n') {
+                line[pos] = '\0';
+                return (int)pos;
+            }
+            if (c < 32 && c != '\t' && c != '\r') {
+                return MODULE_READ_ERROR;
+            }
+            line[pos++] = (char)c;
+            if (pos + 1 >= line_size) {
+                line[pos] = '\0';
+                return MODULE_READ_ERROR;
+            }
+        }
+
+        buffer->begin = 0;
+        buffer->end = 0;
 
         for (;;) {
             struct pollfd wait_fd = {
@@ -358,6 +403,7 @@ static int read_line_timeout(int fd, char *line, size_t line_size,
             int64_t remaining = deadline - monotonic_millis();
             int wait_ms;
             int ready;
+            ssize_t n;
 
             if (cancel_on_stop &&
                 atomic_load_explicit(&g_stop_requested,
@@ -373,45 +419,35 @@ static int read_line_timeout(int fd, char *line, size_t line_size,
                 wait_ms = TNT_MODULE_IO_POLL_SLICE_MS;
             }
             ready = poll(&wait_fd, 1, wait_ms);
-            if (ready > 0) {
-                if (wait_fd.revents & POLLIN) {
-                    break;
+            if (ready == 0) {
+                continue;
+            }
+            if (ready < 0) {
+                if (errno == EINTR) {
+                    continue;
                 }
+                return MODULE_READ_ERROR;
+            }
+            if (!(wait_fd.revents & POLLIN)) {
                 if (wait_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
                     return MODULE_READ_ERROR;
                 }
                 continue;
             }
-            if (ready == 0) {
-                continue;
+
+            n = read(fd, buffer->data, sizeof(buffer->data));
+            if (n > 0) {
+                buffer->end = (size_t)n;
+                break;
             }
-            if (errno != EINTR) {
+            if (n == 0) {
+                return MODULE_READ_ERROR;
+            }
+            if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
                 return MODULE_READ_ERROR;
             }
         }
-
-        n = read(fd, &c, 1);
-        if (n < 0) {
-            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
-                continue;
-            }
-            return MODULE_READ_ERROR;
-        }
-        if (n == 0) {
-            return MODULE_READ_ERROR;
-        }
-        if (c == '\n') {
-            line[pos] = '\0';
-            return (int)pos;
-        }
-        if ((unsigned char)c < 32 && c != '\t' && c != '\r') {
-            return -1;
-        }
-        line[pos++] = c;
     }
-
-    line[pos] = '\0';
-    return MODULE_READ_ERROR;
 }
 
 static void set_module_rlimit(int resource, rlim_t value) {
@@ -443,6 +479,7 @@ static void prepare_module_child(void) {
 #ifdef RLIMIT_NOFILE
     set_module_rlimit(RLIMIT_NOFILE, TNT_MODULE_MAX_OPEN_FILES);
 #endif
+    unsetenv("TNT_ACCESS_TOKEN");
     unsetenv("LD_PRELOAD");
     unsetenv("LD_LIBRARY_PATH");
 #ifdef __APPLE__
@@ -460,29 +497,84 @@ static void sleep_millis(int millis) {
     }
 }
 
-static void reap_module_process(pid_t pid) {
+static bool reap_module_child_nonblocking(pid_t pid) {
     int status;
+    pid_t result;
+
+    if (pid <= 0) {
+        return true;
+    }
+
+    do {
+        result = waitpid(pid, &status, WNOHANG);
+    } while (result < 0 && errno == EINTR);
+
+    return result == pid || (result < 0 && errno == ECHILD);
+}
+
+static void reap_module_child(pid_t pid) {
+    int status;
+
+    if (pid <= 0) {
+        return;
+    }
+
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            break;
+        }
+    }
+}
+
+static bool module_process_group_alive(pid_t pgid) {
+    if (pgid <= 0) {
+        return false;
+    }
+
+    if (killpg(pgid, 0) == 0) {
+        return true;
+    }
+    return errno == EPERM;
+}
+
+static void terminate_module_process_group(pid_t pid, pid_t pgid) {
+    bool child_reaped = false;
     int waited_ms = 0;
 
     if (pid <= 0) {
         return;
     }
 
-    while (waitpid(pid, &status, WNOHANG) == 0) {
-        if (waited_ms >= TNT_MODULE_STOP_GRACE_MS) {
-            kill(pid, SIGKILL);
-            break;
+    if (pgid <= 0 || killpg(pgid, SIGTERM) < 0) {
+        (void)kill(pid, SIGTERM);
+    }
+
+    while (waited_ms < TNT_MODULE_STOP_GRACE_MS) {
+        if (!child_reaped) {
+            child_reaped = reap_module_child_nonblocking(pid);
+        }
+        if (child_reaped && !module_process_group_alive(pgid)) {
+            return;
         }
         sleep_millis(10);
         waited_ms += 10;
     }
 
-    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    if (pgid > 0) {
+        (void)killpg(pgid, SIGKILL);
+    }
+    if (!child_reaped) {
+        (void)kill(pid, SIGKILL);
+        reap_module_child(pid);
     }
 }
 
 static void close_module_process(module_process_t *module) {
-    if (!module || !module->active) return;
+    if (!module ||
+        !atomic_exchange_explicit(&module->active, false,
+                                  memory_order_acq_rel)) {
+        return;
+    }
 
     if (module->stdin_fd >= 0) {
         close(module->stdin_fd);
@@ -493,11 +585,10 @@ static void close_module_process(module_process_t *module) {
         module->stdout_fd = -1;
     }
     if (module->pid > 0) {
-        kill(module->pid, SIGTERM);
-        reap_module_process(module->pid);
+        terminate_module_process_group(module->pid, module->pgid);
         module->pid = -1;
+        module->pgid = -1;
     }
-    module->active = false;
 }
 
 static bool handshake_ok(const char *line) {
@@ -509,6 +600,10 @@ static bool handshake_ok(const char *line) {
            tnt_json_get_string_field(line, "protocol", protocol,
                                      sizeof(protocol)) &&
            strcmp(protocol, TNT_MODULE_PROTOCOL_VERSION) == 0;
+}
+
+static bool establish_child_process_group(pid_t pid) {
+    return setpgid(pid, pid) == 0 || getpgid(pid) == pid;
 }
 
 static int start_module_process(const char *module_dir,
@@ -541,6 +636,9 @@ static int start_module_process(const char *module_dir,
     }
 
     if (pid == 0) {
+        if (setpgid(0, 0) < 0) {
+            _exit(127);
+        }
         close(in_pipe[1]);
         close(out_pipe[0]);
         if (dup2(in_pipe[0], STDIN_FILENO) < 0 ||
@@ -556,13 +654,24 @@ static int start_module_process(const char *module_dir,
         _exit(127);
     }
 
+    if (!establish_child_process_group(pid)) {
+        close(in_pipe[0]);
+        close(in_pipe[1]);
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        (void)kill(pid, SIGKILL);
+        reap_module_child(pid);
+        return -1;
+    }
+
     close(in_pipe[0]);
     close(out_pipe[1]);
 
     module->pid = pid;
+    module->pgid = pid;
     module->stdin_fd = in_pipe[1];
     module->stdout_fd = out_pipe[0];
-    module->active = true;
+    atomic_store_explicit(&module->active, true, memory_order_release);
 
     if (tnt_module_append_handshake(handshake, sizeof(handshake), &pos,
                                     TNT_VERSION) < 0 ||
@@ -571,8 +680,11 @@ static int start_module_process(const char *module_dir,
         write_module_input(module->stdin_fd, handshake, strlen(handshake),
                            TNT_MODULE_HANDSHAKE_TIMEOUT_MS, false) !=
             MODULE_WRITE_OK ||
-        read_line_timeout(module->stdout_fd, line, sizeof(line),
-                          TNT_MODULE_HANDSHAKE_TIMEOUT_MS, false) <= 0 ||
+        read_line_deadline(module->stdout_fd, &module->output, line,
+                           sizeof(line),
+                           monotonic_millis() +
+                               TNT_MODULE_HANDSHAKE_TIMEOUT_MS,
+                           false) <= 0 ||
         !handshake_ok(line)) {
         close_module_process(module);
         return -1;
@@ -581,59 +693,116 @@ static int start_module_process(const char *module_dir,
     return 0;
 }
 
-static void enqueue_message(const message_t *msg) {
-    module_event_node_t *node;
-    bool queue_full;
-
-    if (!msg) return;
-
-    pthread_mutex_lock(&g_queue_lock);
-    queue_full = g_queue_len >= TNT_MODULE_QUEUE_LIMIT;
-    if (!g_running || queue_full) {
-        pthread_mutex_unlock(&g_queue_lock);
-        if (queue_full) {
-            fprintf(stderr, "module runtime: event queue full, dropping\n");
-        }
-        return;
+static int module_queue_init(module_process_t *module) {
+    if (!module) {
+        return -1;
     }
 
-    node = calloc(1, sizeof(*node));
-    if (!node) {
-        pthread_mutex_unlock(&g_queue_lock);
-        return;
+    module->event_queue = calloc(TNT_MODULE_QUEUE_LIMIT,
+                                 sizeof(*module->event_queue));
+    if (!module->event_queue) {
+        return -1;
     }
-    node->msg = *msg;
+    if (pthread_mutex_init(&module->queue_lock, NULL) != 0) {
+        free(module->event_queue);
+        module->event_queue = NULL;
+        return -1;
+    }
+    if (pthread_cond_init(&module->queue_cond, NULL) != 0) {
+        pthread_mutex_destroy(&module->queue_lock);
+        free(module->event_queue);
+        module->event_queue = NULL;
+        return -1;
+    }
 
-    if (g_queue_tail) {
-        g_queue_tail->next = node;
-    } else {
-        g_queue_head = node;
-    }
-    g_queue_tail = node;
-    g_queue_len++;
-    pthread_cond_signal(&g_queue_cond);
-    pthread_mutex_unlock(&g_queue_lock);
+    module->queue_read_index = 0;
+    module->queued_event_count = 0;
+    module->queue_running = true;
+    module->saturation_reported = false;
+    module->queue_initialized = true;
+    return 0;
 }
 
-static module_event_node_t *dequeue_message(void) {
-    module_event_node_t *node;
+static void module_queue_stop(module_process_t *module) {
+    if (!module || !module->queue_initialized) return;
 
-    pthread_mutex_lock(&g_queue_lock);
-    while (g_running && !g_queue_head) {
-        pthread_cond_wait(&g_queue_cond, &g_queue_lock);
+    pthread_mutex_lock(&module->queue_lock);
+    module->queue_running = false;
+    pthread_cond_broadcast(&module->queue_cond);
+    pthread_mutex_unlock(&module->queue_lock);
+}
+
+static void module_queue_destroy(module_process_t *module) {
+    if (!module || !module->queue_initialized) return;
+
+    free(module->event_queue);
+    module->event_queue = NULL;
+    module->queue_read_index = 0;
+    module->queued_event_count = 0;
+    module->saturation_reported = false;
+    pthread_cond_destroy(&module->queue_cond);
+    pthread_mutex_destroy(&module->queue_lock);
+    module->queue_initialized = false;
+}
+
+static module_queue_push_result_t module_queue_push(module_process_t *module,
+                                                    const message_t *msg,
+                                                    uint64_t event_id) {
+    size_t queue_write_index;
+    bool active;
+    bool queue_full;
+
+    if (!module || !msg || !module->queue_initialized ||
+        !atomic_load_explicit(&module->active, memory_order_acquire)) {
+        return MODULE_QUEUE_DROPPED;
     }
-    if (!g_running) {
-        pthread_mutex_unlock(&g_queue_lock);
-        return NULL;
+
+    pthread_mutex_lock(&module->queue_lock);
+    queue_full = module->queued_event_count >= TNT_MODULE_QUEUE_LIMIT;
+    active = atomic_load_explicit(&module->active, memory_order_acquire);
+    if (!module->queue_running || queue_full || !active) {
+        if (module->queue_running && queue_full && active &&
+            !module->saturation_reported) {
+            module->saturation_reported = true;
+            pthread_mutex_unlock(&module->queue_lock);
+            return MODULE_QUEUE_SATURATED;
+        }
+        pthread_mutex_unlock(&module->queue_lock);
+        return MODULE_QUEUE_DROPPED;
     }
-    node = g_queue_head;
-    if (node) {
-        g_queue_head = node->next;
-        if (!g_queue_head) g_queue_tail = NULL;
-        g_queue_len--;
+
+    queue_write_index =
+        (module->queue_read_index + module->queued_event_count) %
+        TNT_MODULE_QUEUE_LIMIT;
+    module->event_queue[queue_write_index].msg = *msg;
+    module->event_queue[queue_write_index].event_id = event_id;
+    module->queued_event_count++;
+    pthread_cond_signal(&module->queue_cond);
+    pthread_mutex_unlock(&module->queue_lock);
+    return MODULE_QUEUE_PUSHED;
+}
+
+static bool module_queue_pop(module_process_t *module, module_event_t *event) {
+    if (!module || !event || !module->queue_initialized) return false;
+
+    pthread_mutex_lock(&module->queue_lock);
+    while (module->queue_running && module->queued_event_count == 0) {
+        pthread_cond_wait(&module->queue_cond, &module->queue_lock);
     }
-    pthread_mutex_unlock(&g_queue_lock);
-    return node;
+    if (!module->queue_running) {
+        pthread_mutex_unlock(&module->queue_lock);
+        return false;
+    }
+
+    *event = module->event_queue[module->queue_read_index];
+    module->queue_read_index =
+        (module->queue_read_index + 1) % TNT_MODULE_QUEUE_LIMIT;
+    module->queued_event_count--;
+    if (module->queued_event_count <= TNT_MODULE_QUEUE_LIMIT / 2) {
+        module->saturation_reported = false;
+    }
+    pthread_mutex_unlock(&module->queue_lock);
+    return true;
 }
 
 static void publish_module_message(const module_process_t *module,
@@ -648,13 +817,16 @@ static void publish_module_message(const module_process_t *module,
              TNT_MODULE_NAME_MAX, module->manifest.name);
     snprintf(msg.content, sizeof(msg.content), "%s", plain_text);
 
+    pthread_mutex_lock(&g_module_publish_lock);
     if (message_save(&msg) < 0) {
+        pthread_mutex_unlock(&g_module_publish_lock);
         fprintf(stderr, "module runtime: failed to persist module message\n");
         return;
     }
 
     room_broadcast(g_room, &msg);
     notify_mentions(msg.content, NULL);
+    pthread_mutex_unlock(&g_module_publish_lock);
 }
 
 static module_response_action_t handle_module_response(module_process_t *module,
@@ -688,9 +860,11 @@ static void deliver_message_to_module(module_process_t *module,
     char message_id[64];
     size_t pos = 0;
     int responses = 0;
+    int64_t response_deadline;
     module_write_result_t write_result;
 
-    if (!module || !module->active || !msg ||
+    if (!module ||
+        !atomic_load_explicit(&module->active, memory_order_acquire) || !msg ||
         atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
         return;
     }
@@ -720,12 +894,21 @@ static void deliver_message_to_module(module_process_t *module,
         return;
     }
 
+    response_deadline = monotonic_millis() + TNT_MODULE_RESPONSE_TIMEOUT_MS;
     while (1) {
+        int64_t remaining;
+        int n;
+
         if (atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
             return;
         }
-        int n = read_line_timeout(module->stdout_fd, line, sizeof(line),
-                                  TNT_MODULE_RESPONSE_TIMEOUT_MS, true);
+        remaining = response_deadline - monotonic_millis();
+        if (remaining <= 0) {
+            n = 0;
+        } else {
+            n = read_line_deadline(module->stdout_fd, &module->output, line,
+                                   sizeof(line), response_deadline, true);
+        }
         if (n == MODULE_READ_STOPPING) {
             return;
         }
@@ -733,6 +916,10 @@ static void deliver_message_to_module(module_process_t *module,
             return;
         }
         if (n == 0) {
+            fprintf(stderr,
+                    "module runtime: disabling %s after response timeout\n",
+                    module->manifest.name);
+            close_module_process(module);
             return;
         }
         if (n < 0) {
@@ -770,18 +957,11 @@ static void deliver_message_to_module(module_process_t *module,
 }
 
 static void *module_worker_main(void *arg) {
-    uint64_t event_id = 0;
-    (void)arg;
+    module_process_t *module = arg;
+    module_event_t event;
 
-    while (1) {
-        module_event_node_t *node = dequeue_message();
-        if (!node) break;
-
-        event_id++;
-        for (int i = 0; i < g_module_count; i++) {
-            deliver_message_to_module(&g_modules[i], &node->msg, event_id);
-        }
-        free(node);
+    while (module_queue_pop(module, &event)) {
+        deliver_message_to_module(module, &event.msg, event.event_id);
     }
 
     return NULL;
@@ -807,8 +987,11 @@ static int load_modules_from_env(void) {
         module_process_t *module = &g_modules[g_module_count];
 
         memset(module, 0, sizeof(*module));
+        module->pid = -1;
+        module->pgid = -1;
         module->stdin_fd = -1;
         module->stdout_fd = -1;
+        atomic_init(&module->active, false);
         if (tnt_module_manifest_load(token, &module->manifest) == 0 &&
             start_module_process(token, module) == 0) {
             fprintf(stderr, "module runtime: enabled %s\n",
@@ -824,67 +1007,181 @@ static int load_modules_from_env(void) {
     return 0;
 }
 
-int tnt_module_runtime_init(void) {
-    g_module_count = 0;
-    g_running = false;
-    atomic_store_explicit(&g_stop_requested, false, memory_order_release);
+static size_t module_worker_stack_size(void) {
+    size_t stack_size = TNT_MODULE_WORKER_STACK_SIZE;
 
-    if (load_modules_from_env() < 0) {
-        atomic_store_explicit(&g_stop_requested, true, memory_order_release);
+#ifdef PTHREAD_STACK_MIN
+    if (stack_size < (size_t)PTHREAD_STACK_MIN) {
+        stack_size = (size_t)PTHREAD_STACK_MIN;
+    }
+#endif
+    return stack_size;
+}
+
+static void stop_module_workers(int count) {
+    for (int i = 0; i < count; i++) {
+        module_queue_stop(&g_modules[i]);
+    }
+    for (int i = 0; i < count; i++) {
+        if (g_modules[i].worker_started) {
+            pthread_join(g_modules[i].worker, NULL);
+            g_modules[i].worker_started = false;
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        module_queue_destroy(&g_modules[i]);
+    }
+}
+
+static int start_module_workers(int count) {
+    pthread_attr_t attr;
+    bool attr_initialized = false;
+
+    for (int i = 0; i < count; i++) {
+        if (module_queue_init(&g_modules[i]) < 0) {
+            goto fail;
+        }
+    }
+
+    if (pthread_attr_init(&attr) != 0) {
+        goto fail;
+    }
+    attr_initialized = true;
+    if (pthread_attr_setstacksize(&attr, module_worker_stack_size()) != 0) {
+        goto fail;
+    }
+
+    for (int i = 0; i < count; i++) {
+        if (pthread_create(&g_modules[i].worker, &attr, module_worker_main,
+                           &g_modules[i]) != 0) {
+            goto fail;
+        }
+        g_modules[i].worker_started = true;
+    }
+
+    pthread_attr_destroy(&attr);
+    return 0;
+
+fail:
+    if (attr_initialized) {
+        pthread_attr_destroy(&attr);
+    }
+    stop_module_workers(count);
+    return -1;
+}
+
+static void close_module_processes(int count) {
+    for (int i = 0; i < count; i++) {
+        close_module_process(&g_modules[i]);
+    }
+}
+
+int tnt_module_runtime_init(void) {
+    int count;
+
+    pthread_mutex_lock(&g_lifecycle_lock);
+    pthread_mutex_lock(&g_dispatch_lock);
+    if (g_accepting || g_module_count != 0) {
+        pthread_mutex_unlock(&g_dispatch_lock);
+        pthread_mutex_unlock(&g_lifecycle_lock);
         return -1;
     }
-    if (g_module_count == 0) {
+    g_next_event_id = 0;
+    pthread_mutex_unlock(&g_dispatch_lock);
+
+    atomic_store_explicit(&g_stop_requested, false, memory_order_release);
+    if (load_modules_from_env() < 0) {
+        goto fail;
+    }
+    count = g_module_count;
+    if (count == 0) {
         atomic_store_explicit(&g_stop_requested, true, memory_order_release);
+        pthread_mutex_unlock(&g_lifecycle_lock);
         return 0;
     }
-
-    g_running = true;
-    if (pthread_create(&g_module_thread, NULL, module_worker_main, NULL) != 0) {
-        g_running = false;
-        atomic_store_explicit(&g_stop_requested, true, memory_order_release);
-        for (int i = 0; i < g_module_count; i++) {
-            close_module_process(&g_modules[i]);
-        }
-        g_module_count = 0;
-        return -1;
+    if (start_module_workers(count) < 0) {
+        goto fail;
     }
-    g_thread_started = true;
+
+    pthread_mutex_lock(&g_dispatch_lock);
+    g_accepting = true;
+    pthread_mutex_unlock(&g_dispatch_lock);
+    pthread_mutex_unlock(&g_lifecycle_lock);
     return 0;
+
+fail:
+    count = g_module_count;
+    atomic_store_explicit(&g_stop_requested, true, memory_order_release);
+    stop_module_workers(count);
+    close_module_processes(count);
+    pthread_mutex_lock(&g_dispatch_lock);
+    g_module_count = 0;
+    pthread_mutex_unlock(&g_dispatch_lock);
+    pthread_mutex_unlock(&g_lifecycle_lock);
+    return -1;
 }
 
 void tnt_module_runtime_shutdown(void) {
-    module_event_node_t *node;
+    int count;
 
+    pthread_mutex_lock(&g_lifecycle_lock);
     atomic_store_explicit(&g_stop_requested, true, memory_order_release);
-    pthread_mutex_lock(&g_queue_lock);
-    g_running = false;
-    pthread_cond_broadcast(&g_queue_cond);
-    pthread_mutex_unlock(&g_queue_lock);
+    pthread_mutex_lock(&g_dispatch_lock);
+    g_accepting = false;
+    count = g_module_count;
+    pthread_mutex_unlock(&g_dispatch_lock);
 
-    if (g_thread_started) {
-        pthread_join(g_module_thread, NULL);
-        g_thread_started = false;
-    }
+    stop_module_workers(count);
+    close_module_processes(count);
 
-    while ((node = g_queue_head) != NULL) {
-        g_queue_head = node->next;
-        free(node);
-    }
-    g_queue_tail = NULL;
-    g_queue_len = 0;
-
-    for (int i = 0; i < g_module_count; i++) {
-        close_module_process(&g_modules[i]);
-    }
+    pthread_mutex_lock(&g_dispatch_lock);
     g_module_count = 0;
+    g_next_event_id = 0;
+    pthread_mutex_unlock(&g_dispatch_lock);
+    pthread_mutex_unlock(&g_lifecycle_lock);
 }
 
 void tnt_module_runtime_publish_message_created(const message_t *msg) {
-    if (!msg || g_module_count == 0) {
+    char saturated_modules[TNT_MAX_MODULES][TNT_MODULE_NAME_MAX + 1];
+    int saturated_count = 0;
+    uint64_t event_id;
+
+    if (!msg ||
+        atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
         return;
     }
 
-    enqueue_message(msg);
+    pthread_mutex_lock(&g_dispatch_lock);
+    if (!g_accepting ||
+        atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+        pthread_mutex_unlock(&g_dispatch_lock);
+        return;
+    }
+
+    event_id = ++g_next_event_id;
+    if (event_id == 0) {
+        event_id = ++g_next_event_id;
+    }
+    for (int i = 0; i < g_module_count; i++) {
+        if (module_queue_push(&g_modules[i], msg, event_id) ==
+                MODULE_QUEUE_SATURATED &&
+            saturated_count < TNT_MAX_MODULES) {
+            size_t name_len = strnlen(
+                g_modules[i].manifest.name,
+                sizeof(saturated_modules[saturated_count]) - 1);
+
+            memcpy(saturated_modules[saturated_count],
+                   g_modules[i].manifest.name, name_len);
+            saturated_modules[saturated_count][name_len] = '\0';
+            saturated_count++;
+        }
+    }
+    pthread_mutex_unlock(&g_dispatch_lock);
+
+    for (int i = 0; i < saturated_count; i++) {
+        fprintf(stderr, "module runtime: event queue full for %s, dropping\n",
+                saturated_modules[i]);
+    }
 }
 
 #ifdef TNT_TESTING
@@ -900,11 +1197,33 @@ int tnt_module_runtime_test_write_fd(int fd, const char *data, size_t len,
 
 int tnt_module_runtime_test_read_fd(int fd, char *line, size_t line_size,
                                     int timeout_ms, bool cancel_on_stop) {
-    if (set_fd_nonblocking(fd) < 0) {
+    module_read_buffer_t buffer = {0};
+
+    if (timeout_ms < 0 || set_fd_nonblocking(fd) < 0) {
         return MODULE_READ_ERROR;
     }
-    return read_line_timeout(fd, line, line_size, timeout_ms,
-                             cancel_on_stop);
+    return read_line_deadline(fd, &buffer, line, line_size,
+                              monotonic_millis() + timeout_ms,
+                              cancel_on_stop);
+}
+
+int tnt_module_runtime_test_read_pair_fd(int fd, char *first,
+                                         size_t first_size, char *second,
+                                         size_t second_size, int timeout_ms) {
+    module_read_buffer_t buffer = {0};
+    int64_t deadline;
+    int n;
+
+    if (timeout_ms < 0 || set_fd_nonblocking(fd) < 0) {
+        return MODULE_READ_ERROR;
+    }
+    deadline = monotonic_millis() + timeout_ms;
+    n = read_line_deadline(fd, &buffer, first, first_size, deadline, false);
+    if (n <= 0) {
+        return n;
+    }
+    return read_line_deadline(fd, &buffer, second, second_size, deadline,
+                              false);
 }
 
 void tnt_module_runtime_test_reset_stop(void) {

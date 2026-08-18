@@ -1,0 +1,160 @@
+.TH TNT-MESSAGE-LOG 5 "2026-08-18" "TNT 1.3.0"
+.SH NAME
+tnt-message-log \- TNT public message log format
+.SH DESCRIPTION
+TNT stores public room history in an append-only UTF-8 file named
+.IR messages.log .
+This page defines version 1 of the record format used for replay, search,
+export, validation, and recovery.
+.P
+The file has no header or version marker.
+Its version is defined by the record contract below.
+.SH FORMAT
+Each record occupies one newline-terminated line.
+It has exactly three fields and two literal
+.B |
+separators:
+.P
+.EX
+2026-05-27T12:34:56Z|alice|hello
+.EE
+.P
+The fields are:
+.TP
+.I timestamp
+A UTC timestamp in the form
+.BR YYYY-MM-DDTHH:MM:SSZ .
+.TP
+.I username
+A nonempty UTF-8 string of at most 63 bytes.
+.TP
+.I content
+A nonempty UTF-8 string of at most 1023 bytes.
+.P
+Neither string field may contain
+.BR | ,
+a C0 or C1 control character, or DEL.
+Every record, including the final record, must end with a newline.
+.SH VALIDATION
+One parser is used by server replay, interactive search, exec
+.BR dump ,
+offline checking, and recovery.
+A record is invalid if it:
+.IP \(bu 2
+does not have exactly two separators and three nonempty fields;
+.IP \(bu 2
+does not end with a newline;
+.IP \(bu 2
+contains invalid UTF-8, a C0 or C1 control character, or DEL;
+.IP \(bu 2
+exceeds either field limit; or
+.IP \(bu 2
+has an invalid or out-of-window timestamp.
+.P
+At scan time,
+a timestamp is accepted from 3650 days before the current time
+through 24 hours after it.
+.P
+Normal readers skip invalid records and continue with later records.
+A truncated final append is therefore ignored rather than replayed.
+.SH WRITING
+Before appending a record, the server replaces
+.BR | ,
+line feed, and carriage return in a username with
+.BR _ .
+It replaces the same bytes in content with spaces.
+Timestamps are written in UTC.
+.P
+Interactive public messages, public room notices, exec posts, and
+module-created messages use this log.
+Private messages and private inbox state are never written to it.
+.SH ROTATION
+After an append makes the active file larger than 10 MiB, TNT closes it and
+renames it to
+.IR messages.log.1 .
+A later append creates a new
+.IR messages.log .
+The next rotation replaces the existing
+.IR messages.log.1 .
+.P
+Replay, search, and exec
+.B dump
+read only the active
+.IR messages.log .
+They do not merge the rotated file.
+.SH RECOVERY
+.B tnt
+provides two offline maintenance modes.
+Neither mode starts the SSH server.
+.TP
+.BI "tnt \-\-log\-check " file
+Validate every physical record and write a summary to standard output.
+.TP
+.BI "tnt \-\-log\-recover " file
+Write each valid record in canonical version 1 form to standard output.
+Write the summary to standard error.
+The source file is not modified.
+.P
+The summary has these line-oriented fields:
+.P
+.EX
+path /var/lib/tnt/messages.log
+records_seen 120
+valid_records 119
+invalid_records 1
+first_invalid_line 120
+.EE
+.P
+.B first_invalid_line
+is 0 when no invalid record was found.
+Both modes return 0 when all records are valid.
+They return 1 when invalid records or
+I/O errors occur.
+.SH FILES
+.TP
+.I state-directory/messages.log
+Active public message log.
+.TP
+.I state-directory/messages.log.1
+Single rotated predecessor of the active log.
+.SH VERSIONS
+The control-free UTF-8 fields and framing contract are stable throughout
+TNT 1.x.
+Well-formed version 1 logs without control characters remain readable.
+.SH CAVEATS
+The file is append-only operational state, not an editable configuration
+file.
+Manual edits can create invalid UTF-8, missing final newlines, extra
+separators, or timestamps outside the accepted window.
+.P
+Recovery output can be redirected to a new file.
+Replacing a live log can
+race a server append.
+Stop the server before replacing or compacting its active log.
+.P
+Earlier TNT 1.3.0 builds could write records containing C0 or C1 control
+characters.
+The current reader skips those records.
+Use
+.B \-\-log\-check
+before an upgrade and
+.B \-\-log\-recover
+to produce a control-free log.
+.SH EXAMPLES
+Check a stopped server's active log:
+.P
+.EX
+tnt \-\-log\-check /var/lib/tnt/messages.log
+.EE
+.P
+Recover valid records into a separate file:
+.P
+.EX
+tnt \-\-log\-recover /var/lib/tnt/messages.log \
+    >recovered.messages.log
+.EE
+.SH SEE ALSO
+.BR tntctl (1),
+.BR tnt\-chat (7),
+.BR tnt\-exec (7),
+.BR tnt (8)
