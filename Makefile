@@ -258,6 +258,7 @@ script-test: all
 	@cd tests && ./test_install_wizard.sh
 	@cd tests && ./test_installer.sh
 	@cd tests && ./test_logrotate.sh
+	@cd tests && ./test_setup_cron.sh
 	@cd tests && ./test_message_log_tool.sh
 	@cd tests && ./test_source_archive.sh
 	@cd tests && ./test_release_artifact_gate.sh

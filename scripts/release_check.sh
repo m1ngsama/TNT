@@ -254,6 +254,7 @@ sh -n scripts/check_release_ref.sh
 sh -n scripts/package_publish_check.sh
 sh -n scripts/package_release_assets.sh
 sh -n scripts/package_source_archive.sh
+bash -n scripts/setup_cron.sh
 sh -n tests/cgroup_exec.sh
 [ -x tests/cgroup_exec.sh ] || fail "tests/cgroup_exec.sh must be executable"
 scripts/check_release_ref.sh "v$version"
