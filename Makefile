@@ -77,7 +77,7 @@ PERF_SERVER_WRAPPER ?=
 PERF_ENFORCE ?= none
 PERF_OUTPUT ?=
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release small release-smoke release-check release-check-strict package-publish-check debian-source-package asan ubsan ubsan-test valgrind check check-cppcheck check-clang-tidy test package-test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release small release-smoke release-check release-check-strict package-publish-check debian-source-package asan ubsan ubsan-test valgrind check check-cppcheck check-clang-tidy test package-test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test login-timeout-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
 
 all: $(TARGETS)
 
@@ -274,6 +274,7 @@ integration-test: all
 	@cd tests && PORT=$$(($${PORT:-2222} + 5)) ./test_empty_view.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 6)) ./test_module_runtime.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 7)) ./test_graceful_shutdown.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 8)) ./test_login_timeouts.sh
 	@cd tests && ./test_tntctl_cli.sh
 
 module-runtime-test: all
@@ -283,6 +284,10 @@ module-runtime-test: all
 graceful-shutdown-test: all
 	@echo "Running graceful shutdown tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_graceful_shutdown.sh
+
+login-timeout-test: all
+	@echo "Running login timeout tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_login_timeouts.sh
 
 anonymous-access-test: all
 	@echo "Running anonymous access tests..."

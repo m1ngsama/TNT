@@ -40,6 +40,9 @@ static ui_lang_t g_default_ui_lang = UI_LANG_EN;
 #define DARWIN_HIGH_FD_POLL_MS 10
 #define CHANNEL_CLOSE_ACK_TIMEOUT_MS 1000
 #define ROOM_REDRAW_MIN_INTERVAL_MS 8
+#define USERNAME_TIMEOUT_MS 60000
+
+static int64_t input_monotonic_millis(void);
 
 static const char *input_client_name(const struct client *client) {
     return client ? ((const client_t *)client)->username : NULL;
@@ -57,16 +60,29 @@ static int read_username(client_t *client) {
     int pos = 0;
     char buf[4];
     const char *prompt = i18n_text(client->ui_lang, I18N_USERNAME_PROMPT);
+    int64_t deadline_ms = input_monotonic_millis() + USERNAME_TIMEOUT_MS;
 
     tui_render_welcome(client);
     client_printf(client, "%s", prompt);
 
     while (1) {
-        int n = ssh_channel_read_timeout(client->channel, buf, 1, 0, 60000); /* 60 sec timeout */
+        int64_t remaining = deadline_ms - input_monotonic_millis();
+        int n;
+
+        if (remaining <= 0) {
+            return -1;
+        }
+
+        n = ssh_channel_read_timeout(client->channel, buf, 1, 0,
+                                     (int)remaining);
 
         if (n == SSH_AGAIN) {
-            /* Timeout */
+            /* Signals can wake libssh before the requested timeout.  Keep the
+             * original absolute deadline rather than granting a fresh minute. */
             if (!ssh_channel_is_open(client->channel)) {
+                return -1;
+            }
+            if (input_monotonic_millis() >= deadline_ms) {
                 return -1;
             }
             continue;
@@ -119,9 +135,25 @@ static int read_username(client_t *client) {
             }
             buf[0] = b;
             if (len > 1) {
-                int read_bytes = ssh_channel_read_timeout(client->channel, &buf[1], len - 1, 0, 5000);
+                int64_t continuation_remaining =
+                    deadline_ms - input_monotonic_millis();
+                int continuation_timeout;
+                int read_bytes;
+
+                if (continuation_remaining <= 0) {
+                    return -1;
+                }
+                continuation_timeout = continuation_remaining > 5000
+                                           ? 5000
+                                           : (int)continuation_remaining;
+                read_bytes = ssh_channel_read_timeout(
+                    client->channel, &buf[1], len - 1, 0,
+                    continuation_timeout);
                 if (read_bytes != len - 1) {
                     /* Incomplete or timed-out UTF-8 continuation */
+                    if (input_monotonic_millis() >= deadline_ms) {
+                        return -1;
+                    }
                     continue;
                 }
             }

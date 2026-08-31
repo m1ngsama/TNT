@@ -11,6 +11,7 @@
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -39,6 +40,101 @@ typedef struct {
 
 /* Configured access token; empty string means "no auth required". */
 static char g_access_token[256] = "";
+
+/* Key exchange, authentication, and channel setup share one absolute
+ * deadline.  A peer that drip-feeds handshake bytes must not keep a detached
+ * worker or a connection-limit slot alive indefinitely. */
+#define BOOTSTRAP_SETUP_TIMEOUT_MS 10000
+
+static int64_t bootstrap_monotonic_millis(void) {
+    struct timespec now;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
+        return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    }
+    return (int64_t)time(NULL) * 1000;
+}
+
+/* Drive libssh's re-entrant non-blocking key-exchange state machine until the
+ * shared bootstrap deadline.  SSH_AGAIN is returned only for our timeout;
+ * ordinary non-blocking progress stays inside this function. */
+static int handle_key_exchange_until(ssh_session session,
+                                     int64_t deadline_ms) {
+    int fd = ssh_get_fd(session);
+    int original_flags;
+    int rc = SSH_ERROR;
+
+    if (fd < 0) {
+        return SSH_ERROR;
+    }
+
+    original_flags = fcntl(fd, F_GETFL, 0);
+    if (original_flags < 0) {
+        return SSH_ERROR;
+    }
+
+    ssh_set_blocking(session, 0);
+    if (fcntl(fd, F_SETFL, original_flags | O_NONBLOCK) < 0) {
+        ssh_set_blocking(session, 1);
+        return SSH_ERROR;
+    }
+
+    for (;;) {
+        int64_t remaining;
+        struct pollfd wait_fd;
+        int poll_rc;
+        int ssh_flags;
+
+        remaining = deadline_ms - bootstrap_monotonic_millis();
+        if (remaining <= 0) {
+            rc = SSH_AGAIN;
+            break;
+        }
+
+        rc = ssh_handle_key_exchange(session);
+        if (rc != SSH_AGAIN) {
+            break;
+        }
+
+        remaining = deadline_ms - bootstrap_monotonic_millis();
+        if (remaining <= 0) {
+            break;
+        }
+
+        ssh_flags = ssh_get_poll_flags(session);
+        wait_fd.fd = fd;
+        wait_fd.events = POLLIN;
+        if (ssh_flags & SSH_WRITE_PENDING) {
+            wait_fd.events |= POLLOUT;
+        }
+        wait_fd.revents = 0;
+
+        poll_rc = poll(&wait_fd, 1, (int)remaining);
+        if (poll_rc == 0) {
+            rc = SSH_AGAIN;
+            break;
+        }
+        if (poll_rc < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            rc = SSH_ERROR;
+            break;
+        }
+        if ((wait_fd.revents & POLLNVAL) ||
+            ((wait_fd.revents & (POLLERR | POLLHUP)) &&
+             !(wait_fd.revents & (POLLIN | POLLOUT)))) {
+            rc = SSH_ERROR;
+            break;
+        }
+    }
+
+    if (fcntl(fd, F_SETFL, original_flags) < 0 && rc == SSH_OK) {
+        rc = SSH_ERROR;
+    }
+    ssh_set_blocking(session, 1);
+    return rc;
+}
 
 void bootstrap_init(void) {
     const char *token_env = getenv("TNT_ACCESS_TOKEN");
@@ -361,7 +457,7 @@ void *bootstrap_run(void *arg) {
     ssh_channel channel;
     client_t *client = NULL;
     bool timed_out = false;
-    time_t start_time;
+    int64_t setup_deadline_ms;
     char accepted_ip[INET6_ADDRSTRLEN] = "";
     void (*socket_closing)(void *userdata) = NULL;
     void *socket_closing_userdata = NULL;
@@ -426,9 +522,17 @@ void *bootstrap_run(void *arg) {
     server_cb.channel_open_request_session_function = channel_open_request_session;
     ssh_set_server_callbacks(session, &server_cb);
 
-    if (ssh_handle_key_exchange(session) != SSH_OK) {
-        fprintf(stderr, "Key exchange failed from %s: %s\n",
-                ctx->client_ip, ssh_get_error(session));
+    setup_deadline_ms = bootstrap_monotonic_millis() +
+                        BOOTSTRAP_SETUP_TIMEOUT_MS;
+    int key_exchange_rc = handle_key_exchange_until(session, setup_deadline_ms);
+    if (key_exchange_rc != SSH_OK) {
+        if (key_exchange_rc == SSH_AGAIN) {
+            fprintf(stderr, "Key exchange timed out from %s\n",
+                    ctx->client_ip);
+        } else {
+            fprintf(stderr, "Key exchange failed from %s: %s\n",
+                    ctx->client_ip, ssh_get_error(session));
+        }
         cleanup_failed_session(session, ctx);
         return NULL;
     }
@@ -448,10 +552,17 @@ void *bootstrap_run(void *arg) {
         return NULL;
     }
 
-    start_time = time(NULL);
     while ((!ctx->auth_success || ctx->channel == NULL || !ctx->channel_ready) &&
            ctx->auth_attempts <= 3 && !timed_out) {
-        int rc = ssh_event_dopoll(event, 1000);
+        int64_t remaining = setup_deadline_ms - bootstrap_monotonic_millis();
+        int poll_timeout;
+
+        if (remaining <= 0) {
+            timed_out = true;
+            break;
+        }
+        poll_timeout = remaining > 1000 ? 1000 : (int)remaining;
+        int rc = ssh_event_dopoll(event, poll_timeout);
 
         if (rc == SSH_ERROR) {
             fprintf(stderr, "Event poll error from %s: %s\n",
@@ -459,7 +570,9 @@ void *bootstrap_run(void *arg) {
             break;
         }
 
-        if (time(NULL) - start_time > 10) {
+        if (bootstrap_monotonic_millis() >= setup_deadline_ms &&
+            (!ctx->auth_success || ctx->channel == NULL ||
+             !ctx->channel_ready)) {
             timed_out = true;
         }
     }
