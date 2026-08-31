@@ -817,17 +817,18 @@ void tui_render_command_output(client_t *client) {
     }
     buffer_appendf(buffer, sizeof(buffer), &pos, ANSI_RESET "\r\n");
 
-    /* Command output - use a copy to avoid strtok corruption */
+    /* Command output - keep tokenizer state local to this session render. */
     char output_copy[MAX_COMMAND_OUTPUT_LEN];
     strncpy(output_copy, client->command_output, sizeof(output_copy) - 1);
     output_copy[sizeof(output_copy) - 1] = '\0';
 
     char *lines[256];
     int line_count = 0;
-    char *line = strtok(output_copy, "\n");
+    char *saveptr = NULL;
+    char *line = strtok_r(output_copy, "\n", &saveptr);
     while (line && line_count < (int)(sizeof(lines) / sizeof(lines[0]))) {
         lines[line_count++] = line;
-        line = strtok(NULL, "\n");
+        line = strtok_r(NULL, "\n", &saveptr);
     }
 
     int content_height = rh - 2;
@@ -915,7 +916,8 @@ void tui_render_motd(client_t *client) {
     int max_body_lines = rh - 4;  /* top border + top pad + bottom pad + bottom border */
     if (max_body_lines < 1) max_body_lines = 1;
 
-    char *line = strtok(body_copy, "\n");
+    char *saveptr = NULL;
+    char *line = strtok_r(body_copy, "\n", &saveptr);
     while (line && body_lines < max_body_lines) {
         char truncated[1024];
         strncpy(truncated, line, sizeof(truncated) - 1);
@@ -928,7 +930,7 @@ void tui_render_motd(client_t *client) {
         }
         buffer_appendf(buffer, sizeof(buffer), &pos, "  %s\r\n", truncated);
         body_lines++;
-        line = strtok(NULL, "\n");
+        line = strtok_r(NULL, "\n", &saveptr);
     }
 
     /* Fill empty space up to the bottom border */
@@ -996,10 +998,11 @@ void tui_render_help(client_t *client) {
     /* Split into lines and display with scrolling */
     char *lines[100];
     int line_count = 0;
-    char *line = strtok(help_copy, "\n");
+    char *saveptr = NULL;
+    char *line = strtok_r(help_copy, "\n", &saveptr);
     while (line && line_count < 100) {
         lines[line_count++] = line;
-        line = strtok(NULL, "\n");
+        line = strtok_r(NULL, "\n", &saveptr);
     }
 
     int content_height = rh - 2;

@@ -138,6 +138,8 @@ step "checking client I/O ownership boundaries"
     fail "commands.c must not use SSH io_lock for in-memory command state"
 ! grep -n "client_addref(client)" src/bootstrap.c >/dev/null ||
     fail "bootstrap.c must let client_install_channel_callbacks own callback refs"
+! grep -nE '(^|[^[:alnum:]_])strtok[[:space:]]*\(' src/tui.c >/dev/null ||
+    fail "TUI renderers must not use process-global strtok state"
 grep -q "client_release_session(client)" src/input.c ||
     fail "input.c must release session ownership through client_release_session"
 if grep -R "ssh_channel_write" src include | grep -v "^src/client.c:" >/dev/null; then

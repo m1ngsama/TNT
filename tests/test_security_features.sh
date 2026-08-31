@@ -238,8 +238,18 @@ else
     fail "ThreadSanitizer compilation failed"
 fi
 
-# Test 7: Resource Management (Dynamic Allocation)
-print_test "7. Resource Management (Large Log Files)"
+# Test 7: Per-session TUI tokenizer state
+print_test "7. Per-session TUI Tokenizer State"
+if grep -nE '(^|[^[:alnum:]_])strtok[[:space:]]*\(' ../src/tui.c \
+        >"$STATE_ROOT/unsafe-strtok.log"; then
+    fail "TUI renderers use process-global strtok state"
+    sed -n '1,40p' "$STATE_ROOT/unsafe-strtok.log"
+else
+    pass "TUI renderers use reentrant per-session tokenizers"
+fi
+
+# Test 8: Resource Management (Dynamic Allocation)
+print_test "8. Resource Management (Large Log Files)"
 LARGE_DIR="$STATE_ROOT/large-log"
 mkdir -p "$LARGE_DIR"
 # Create a large message log (2000 entries, more than old fixed 1000 limit)
