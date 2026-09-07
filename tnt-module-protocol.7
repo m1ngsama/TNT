@@ -1,4 +1,4 @@
-.TH TNT-MODULE-PROTOCOL 7 "2026-08-18" "TNT 1.3.0"
+.TH TNT-MODULE-PROTOCOL 7 "2026-09-07" "TNT 1.3.1"
 .SH NAME
 tnt-module-protocol \- implement an external TNT message module
 .SH DESCRIPTION
@@ -111,11 +111,11 @@ String
 .B server.version
 The running TNT version string.
 .P
-For TNT 1.3.0, the record is:
+For TNT 1.3.1, the record is:
 .P
 .EX
 {"type":"handshake","protocol":"tnt.module.v1",\c
-"server":{"name":"tnt","version":"1.3.0"}}
+"server":{"name":"tnt","version":"1.3.1"}}
 .EE
 .P
 The module must answer within two seconds with:
