@@ -236,6 +236,59 @@ TEST(utf8_boundary_cases) {
     assert(utf8_char_width(0xA000) == 1);   /* Just after CJK Unified */
 }
 
+TEST(utf8_width_emoji_is_two_columns) {
+    assert(utf8_string_width("😌") == 2);
+    assert(utf8_string_width("🎲") == 2);
+    assert(utf8_string_width("a😌b") == 4);
+}
+
+TEST(utf8_width_zero_width_codepoints) {
+    /* e + U+0301 COMBINING ACUTE ACCENT renders in one column. */
+    assert(utf8_string_width("e\xCC\x81") == 1);
+    /* U+200B ZERO WIDTH SPACE */
+    assert(utf8_string_width("\xE2\x80\x8B") == 0);
+}
+
+TEST(utf8_width_variation_selector_promotes_to_emoji) {
+    /* U+2764 alone is a narrow symbol; with U+FE0F it is emoji-wide. */
+    assert(utf8_string_width("\xE2\x9D\xA4") == 1);
+    assert(utf8_string_width("\xE2\x9D\xA4\xEF\xB8\x8F") == 2);
+}
+
+TEST(utf8_cluster_zwj_sequence_is_one_unit) {
+    const char *family = "👨\xE2\x80\x8D👩\xE2\x80\x8D👧";
+    assert(utf8_cluster_length(family) == strlen(family));
+    assert(utf8_cluster_width(family) == 2);
+    assert(utf8_string_width(family) == 2);
+}
+
+TEST(utf8_cluster_regional_indicator_pair_is_one_flag) {
+    const char *flag = "🇨🇳";
+    assert(utf8_cluster_length(flag) == strlen(flag));
+    assert(utf8_cluster_width(flag) == 2);
+}
+
+TEST(utf8_cluster_length_plain_characters) {
+    assert(utf8_cluster_length("A") == 1);
+    assert(utf8_cluster_length("中") == 3);
+    assert(utf8_cluster_length("") == 0);
+    assert(utf8_cluster_length(NULL) == 0);
+}
+
+TEST(utf8_truncate_never_splits_a_cluster) {
+    char buf[64];
+
+    /* Two flags, each two columns.  A three-column budget must keep one. */
+    snprintf(buf, sizeof(buf), "🇨🇳🇯🇵");
+    utf8_truncate(buf, 3);
+    assert(strcmp(buf, "🇨🇳") == 0);
+
+    /* A ZWJ family is indivisible: a one-column budget keeps nothing. */
+    snprintf(buf, sizeof(buf), "👨\xE2\x80\x8D👩");
+    utf8_truncate(buf, 1);
+    assert(buf[0] == '\0');
+}
+
 int main(void) {
     printf("Running UTF-8 unit tests...\n\n");
 
@@ -262,6 +315,13 @@ int main(void) {
     RUN_TEST(utf8_is_valid_sequence);
     RUN_TEST(utf8_control_character_detection);
     RUN_TEST(utf8_boundary_cases);
+    RUN_TEST(utf8_width_emoji_is_two_columns);
+    RUN_TEST(utf8_width_zero_width_codepoints);
+    RUN_TEST(utf8_width_variation_selector_promotes_to_emoji);
+    RUN_TEST(utf8_cluster_zwj_sequence_is_one_unit);
+    RUN_TEST(utf8_cluster_regional_indicator_pair_is_one_flag);
+    RUN_TEST(utf8_cluster_length_plain_characters);
+    RUN_TEST(utf8_truncate_never_splits_a_cluster);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;

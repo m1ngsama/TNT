@@ -4,6 +4,7 @@
 #include "chat_room.h"
 #include "help_text.h"
 #include "history_view.h"
+#include "richtext.h"
 #include "i18n.h"
 #include "system_message.h"
 #include "theme.h"
@@ -41,10 +42,12 @@ static char *client_render_buffer(client_t *client, size_t min_size) {
     return client->render_buffer;
 }
 
-static void format_message_colored(const message_t *msg, char *buffer,
-                                   size_t buf_size, int width,
-                                   const char *my_username,
-                                   const theme_t *theme) {
+/* Renders display row `row` of msg into buffer.  Returns false when the
+ * message has no such row, which is how the caller knows it is done. */
+static bool format_message_row(const message_t *msg, int row, char *buffer,
+                               size_t buf_size, int width,
+                               const char *my_username,
+                               const theme_t *theme) {
     char time_str[32];
     if (msg->display_time[0] != '\0') {
         snprintf(time_str, sizeof(time_str), "%s", msg->display_time);
@@ -93,74 +96,55 @@ static void format_message_colored(const message_t *msg, char *buffer,
     const char *hl_start = mentioned ? "\033[1;33m" : "";
     const char *hl_end = mentioned ? "\033[0m" : "";
 
+    /* Plain-text prefix, used only for its display width — the gutter is one
+     * column, so it is part of the budget the content has to fit into. */
+    char prefix_plain[256];
+    if (system_message_is_system(msg)) {
+        snprintf(prefix_plain, sizeof(prefix_plain), " --> ");
+    } else if (strcmp(msg->username, "*") == 0) {
+        snprintf(prefix_plain, sizeof(prefix_plain), " %s * ", time_str);
+    } else {
+        snprintf(prefix_plain, sizeof(prefix_plain), " %s %s: ",
+                 time_str, msg->username);
+    }
+
+    int prefix_width = utf8_string_width(prefix_plain);
+    int content_width = width - prefix_width;
+    if (content_width < 4) content_width = 4;
+
+    richtext_span_t spans[HISTORY_VIEW_MAX_WRAPPED_ROWS];
+    size_t rows = richtext_wrap(msg->content, content_width, spans,
+                                HISTORY_VIEW_MAX_WRAPPED_ROWS);
+
+    if (row < 0 || (size_t)row >= rows) {
+        return false;
+    }
+
+    char row_text[MAX_MESSAGE_LEN];
+    snprintf(row_text, sizeof(row_text), "%.*s", (int)spans[row].len,
+             msg->content + spans[row].offset);
+
+    if (row > 0) {
+        /* Continuation rows align under the first row's text. */
+        snprintf(buffer, buf_size, "%*s%s%s%s", prefix_width, "",
+                 hl_start, row_text, hl_end);
+        return true;
+    }
+
     if (system_message_is_system(msg)) {
         snprintf(buffer, buf_size,
-                 "%s\033[90m--> %s\033[0m", gutter, msg->content);
+                 "%s\033[90m--> %s\033[0m", gutter, row_text);
     } else if (strcmp(msg->username, "*") == 0) {
         snprintf(buffer, buf_size,
                  "%s\033[90m%s\033[0m %s* %s\033[0m",
-                 gutter, time_str, theme->accent_italic, msg->content);
+                 gutter, time_str, theme->accent_italic, row_text);
     } else {
         snprintf(buffer, buf_size,
                  "%s\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
                  gutter, time_str, username_color(msg->username),
-                 msg->username, hl_start, msg->content, hl_end);
+                 msg->username, hl_start, row_text, hl_end);
     }
-
-    /* Plain-text version for width calculation — gutter is 1 column. */
-    char plain[MAX_MESSAGE_LEN + 128];
-    if (system_message_is_system(msg)) {
-        snprintf(plain, sizeof(plain), " --> %s", msg->content);
-    } else if (strcmp(msg->username, "*") == 0) {
-        snprintf(plain, sizeof(plain), " %s * %s", time_str, msg->content);
-    } else {
-        snprintf(plain, sizeof(plain), " %s %s: %s",
-                 time_str, msg->username, msg->content);
-    }
-
-    if (utf8_string_width(plain) > width) {
-        /* Rebuild with truncated content — prefix_plain also includes the
-         * 1-column gutter so the budget math comes out right. */
-        int prefix_width;
-        char prefix_plain[256];
-        if (system_message_is_system(msg)) {
-            snprintf(prefix_plain, sizeof(prefix_plain), " --> ");
-        } else if (strcmp(msg->username, "*") == 0) {
-            snprintf(prefix_plain, sizeof(prefix_plain), " %s * ", time_str);
-        } else {
-            snprintf(prefix_plain, sizeof(prefix_plain), " %s %s: ",
-                     time_str, msg->username);
-        }
-        prefix_width = utf8_string_width(prefix_plain);
-        int content_width = width - prefix_width;
-        if (content_width < 4) content_width = 4;
-
-        char truncated_content[MAX_MESSAGE_LEN];
-        if (system_message_is_system(msg)) {
-            strncpy(truncated_content, msg->content, sizeof(truncated_content) - 1);
-            truncated_content[sizeof(truncated_content) - 1] = '\0';
-        } else if (strcmp(msg->username, "*") == 0) {
-            snprintf(truncated_content, sizeof(truncated_content), "* %s", msg->content);
-        } else {
-            strncpy(truncated_content, msg->content, sizeof(truncated_content) - 1);
-            truncated_content[sizeof(truncated_content) - 1] = '\0';
-        }
-        utf8_truncate(truncated_content, content_width);
-
-        if (system_message_is_system(msg)) {
-            snprintf(buffer, buf_size,
-                     "%s\033[90m--> %s\033[0m", gutter, truncated_content);
-        } else if (strcmp(msg->username, "*") == 0) {
-            snprintf(buffer, buf_size,
-                     "%s\033[90m%s\033[0m %s%s\033[0m",
-                     gutter, time_str, theme->accent_italic, truncated_content);
-        } else {
-            snprintf(buffer, buf_size,
-                     "%s\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
-                     gutter, time_str, username_color(msg->username),
-                     msg->username, hl_start, truncated_content, hl_end);
-        }
-    }
+    return true;
 }
 
 /* Clear the screen */
@@ -367,7 +351,7 @@ void tui_render_screen(client_t *client) {
             if (end > msg_count) end = msg_count;
             if (anchor_latest) {
                 start = history_view_latest_start_for_height(
-                    visible_messages, msg_count, msg_height);
+                    visible_messages, msg_count, msg_height, render_width);
                 end = msg_count;
             }
             snapshot_count = end - start;
@@ -393,7 +377,7 @@ void tui_render_screen(client_t *client) {
                 int recent_count = room_copy_recent_messages(
                     g_room, msg_snapshot, snapshot_capacity, &actual_count);
                 int local_start = history_view_latest_start_for_height(
-                    msg_snapshot, recent_count, msg_height);
+                    msg_snapshot, recent_count, msg_height, render_width);
                 snapshot_count = recent_count - local_start;
                 if (local_start > 0 && snapshot_count > 0) {
                     memmove(msg_snapshot, msg_snapshot + local_start,
@@ -617,10 +601,16 @@ void tui_render_screen(client_t *client) {
             }
 
             char msg_line[2048];
-            format_message_colored(&msg_snapshot[i], msg_line, sizeof(msg_line),
-                                   render_width, client->username, theme);
-            buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n", msg_line);
-            rows_written++;
+            for (int row = 0;
+                 rows_written < msg_height &&
+                     format_message_row(&msg_snapshot[i], row, msg_line,
+                                        sizeof(msg_line), render_width,
+                                        client->username, theme);
+                 row++) {
+                buffer_appendf(buffer, buf_size, &pos, "%s\033[K\r\n",
+                               msg_line);
+                rows_written++;
+            }
         }
     }
 

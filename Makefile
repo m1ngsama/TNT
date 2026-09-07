@@ -272,6 +272,7 @@ integration-test: all
 	@cd tests && PORT=$$(($${PORT:-2222} + 3)) ./test_user_lifecycle.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 4)) ./test_mute_joins_view.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 5)) ./test_empty_view.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 9)) ./test_wide_text_view.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 6)) ./test_module_runtime.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 7)) ./test_graceful_shutdown.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 8)) ./test_login_timeouts.sh

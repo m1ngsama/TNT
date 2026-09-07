@@ -154,6 +154,10 @@ It must fit the same message limit.
 Mention an online user in a public message.
 The recipient receives a terminal bell and highlight.
 .P
+A message that is wider than the terminal wraps onto as many rows as it
+needs, and the continuation rows align under the first row's text.
+Wrapping never splits a character, an emoji, or a flag.
+.P
 The room keeps the 100 most recent public messages in memory.
 Use
 .B :last

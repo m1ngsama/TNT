@@ -34,6 +34,7 @@ tests/unit/test_config_defaults
 tests/unit/test_theme
 tests/unit/test_client_outbox
 tests/unit/test_common
+tests/unit/test_richtext
 perf-results/
 __pycache__/
 *.pyc

@@ -7,6 +7,7 @@ F: MAINTAINERS
 F: README.md
 F: SECURITY.md
 F: demos/**
+F: docs/superpowers/**
 F: include/.gitkeep
 F: scripts/check_maintainers.sh
 F: scripts/get_maintainer.sh
@@ -49,6 +50,9 @@ F: include/history_view.h
 F: src/input*.c
 F: src/tui*.c
 F: src/history_view.c
+F: include/richtext.h
+F: src/richtext.c
+F: tests/unit/test_richtext.c
 F: tests/test_interactive_input.sh
 F: tests/test_user_lifecycle.sh
 F: tnt-chat.7
