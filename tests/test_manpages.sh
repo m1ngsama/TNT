@@ -39,11 +39,23 @@ require_fixed() {
 echo "=== TNT Manual Page Tests ==="
 
 markdown=$(find "$REPO_ROOT" -type f -name '*.md' \
-    -not -path "$REPO_ROOT/.git/*" -print)
+    -not -path "$REPO_ROOT/.git/*" \
+    -not -path "$REPO_ROOT/README.md" \
+    -not -path "$REPO_ROOT/SECURITY.md" -print)
 if [ -z "$markdown" ]; then
-    pass "repository has no Markdown documentation"
+    pass "Markdown is limited to the repository entry points"
 else
-    fail "repository contains Markdown documentation" "$markdown"
+    fail "reference documentation belongs in manual pages" "$markdown"
+fi
+
+missing_entry=""
+for entry in README.md SECURITY.md; do
+    [ -f "$REPO_ROOT/$entry" ] || missing_entry="$missing_entry $entry"
+done
+if [ -z "$missing_entry" ]; then
+    pass "repository entry points are present"
+else
+    fail "repository entry points are missing" "$missing_entry"
 fi
 
 missing=""
