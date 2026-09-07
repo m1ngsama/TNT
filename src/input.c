@@ -9,6 +9,7 @@
 #include "commands.h"
 #include "config_defaults.h"
 #include "common.h"
+#include "editor.h"
 #include "exec.h"
 #include "history_view.h"
 #include "i18n.h"
@@ -570,10 +571,43 @@ static void input_replace(char *input, size_t input_size, size_t *input_len,
     *input_len = len;
 }
 
+/* Reads the remainder of an "ESC [ <n> ~" sequence and applies it.  Returns
+ * true in every case: an editing key that this build does not implement is
+ * still consumed, because letting it fall through would mean leaving INSERT
+ * mode and discarding the message the user is composing. */
+static bool handle_insert_csi_tilde(client_t *client, editor_t *ed,
+                                    char first) {
+    char terminator;
+    int n = ssh_channel_read_timeout(client->channel, &terminator, 1, 0, 50);
+
+    if (n != 1 || terminator != '~') {
+        return true;  /* Not a form we know; consume it either way. */
+    }
+
+    switch (first) {
+    case '1':
+    case '7':
+        editor_move_home(ed);
+        break;
+    case '3':
+        editor_delete_next_cluster(ed);
+        break;
+    case '4':
+    case '8':
+        editor_move_end(ed);
+        break;
+    default:
+        return true;
+    }
+
+    tui_render_input(client, ed);
+    return true;
+}
+
 /* Handle a single key press.  Returns true if the key was fully consumed
  * (no further character buffering needed). */
-static bool handle_key(client_t *client, unsigned char key, char *input,
-                       size_t *input_len, size_t *command_input_len) {
+static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
+                       size_t *command_input_len) {
     /* Handle Ctrl+C (Exit or switch to NORMAL) */
     if (key == 3) {
         client_mode_t previous_mode = client->mode;
@@ -656,32 +690,52 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                 if (n == 1 && seq[0] == '[') {
                     n = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
                     if (n == 1) {
-                        if (seq[1] == 'A') {  /* Up — walk back through sent history */
+                        if (seq[1] == 'C') {  /* Right */
+                            editor_move_right(ed);
+                            tui_render_input(client, ed);
+                            return true;
+                        } else if (seq[1] == 'D') {  /* Left */
+                            editor_move_left(ed);
+                            tui_render_input(client, ed);
+                            return true;
+                        } else if (seq[1] == 'H') {  /* Home */
+                            editor_move_home(ed);
+                            tui_render_input(client, ed);
+                            return true;
+                        } else if (seq[1] == 'F') {  /* End */
+                            editor_move_end(ed);
+                            tui_render_input(client, ed);
+                            return true;
+                        } else if (seq[1] == '1' || seq[1] == '3' ||
+                                   seq[1] == '4' || seq[1] == '7' ||
+                                   seq[1] == '8') {
+                            /* "ESC [ <n> ~": Home, Delete, and End. */
+                            return handle_insert_csi_tilde(client, ed, seq[1]);
+                        } else if (seq[1] == 'A') {  /* Up — walk back through sent history */
                             if (client->insert_history_count > 0 &&
                                 client->insert_history_pos > 0) {
                                 client->insert_history_pos--;
-                                input_replace(
-                                    input, MAX_MESSAGE_LEN, input_len,
+                                editor_set_text(
+                                    ed,
                                     client->insert_history[
                                         client->insert_history_pos]);
-                                tui_render_input(client, input);
+                                tui_render_input(client, ed);
                             }
                             return true;
                         } else if (seq[1] == 'B') {  /* Down — walk forward */
                             if (client->insert_history_pos <
                                 client->insert_history_count - 1) {
                                 client->insert_history_pos++;
-                                input_replace(
-                                    input, MAX_MESSAGE_LEN, input_len,
+                                editor_set_text(
+                                    ed,
                                     client->insert_history[
                                         client->insert_history_pos]);
                             } else {
                                 client->insert_history_pos =
                                     client->insert_history_count;
-                                input[0] = '\0';
-                                *input_len = 0;
+                                editor_clear(ed);
                             }
-                            tui_render_input(client, input);
+                            tui_render_input(client, ed);
                             return true;
                         } else if (seq[1] == '2') {
                             /* Could be bracketed-paste start "ESC[200~".
@@ -698,6 +752,10 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                                 bool overflow = false;
                                 bool invalid_utf8 = false;
                                 tnt_input_utf8_state_t paste_utf8 = {0};
+                                /* Collect the paste separately, then insert
+                                 * it at the caret in one step. */
+                                char pasted[MAX_MESSAGE_LEN] = {0};
+                                size_t pasted_len = 0;
                                 while (1) {
                                     char b;
                                     int k = ssh_channel_read_timeout(
@@ -720,8 +778,8 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                                         for (int i = 0; i < t; i++) {
                                             int status =
                                                 tnt_input_append_stream_byte(
-                                                    input, MAX_MESSAGE_LEN,
-                                                    input_len,
+                                                    pasted, sizeof(pasted),
+                                                    &pasted_len,
                                                     &paste_utf8,
                                                     (unsigned char)tail[i],
                                                     true);
@@ -737,7 +795,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                                         continue;
                                     }
                                     int status = tnt_input_append_stream_byte(
-                                        input, MAX_MESSAGE_LEN, input_len,
+                                        pasted, sizeof(pasted), &pasted_len,
                                         &paste_utf8, (unsigned char)b, true);
                                     if (status & TNT_INPUT_APPEND_OVERFLOW) {
                                         overflow = true;
@@ -751,13 +809,23 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                                     TNT_INPUT_APPEND_INVALID_UTF8) {
                                     invalid_utf8 = true;
                                 }
-                                tui_render_input(client, input);
+                                if (pasted_len > 0 &&
+                                    !editor_insert_bytes(ed, pasted,
+                                                         pasted_len)) {
+                                    overflow = true;
+                                }
+                                tui_render_input(client, ed);
                                 if (overflow || invalid_utf8) {
                                     client_send(client, "\a", 1);
                                 }
                             }
                             return true;
                         }
+                        /* A CSI sequence this build does not implement.
+                         * Swallow it.  Letting it reach the plain-ESC branch
+                         * below is what used to drop the user into NORMAL
+                         * mode mid-word and discard the message. */
+                        return true;
                     }
                 }
                 /* Plain ESC — fall through to NORMAL mode */
@@ -766,10 +834,11 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                 tui_render_screen(client);
                 return true;
             } else if (key == '\r' || key == '\n') {  /* Enter */
+                const char *input = editor_text(ed);
                 if (input[0] != '\0') {
-                    bool is_action = *input_len > 4 &&
+                    bool is_action = editor_len(ed) > 4 &&
                                      strncmp(input, "/me ", 4) == 0;
-                    size_t action_len = is_action ? *input_len - 4 : 0;
+                    size_t action_len = is_action ? editor_len(ed) - 4 : 0;
                     size_t action_username_len = 0;
 
                     if (is_action) {
@@ -818,8 +887,7 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                     } else {
                         fprintf(stderr, "interactive: failed to persist message\n");
                     }
-                    input[0] = '\0';
-                    *input_len = 0;
+                    editor_clear(ed);
                 }
                 /* The room update/redraw path at the top of the session loop
                  * owns the post-send repaint.  Deferring it lets a buffered
@@ -828,22 +896,19 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                 client->redraw_pending = true;
                 return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */
-                if (input[0] != '\0') {
-                    *input_len = utf8_remove_last_char(input, *input_len);
-                    tui_render_input(client, input);
+                if (editor_delete_prev_cluster(ed)) {
+                    tui_render_input(client, ed);
                 }
                 return true;  /* Key consumed */
             } else if (key == 23) { /* Ctrl+W (Delete Word) */
-                if (input[0] != '\0') {
-                    *input_len = utf8_remove_last_word(input, *input_len);
-                    tui_render_input(client, input);
+                if (editor_delete_prev_word(ed)) {
+                    tui_render_input(client, ed);
                 }
                 return true;
             } else if (key == 21) { /* Ctrl+U (Delete Line) */
-                if (input[0] != '\0') {
-                    input[0] = '\0';
-                    *input_len = 0;
-                    tui_render_input(client, input);
+                if (editor_len(ed) > 0) {
+                    editor_clear(ed);
+                    tui_render_input(client, ed);
                 }
                 return true;
             } else if (key == 9) { /* Tab: complete @mention */
@@ -852,7 +917,9 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                  * If found, scan g_room for the first case-insensitive
                  * username prefix-match (cycling past self) and replace
                  * the token. */
-                size_t in_len = *input_len;
+                char input[MAX_MESSAGE_LEN];
+                snprintf(input, sizeof(input), "%s", editor_text(ed));
+                size_t in_len = editor_len(ed);
                 ssize_t at_idx = -1;
                 for (ssize_t i = (ssize_t)in_len - 1; i >= 0; i--) {
                     unsigned char c = (unsigned char)input[i];
@@ -889,8 +956,8 @@ static bool handle_key(client_t *client, unsigned char key, char *input,
                             pos += mlen;
                             input[pos++] = ' ';
                             input[pos] = '\0';
-                            *input_len = pos;
-                            tui_render_input(client, input);
+                            editor_set_text(ed, input);
+                            tui_render_input(client, ed);
                         }
                     }
                 }
@@ -1183,8 +1250,8 @@ static int input_flush_client_output(client_t *client) {
 }
 
 void input_run_session(client_t *client) {
-    char input[MAX_MESSAGE_LEN] = {0};
-    size_t input_len = 0;
+    editor_t ed;
+    editor_reset(&ed);
     size_t command_input_len = 0;
     char buf[4];
     bool joined_room = false;
@@ -1352,8 +1419,8 @@ main_loop:
                 }
                 tui_render_screen(client);
                 last_room_render_ms = input_monotonic_millis();
-                if (client->mode == MODE_INSERT && input[0] != '\0') {
-                    tui_render_input(client, input);
+                if (client->mode == MODE_INSERT && editor_len(&ed) > 0) {
+                    tui_render_input(client, &ed);
                 }
             }
             if (room_updated) {
@@ -1536,7 +1603,7 @@ main_loop:
         unsigned char b = buf[0];
 
         /* Handle special keys - returns true if key was consumed */
-        bool key_consumed = handle_key(client, b, input, &input_len,
+        bool key_consumed = handle_key(client, b, &ed,
                                        &command_input_len);
 
         /* Only add character to input if not consumed by handle_key */
@@ -1545,11 +1612,10 @@ main_loop:
             if (client->mode == MODE_INSERT && !client->show_help &&
                 client->command_output[0] == '\0') {
                 if (b >= 32 && b < 127) {  /* ASCII printable */
-                    int status = tnt_input_append_ascii(
-                        input, MAX_MESSAGE_LEN, &input_len, b);
-                    if (status == TNT_INPUT_APPEND_OK) {
+                    char ch = (char)b;
+                    if (editor_insert_bytes(&ed, &ch, 1)) {
                         if (ready <= n) {
-                            tui_render_input(client, input);
+                            tui_render_input(client, &ed);
                         }
                     } else {
                         client_send(client, "\a", 1);
@@ -1573,11 +1639,10 @@ main_loop:
                         /* Invalid UTF-8 sequence */
                         continue;
                     }
-                    int status = tnt_input_append_utf8_sequence(
-                        input, MAX_MESSAGE_LEN, &input_len, buf, char_len);
-                    if (status == TNT_INPUT_APPEND_OK) {
+                    if (!utf8_is_control_sequence(buf, char_len) &&
+                        editor_insert_bytes(&ed, buf, (size_t)char_len)) {
                         if (ready <= char_len) {
-                            tui_render_input(client, input);
+                            tui_render_input(client, &ed);
                         }
                     } else {
                         client_send(client, "\a", 1);

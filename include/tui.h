@@ -4,6 +4,8 @@
 #include "common.h"
 #include "message.h"
 
+struct editor;
+
 /* Client structure (forward declaration) */
 struct client;
 
@@ -22,7 +24,7 @@ void tui_render_command_output(struct client *client);
 void tui_render_motd(struct client *client);
 
 /* Render the input line */
-void tui_render_input(struct client *client, const char *input);
+void tui_render_input(struct client *client, const struct editor *ed);
 
 /* Render only the command input/status line */
 void tui_render_command_input(struct client *client);

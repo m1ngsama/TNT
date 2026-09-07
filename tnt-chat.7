@@ -46,11 +46,21 @@ Send the current nonempty message.
 .B Esc
 Enter NORMAL mode.
 .TP
+.B Left, Right
+Move the caret one character.
+Text typed next is inserted at the caret.
+.TP
+.B Home, End
+Move the caret to the start or the end of the line.
+.TP
 .B Backspace
-Delete the preceding Unicode character.
+Delete the character before the caret.
+.TP
+.B Delete
+Delete the character under the caret.
 .TP
 .B Ctrl-W
-Delete the preceding word.
+Delete the word before the caret.
 .TP
 .B Ctrl-U
 Delete the input line.
@@ -66,7 +76,11 @@ token.
 .B Ctrl-C
 Enter NORMAL mode.
 .P
-Bracketed multiline paste is inserted as one message.
+A caret movement never splits a character, an emoji, or a flag.
+An escape sequence this build does not recognise is ignored; it does not
+change modes.
+.P
+Bracketed multiline paste is inserted at the caret as one message.
 Line breaks in the pasted text become spaces.
 Input that exceeds the message limit or contains invalid UTF-8 is rejected
 with a terminal bell.
