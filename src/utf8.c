@@ -290,31 +290,29 @@ int utf8_strlen(const char *str) {
 
 /* Truncate string to fit within max_width display characters */
 void utf8_truncate(char *str, int max_width) {
+    size_t offset = 0;
     int width = 0;
-    int bytes_read;
-    char *p = str;
-    char *last_valid = str;
 
-    while (*p != '\0') {
-        uint32_t codepoint = utf8_decode(p, &bytes_read);
-        int char_width = utf8_char_width(codepoint);
-
-        if (width + char_width > max_width) {
-            break;
-        }
-
-        width += char_width;
-        p += bytes_read;
-        last_valid = p;
+    if (!str || max_width < 0) {
+        return;
     }
 
-    *last_valid = '\0';
+    while (str[offset]) {
+        size_t len = utf8_cluster_length(str + offset);
+        int cluster_width = utf8_cluster_width(str + offset);
+
+        if (len == 0 || width + cluster_width > max_width) {
+            break;
+        }
+        width += cluster_width;
+        offset += len;
+    }
+    str[offset] = '\0';
 }
 
 void utf8_ansi_truncate(const char *src, char *dst, size_t dst_size,
                         int max_width) {
     int width = 0;
-    int bytes_read;
     size_t pos = 0;
     bool copied_ansi = false;
     bool last_ansi_was_reset = false;
@@ -348,22 +346,25 @@ void utf8_ansi_truncate(const char *src, char *dst, size_t dst_size,
             continue;
         }
 
-        uint32_t codepoint = utf8_decode(p, &bytes_read);
-        int char_width = utf8_char_width(codepoint);
+        size_t cluster_len = utf8_cluster_length(p);
+        int cluster_width = utf8_cluster_width(p);
 
-        if (width + char_width > max_width) {
+        if (cluster_len == 0) {
+            break;
+        }
+        if (width + cluster_width > max_width) {
             truncated = true;
             break;
         }
-        if (pos + (size_t)bytes_read >= dst_size) {
+        if (pos + cluster_len >= dst_size) {
             truncated = true;
             break;
         }
 
-        memcpy(dst + pos, p, (size_t)bytes_read);
-        pos += (size_t)bytes_read;
-        width += char_width;
-        p += bytes_read;
+        memcpy(dst + pos, p, cluster_len);
+        pos += cluster_len;
+        width += cluster_width;
+        p += cluster_len;
     }
 
     if (truncated && copied_ansi && !last_ansi_was_reset) {

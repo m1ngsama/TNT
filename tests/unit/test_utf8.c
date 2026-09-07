@@ -275,6 +275,20 @@ TEST(utf8_cluster_length_plain_characters) {
     assert(utf8_cluster_length(NULL) == 0);
 }
 
+TEST(utf8_truncate_never_splits_a_cluster) {
+    char buf[64];
+
+    /* Two flags, each two columns.  A three-column budget must keep one. */
+    snprintf(buf, sizeof(buf), "🇨🇳🇯🇵");
+    utf8_truncate(buf, 3);
+    assert(strcmp(buf, "🇨🇳") == 0);
+
+    /* A ZWJ family is indivisible: a one-column budget keeps nothing. */
+    snprintf(buf, sizeof(buf), "👨\xE2\x80\x8D👩");
+    utf8_truncate(buf, 1);
+    assert(buf[0] == '\0');
+}
+
 int main(void) {
     printf("Running UTF-8 unit tests...\n\n");
 
@@ -307,6 +321,7 @@ int main(void) {
     RUN_TEST(utf8_cluster_zwj_sequence_is_one_unit);
     RUN_TEST(utf8_cluster_regional_indicator_pair_is_one_flag);
     RUN_TEST(utf8_cluster_length_plain_characters);
+    RUN_TEST(utf8_truncate_never_splits_a_cluster);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;
