@@ -50,6 +50,9 @@ F: include/history_view.h
 F: src/input*.c
 F: src/tui*.c
 F: src/history_view.c
+F: include/richtext.h
+F: src/richtext.c
+F: tests/unit/test_richtext.c
 F: tests/test_interactive_input.sh
 F: tests/test_user_lifecycle.sh
 F: tnt-chat.7

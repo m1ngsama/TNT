@@ -43,14 +43,18 @@ HELP_TEXT_SRC = ../../src/help_text.c
 MANUAL_TEXT_SRC = ../../src/manual_text.c
 RATELIMIT_SRC = ../../src/ratelimit.c
 THEME_SRC = ../../src/theme.c
+RICHTEXT_SRC = ../../src/richtext.c
 
-TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_common test_client_outbox test_config_defaults test_theme
+TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_common test_client_outbox test_config_defaults test_theme test_richtext
 
 .PHONY: all clean run
 
 all: $(TESTS)
 
 test_utf8: test_utf8.c $(UTF8_SRC)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
+
+test_richtext: test_richtext.c $(RICHTEXT_SRC) $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_input_buffer: test_input_buffer.c $(INPUT_BUFFER_SRC) $(UTF8_SRC)
@@ -117,6 +121,9 @@ test_theme: test_theme.c $(THEME_SRC)
 run: all
 	@echo "=== Running UTF-8 Tests ==="
 	./test_utf8
+	@echo ""
+	@echo "=== Running Richtext Tests ==="
+	./test_richtext
 	@echo ""
 	@echo "=== Running Input Buffer Tests ==="
 	./test_input_buffer
