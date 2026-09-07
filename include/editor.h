@@ -11,7 +11,7 @@
  * Every mutation keeps three invariants: the buffer stays NUL-terminated,
  * `cursor` never exceeds `len`, and `cursor` always sits on a cluster
  * boundary, so an emoji or a flag is never split by editing. */
-typedef struct {
+typedef struct editor {
     char buf[MAX_MESSAGE_LEN];
     size_t len;      /* bytes in use, excluding the terminator */
     size_t cursor;   /* byte offset of the caret */

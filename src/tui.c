@@ -5,6 +5,7 @@
 #include "help_text.h"
 #include "history_view.h"
 #include "richtext.h"
+#include "editor.h"
 #include "i18n.h"
 #include "system_message.h"
 #include "theme.h"
@@ -654,8 +655,10 @@ void tui_render_screen(client_t *client) {
  * Format: "› <input>"  with optional right-aligned length indicator
  * once the buffer is past 80% full.  The indicator turns bold-yellow
  * past 95% so users can see further keystrokes will be dropped. */
-void tui_render_input(client_t *client, const char *input) {
-    if (!client || !client->connected) return;
+void tui_render_input(client_t *client, const editor_t *ed) {
+    if (!client || !client->connected || !ed) return;
+
+    const char *input = editor_text(ed);
 
     int rw = client->width;
     int rh = client->height;
@@ -685,24 +688,36 @@ void tui_render_input(client_t *client, const char *input) {
     int avail = rw - 3 - (gauge_width > 0 ? gauge_width + 1 : 0);
     if (avail < 1) avail = 1;
 
-    /* Truncate from start if too long */
+    /* Scroll horizontally so the caret stays visible.  Following the cursor
+     * rather than the end of the text is what makes editing at the start of
+     * a long line usable. */
     char display[MAX_MESSAGE_LEN];
-    strncpy(display, input, sizeof(display) - 1);
-    display[sizeof(display) - 1] = '\0';
+    int scroll_columns = 0;
 
     if (input_width > avail) {
+        int cursor_column = editor_cursor_column(ed);
         int excess = input_width - avail;
-        int skip_width = 0;
-        const char *p = input;
-        int bytes_read;
+        int target = cursor_column - avail + 1;
 
-        while (*p && skip_width < excess) {
-            uint32_t cp = utf8_decode(p, &bytes_read);
-            skip_width += utf8_char_width(cp);
-            p += bytes_read;
+        if (target < 0) target = 0;
+        if (target > excess) target = excess;
+
+        const char *p = input;
+        while (*p && scroll_columns < target) {
+            size_t len = utf8_cluster_length(p);
+
+            if (len == 0) {
+                break;
+            }
+            scroll_columns += utf8_cluster_width(p);
+            p += len;
         }
 
         strncpy(display, p, sizeof(display) - 1);
+        display[sizeof(display) - 1] = '\0';
+    } else {
+        strncpy(display, input, sizeof(display) - 1);
+        display[sizeof(display) - 1] = '\0';
     }
 
     /* Compose: cursor to input row, clear line, "› " prompt, input.
@@ -719,6 +734,15 @@ void tui_render_input(client_t *client, const char *input) {
                  "\033[%d;1H" ANSI_CLEAR_LINE "\033[2;37m›\033[0m %s",
                  rh, display);
     }
+
+    /* Park the terminal caret where the next character will land.  Text
+     * starts at column 3, after "› ". */
+    size_t used = strlen(buffer);
+    int cursor_col = 3 + editor_cursor_column(ed) - scroll_columns;
+    if (cursor_col < 3) cursor_col = 3;
+    if (cursor_col > rw) cursor_col = rw;
+    snprintf(buffer + used, sizeof(buffer) - used, "\033[%d;%dH", rh,
+             cursor_col);
 
     client_send(client, buffer, strlen(buffer));
 }
