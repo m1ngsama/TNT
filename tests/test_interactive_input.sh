@@ -36,7 +36,7 @@ TNT_LANG=zh TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$B
 SERVER_PID=$!
 
 SERVER_READY=0
-for _ in 1 2 3 4 5; do
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     if ! kill -0 "$SERVER_PID" 2>/dev/null; then
         echo "x Server failed to start"
         sed -n '1,120p' "$STATE_DIR/server.log"
