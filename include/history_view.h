@@ -17,7 +17,11 @@ void history_view_scroll_to_latest(int *scroll_pos, bool *follow_tail,
 void history_view_scroll_to_oldest(int *scroll_pos, bool *follow_tail);
 void history_view_scroll_by(int *scroll_pos, bool *follow_tail,
                             int message_count, int view_height, int delta);
+/* Oldest message index that still fits in the newest screenful, accounting
+ * for date dividers and for messages that wrap across several rows at the
+ * given render width.  Callers that hold a message snapshot use this; the
+ * cheap count-based bound above stays for the scroll-position clamp. */
 int history_view_latest_start_for_height(const message_t *messages, int count,
-                                         int height);
+                                         int height, int width);
 
 #endif /* HISTORY_VIEW_H */

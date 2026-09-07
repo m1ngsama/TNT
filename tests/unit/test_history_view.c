@@ -80,18 +80,18 @@ TEST(latest_start_counts_date_dividers) {
     messages[4] = make_msg(1704240000, "day3-1");  /* 2024-01-03 */
     messages[5] = make_msg(1704240060, "day3-2");
 
-    assert(history_view_latest_start_for_height(messages, 6, 3) == 4);
-    assert(history_view_latest_start_for_height(messages, 6, 4) == 4);
-    assert(history_view_latest_start_for_height(messages, 6, 5) == 3);
-    assert(history_view_latest_start_for_height(messages, 6, 6) == 2);
+    assert(history_view_latest_start_for_height(messages, 6, 3, 200) == 4);
+    assert(history_view_latest_start_for_height(messages, 6, 4, 200) == 4);
+    assert(history_view_latest_start_for_height(messages, 6, 5, 200) == 3);
+    assert(history_view_latest_start_for_height(messages, 6, 6, 200) == 2);
 }
 
 TEST(latest_start_handles_empty_and_tiny_view) {
     message_t messages[1];
     messages[0] = make_msg(1704067200, "only");
 
-    assert(history_view_latest_start_for_height(messages, 0, 3) == 0);
-    assert(history_view_latest_start_for_height(messages, 1, 1) == 0);
+    assert(history_view_latest_start_for_height(messages, 0, 3, 200) == 0);
+    assert(history_view_latest_start_for_height(messages, 1, 1, 200) == 0);
 }
 
 TEST(latest_start_uses_prepared_date_cache) {
@@ -108,9 +108,9 @@ TEST(latest_start_uses_prepared_date_cache) {
     snprintf(messages[3].display_date, sizeof(messages[3].display_date),
              "2024-01-02");
 
-    assert(history_view_latest_start_for_height(messages, 4, 3) == 2);
-    assert(history_view_latest_start_for_height(messages, 4, 4) == 2);
-    assert(history_view_latest_start_for_height(messages, 4, 5) == 1);
+    assert(history_view_latest_start_for_height(messages, 4, 3, 200) == 2);
+    assert(history_view_latest_start_for_height(messages, 4, 4, 200) == 2);
+    assert(history_view_latest_start_for_height(messages, 4, 5, 200) == 1);
 }
 
 TEST(history_view_counts_wrapped_message_rows) {
@@ -135,6 +135,22 @@ TEST(history_view_message_lines_minimum_is_one) {
     assert(history_view_message_lines(&msg, 0) == 1);
 }
 
+TEST(latest_start_accounts_for_wrapped_rows) {
+    message_t messages[3];
+    for (int i = 0; i < 3; i++) {
+        messages[i] = make_msg(1704067200, "aaaaaaaaaa bbbbbbbbbb");
+        snprintf(messages[i].display_date, sizeof(messages[i].display_date),
+                 "2024-01-01");
+    }
+
+    /* Wide: one row each, plus one divider row, so all three fit in five. */
+    assert(history_view_latest_start_for_height(messages, 3, 5, 200) == 0);
+
+    /* Narrow: two rows each.  Divider + newest (3) + one more (5) fills the
+     * height, so the oldest message no longer fits. */
+    assert(history_view_latest_start_for_height(messages, 3, 5, 10) == 1);
+}
+
 int main(void) {
     printf("=== History View Unit Tests ===\n");
 
@@ -148,6 +164,7 @@ int main(void) {
     RUN_TEST(latest_start_uses_prepared_date_cache);
     RUN_TEST(history_view_counts_wrapped_message_rows);
     RUN_TEST(history_view_message_lines_minimum_is_one);
+    RUN_TEST(latest_start_accounts_for_wrapped_rows);
 
     printf("\nAll %d tests passed!\n", tests_passed);
     return 0;
