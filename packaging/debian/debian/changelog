@@ -1,3 +1,13 @@
+tnt-chat (1.3.1-1) unstable; urgency=medium
+
+  * Replace the Markdown documentation set with installed manual pages.
+  * Bound incomplete SSH logins so stalled setups release their slots.
+  * Isolate TUI tokenizer state and drop cron maintenance privileges.
+  * Detach tntctl stdin so a remote command cannot drain caller input.
+  * Harden module, input, and release gates for constrained hosts.
+
+ -- M1ng <contact@m1ng.space>  Mon, 07 Sep 2026 00:00:00 +0800
+
 tnt-chat (1.3.0-1) unstable; urgency=medium
 
   * Add reproducible performance contracts and a 64-session release gate.
