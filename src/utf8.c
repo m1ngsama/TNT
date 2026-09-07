@@ -78,22 +78,155 @@ int utf8_char_width(uint32_t codepoint) {
     /* Fullwidth forms */
     if (codepoint >= 0xFF00 && codepoint <= 0xFFEF) return 2;
 
+    /* Zero-width: combining marks, variation selectors, joiners, and the
+     * zero-width space family.  These attach to a base character and add no
+     * columns of their own. */
+    if ((codepoint >= 0x0300 && codepoint <= 0x036F) ||   /* Combining Diacritical */
+        (codepoint >= 0x1AB0 && codepoint <= 0x1AFF) ||   /* Combining Extended */
+        (codepoint >= 0x1DC0 && codepoint <= 0x1DFF) ||   /* Combining Supplement */
+        (codepoint >= 0x20D0 && codepoint <= 0x20FF) ||   /* Combining Symbols */
+        (codepoint >= 0xFE00 && codepoint <= 0xFE0F) ||   /* Variation Selectors */
+        (codepoint >= 0xFE20 && codepoint <= 0xFE2F) ||   /* Combining Half Marks */
+        (codepoint >= 0x1160 && codepoint <= 0x11FF) ||   /* Hangul Jamo medial/final */
+        codepoint == 0x200B || codepoint == 0x200C ||
+        codepoint == 0x200D ||                            /* ZWSP, ZWNJ, ZWJ */
+        (codepoint >= 0x2060 && codepoint <= 0x2064)) {
+        return 0;
+    }
+
+    /* Emoji and other wide pictographs. */
+    if ((codepoint >= 0x1F300 && codepoint <= 0x1F5FF) ||  /* Misc Pictographs */
+        (codepoint >= 0x1F600 && codepoint <= 0x1F64F) ||  /* Emoticons */
+        (codepoint >= 0x1F680 && codepoint <= 0x1F6FF) ||  /* Transport */
+        (codepoint >= 0x1F900 && codepoint <= 0x1F9FF) ||  /* Supplemental */
+        (codepoint >= 0x1FA70 && codepoint <= 0x1FAFF) ||  /* Extended-A */
+        (codepoint >= 0x1F000 && codepoint <= 0x1F0FF) ||  /* Tiles and cards */
+        (codepoint >= 0x1F1E6 && codepoint <= 0x1F1FF)) {  /* Regional indicators */
+        return 2;
+    }
+
     /* Default to single width */
     return 1;
+}
+
+static bool codepoint_is_regional_indicator(uint32_t cp) {
+    return cp >= 0x1F1E6 && cp <= 0x1F1FF;
+}
+
+static bool codepoint_joins_previous(uint32_t cp) {
+    /* Anything that renders as part of the preceding cluster. */
+    return utf8_char_width(cp) == 0;
+}
+
+size_t utf8_cluster_length(const char *str) {
+    int used = 0;
+    uint32_t base;
+    size_t len;
+
+    if (!str || *str == '\0') {
+        return 0;
+    }
+
+    base = utf8_decode(str, &used);
+    if (used <= 0) {
+        return 1;
+    }
+    len = (size_t)used;
+
+    for (;;) {
+        const char *next = str + len;
+        int next_used = 0;
+        uint32_t cp;
+
+        if (*next == '\0') {
+            break;
+        }
+
+        cp = utf8_decode(next, &next_used);
+        if (next_used <= 0) {
+            break;
+        }
+
+        if (cp == 0x200D) {
+            /* A joiner always pulls in whatever follows it. */
+            int joined_used = 0;
+            const char *joined = next + next_used;
+
+            if (*joined == '\0') {
+                break;
+            }
+            utf8_decode(joined, &joined_used);
+            if (joined_used <= 0) {
+                break;
+            }
+            len += (size_t)next_used + (size_t)joined_used;
+            continue;
+        }
+
+        if (codepoint_joins_previous(cp)) {
+            len += (size_t)next_used;
+            continue;
+        }
+
+        if (codepoint_is_regional_indicator(base) &&
+            codepoint_is_regional_indicator(cp)) {
+            /* A flag is exactly two indicators; a third starts a new flag. */
+            len += (size_t)next_used;
+        }
+        break;
+    }
+
+    return len;
+}
+
+int utf8_cluster_width(const char *str) {
+    size_t len = utf8_cluster_length(str);
+    size_t offset = 0;
+    int width = 0;
+    bool emoji_presentation = false;
+
+    if (len == 0) {
+        return 0;
+    }
+
+    while (offset < len) {
+        int used = 0;
+        uint32_t cp = utf8_decode(str + offset, &used);
+
+        if (used <= 0) {
+            break;
+        }
+        if (cp == 0xFE0F) {
+            emoji_presentation = true;
+        }
+        if (width == 0) {
+            width = utf8_char_width(cp);
+        }
+        offset += (size_t)used;
+    }
+
+    if (emoji_presentation && width < 2) {
+        width = 2;
+    }
+    return width == 0 ? 0 : width;
 }
 
 /* Calculate display width of a UTF-8 string */
 int utf8_string_width(const char *str) {
     int width = 0;
-    int bytes_read;
-    const char *p = str;
 
-    while (*p != '\0') {
-        uint32_t codepoint = utf8_decode(p, &bytes_read);
-        width += utf8_char_width(codepoint);
-        p += bytes_read;
+    if (!str) {
+        return 0;
     }
+    while (*str) {
+        size_t len = utf8_cluster_length(str);
 
+        if (len == 0) {
+            break;
+        }
+        width += utf8_cluster_width(str);
+        str += len;
+    }
     return width;
 }
 

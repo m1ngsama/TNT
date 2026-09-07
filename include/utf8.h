@@ -8,6 +8,14 @@
 /* UTF-8 character width calculation */
 int utf8_char_width(uint32_t codepoint);
 
+/* Byte length of the grapheme-ish cluster starting at str.  Combining marks,
+ * variation selectors, ZWJ sequences, and regional-indicator pairs join their
+ * base character.  Returns 0 for NULL or an empty string. */
+size_t utf8_cluster_length(const char *str);
+
+/* Display columns occupied by the cluster starting at str. */
+int utf8_cluster_width(const char *str);
+
 /* Get the number of bytes in a UTF-8 character from its first byte */
 int utf8_byte_length(unsigned char first_byte);
 
