@@ -37,9 +37,10 @@
 
 static int g_idle_timeout = TNT_DEFAULT_IDLE_TIMEOUT;
 static ui_lang_t g_default_ui_lang = UI_LANG_EN;
-/* Server-wide keymap default.  Still vim, so this commit changes nothing a
- * user sees; the flip is its own commit. */
-static tnt_keymap_t g_default_keymap = TNT_KEYMAP_VIM;
+/* Server-wide keymap default.  A first-time visitor should be able to type
+ * without learning a mode; people who want the vim keys ask for them with
+ * `ssh vim@host`, the `vim` command, or `--keymap vim`. */
+static tnt_keymap_t g_default_keymap = TNT_KEYMAP_DEFAULT;
 
 #define KEEPALIVE_INTERVAL_MS 15000
 #define DARWIN_HIGH_FD_POLL_MS 10

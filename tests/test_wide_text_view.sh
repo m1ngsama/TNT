@@ -76,7 +76,7 @@ set timeout 15
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "viewer\r"
-expect "Esc NORMAL"
+expect "/help"
 sleep 2
 close
 EOF

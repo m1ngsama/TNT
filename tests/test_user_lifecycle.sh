@@ -54,7 +54,9 @@ wait_for_health() {
 
 echo "=== TNT User Lifecycle Test ==="
 
-TNT_LANG=zh "$BIN" \
+# This suite drives the modal interface, so it says so rather than relying
+# on the server default.
+TNT_LANG=zh TNT_KEYMAP=vim "$BIN" \
     --bind 127.0.0.1 \
     --public-host lifecycle.local \
     --max-connections 32 \

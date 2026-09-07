@@ -275,6 +275,7 @@ integration-test: all
 	@cd tests && PORT=$$(($${PORT:-2222} + 9)) ./test_wide_text_view.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 10)) ./test_cursor_editing.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 11)) ./test_default_keymap.sh
+	@cd tests && PORT=$$(($${PORT:-2222} + 12)) ./test_vim_keymap.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 6)) ./test_module_runtime.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 7)) ./test_graceful_shutdown.sh
 	@cd tests && PORT=$$(($${PORT:-2222} + 8)) ./test_login_timeouts.sh

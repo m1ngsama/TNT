@@ -32,7 +32,10 @@ SSH_OPTS="-e none -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o
 
 echo "=== TNT Interactive Input Tests ==="
 
-TNT_LANG=zh TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
+# This suite drives the modal interface — Esc, NORMAL, and ":" commands —
+# so it states that requirement rather than depending on whichever keymap
+# happens to be the server default.
+TNT_LANG=zh TNT_KEYMAP=vim TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
 SERVER_READY=0

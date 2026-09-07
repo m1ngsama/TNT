@@ -33,6 +33,14 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "Enter · Esc",
         "Enter · Esc"
     ),
+    [I18N_PLAIN_HINT_WIDE] = I18N_STRING(
+        "Enter send · /help for commands · PgUp scrolls",
+        "Enter 发送 · /help 查看命令 · PgUp 翻阅"
+    ),
+    [I18N_PLAIN_HINT_NARROW] = I18N_STRING(
+        "Enter · /help",
+        "Enter · /help"
+    ),
     [I18N_NORMAL_LATEST] = I18N_STRING(
         "G latest",
         "G 最新"

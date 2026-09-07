@@ -21,6 +21,8 @@ tnt \- run the TNT SSH chat server
 .BR 0 | 1 ]
 .RB [ \-\-idle\-timeout
 .IR seconds ]
+.RB [ \-\-keymap
+.IR name ]
 .RB [ \-\-ssh\-log\-level
 .IR level ]
 .YS
@@ -125,6 +127,21 @@ The valid range is 0 through 86400; 0 disables this timeout.
 The default is 1800.
 This option overrides
 .BR TNT_IDLE_TIMEOUT .
+.TP
+.BI "\-\-keymap " name
+Choose the keyboard interface every session starts with:
+.B default
+for the modeless keys, or
+.B vim
+for the modal interface.
+The default is
+.BR default .
+A client can still ask for the other one per session, with the
+.B vim
+command or by connecting as
+.BI vim@ host .
+This option overrides
+.BR TNT_KEYMAP .
 .TP
 .BI "\-\-ssh\-log\-level " level
 Set the libssh log level.

@@ -1,5 +1,6 @@
 #include "tui_status.h"
 #include "i18n.h"
+#include "keymap.h"
 #include "ssh_server.h"
 #include "utf8.h"
 
@@ -56,19 +57,25 @@ void tui_status_append(char *buffer, size_t buf_size, size_t *pos,
     if (!buffer || !pos || !client) return;
 
     if (client->mode == MODE_INSERT) {
+        /* The hint must name keys this session actually has.  Advertising
+         * ":" commands and Esc to somebody on the modeless keymap sends them
+         * after behaviour that does not exist for them. */
+        bool modal = tnt_keymap_uses_modes(client->keymap);
         if (client->width >= 58) {
             buffer_appendf(buffer, buf_size, pos,
                            "\033[2;37m›\033[0m  "
                            "\033[2;37m%s\033[0m"
                            "\033[K",
                            i18n_text(client->ui_lang,
-                                     I18N_INSERT_HINT_WIDE));
+                                     modal ? I18N_INSERT_HINT_WIDE
+                                           : I18N_PLAIN_HINT_WIDE));
         } else if (client->width >= 36) {
             buffer_appendf(buffer, buf_size, pos,
                            "\033[2;37m›\033[0m  "
                            "\033[2;37m%s\033[0m\033[K",
                            i18n_text(client->ui_lang,
-                                     I18N_INSERT_HINT_NARROW));
+                                     modal ? I18N_INSERT_HINT_NARROW
+                                           : I18N_PLAIN_HINT_NARROW));
         } else {
             buffer_appendf(buffer, buf_size, pos, "\033[2;37m›\033[0m \033[K");
         }
