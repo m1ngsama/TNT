@@ -101,10 +101,15 @@ else
 fi
 
 run_ok "basic argv shape" "$BIN" -p 2222 example.com health
+awk '
+    $0 == "-n" { stdin_null = NR }
+    $0 == "example.com" { destination = NR }
+    END { exit !(stdin_null > 0 && stdin_null < destination) }
+' "$SSH_LOG" &&
 grep -q '^example.com$' "$SSH_LOG" &&
 grep -q '^health$' "$SSH_LOG"
 if [ $? -eq 0 ]; then
-    echo "✓ fake ssh receives host and command as separate argv"
+    echo "✓ fake ssh detaches stdin and receives explicit host/command argv"
     PASS=$((PASS + 1))
 else
     echo "✗ fake ssh argv unexpected"
