@@ -4,6 +4,8 @@ F: .github/**
 F: .gitignore
 F: LICENSE
 F: MAINTAINERS
+F: README.md
+F: SECURITY.md
 F: demos/**
 F: include/.gitkeep
 F: scripts/check_maintainers.sh
