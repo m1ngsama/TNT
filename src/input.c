@@ -288,9 +288,6 @@ static void normal_scroll_by(client_t *client, int delta) {
 static void normal_enter_insert(client_t *client) {
     if (!client) return;
     client->mode = MODE_INSERT;
-    /* The login name selects neither identity nor nickname, which is what
-     * leaves `ssh vim@host` free to mean "give me the vim keys". */
-    client->keymap = tnt_keymap_from_login(client->ssh_login, g_default_keymap);
     client->follow_tail = true;
     client->unread_mentions = 0;
     tui_render_screen(client);
@@ -629,6 +626,20 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
             dismiss_command_output(client);
             return true;
         }
+        if (!tnt_keymap_uses_modes(client->keymap)) {
+            /* No mode to fall back to.  Clear what is being composed, and
+             * when there is nothing to clear, say how to leave rather than
+             * disconnecting someone who pressed a habitual Ctrl+C. */
+            if (editor_len(ed) > 0) {
+                editor_clear(ed);
+                tui_render_input(client, ed);
+            } else {
+                client_printf(client, "\a");
+                tui_render_command_hint(
+                    client, i18n_text(client->ui_lang, I18N_HINT_QUIT));
+            }
+            return true;
+        }
         if (previous_mode != MODE_NORMAL) {
             client->mode = MODE_NORMAL;
             client->command_input[0] = '\0';
@@ -720,7 +731,29 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                                    seq[1] == '8') {
                             /* "ESC [ <n> ~": Home, Delete, and End. */
                             return handle_insert_csi_tilde(client, ed, seq[1]);
+                        } else if (seq[1] == '5' || seq[1] == '6') {
+                            /* PgUp / PgDn.  In the default keymap the history
+                             * has to be readable without leaving the input,
+                             * because there is no mode to leave it for. */
+                            char tilde;
+                            int t = ssh_channel_read_timeout(client->channel,
+                                                             &tilde, 1, 0, 50);
+                            if (t == 1 && tilde == '~' &&
+                                !tnt_keymap_uses_modes(client->keymap)) {
+                                int page = history_view_height(client->height);
+                                normal_scroll_by(client,
+                                                 seq[1] == '5' ? -page : page);
+                                tui_render_screen(client);
+                                tui_render_input(client, ed);
+                            }
+                            return true;
                         } else if (seq[1] == 'A') {  /* Up — walk back through sent history */
+                            /* With a caret, Up must not silently replace text
+                             * the user is still composing. */
+                            if (!tnt_keymap_uses_modes(client->keymap) &&
+                                editor_len(ed) > 0) {
+                                return true;
+                            }
                             if (client->insert_history_count > 0 &&
                                 client->insert_history_pos > 0) {
                                 client->insert_history_pos--;
@@ -837,6 +870,17 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                         return true;
                     }
                 }
+                if (!tnt_keymap_uses_modes(client->keymap)) {
+                    /* Nothing to escape to.  Dismissing a panel is the only
+                     * thing Esc does here; it never takes the keyboard away
+                     * from the person typing. */
+                    if (client->show_help) {
+                        client->show_help = false;
+                        tui_render_screen(client);
+                        tui_render_input(client, ed);
+                    }
+                    return true;
+                }
                 /* Plain ESC — fall through to NORMAL mode */
                 client->mode = MODE_NORMAL;
                 normal_scroll_to_latest(client);
@@ -844,6 +888,34 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                 return true;
             } else if (key == '\r' || key == '\n') {  /* Enter */
                 const char *input = editor_text(ed);
+                if (!tnt_keymap_uses_modes(client->keymap) &&
+                    input[0] == '/') {
+                    tnt_command_id_t id;
+
+                    if (input[1] == '/') {
+                        /* "//text" is how a message that really starts with a
+                         * slash gets sent.  Drop one slash and fall through. */
+                        char literal[MAX_MESSAGE_LEN];
+                        snprintf(literal, sizeof(literal), "%s", input + 1);
+                        editor_set_text(ed, literal);
+                        input = editor_text(ed);
+                    } else if (command_catalog_match(input + 1, &id, NULL)) {
+                        /* A recognised command runs; anything else — a path
+                         * like /usr/local/bin, a typo — is just a message. */
+                        snprintf(client->command_input,
+                                 sizeof(client->command_input), "%s",
+                                 input + 1);
+                        *command_input_len = strnlen(
+                            client->command_input,
+                            sizeof(client->command_input) - 1);
+                        editor_clear(ed);
+                        commands_dispatch(client);
+                        client->command_input[0] = '\0';
+                        *command_input_len = 0;
+                        client->redraw_pending = true;
+                        return true;
+                    }
+                }
                 if (input[0] != '\0') {
                     bool is_action = editor_len(ed) > 4 &&
                                      strncmp(input, "/me ", 4) == 0;
@@ -1272,6 +1344,9 @@ void input_run_session(client_t *client) {
 
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
+    /* The login name selects neither identity nor nickname, which is what
+     * leaves `ssh vim@host` free to mean "give me the vim keys". */
+    client->keymap = tnt_keymap_from_login(client->ssh_login, g_default_keymap);
     client->follow_tail = true;
     client->ui_lang = g_default_ui_lang;
     client->connected = true;

@@ -81,6 +81,14 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "? keys",
         "? 按键"
     ),
+    [I18N_HINT_QUIT] = I18N_STRING(
+        "Type /quit to leave",
+        "输入 /quit 离开"
+    ),
+    [I18N_KEYMAP_SWITCHED_FORMAT] = I18N_STRING(
+        "Keys: %s\n",
+        "键位: %s\n"
+    ),
     [I18N_EMPTY_ROOM] = I18N_STRING(
         "No messages yet",
         "暂无消息"
