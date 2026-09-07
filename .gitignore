@@ -32,6 +32,8 @@ tests/unit/test_tntctl_text
 tests/unit/test_ratelimit
 tests/unit/test_config_defaults
 tests/unit/test_theme
+tests/unit/test_client_outbox
+tests/unit/test_common
 perf-results/
 __pycache__/
 *.pyc
