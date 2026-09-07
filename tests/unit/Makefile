@@ -45,8 +45,9 @@ RATELIMIT_SRC = ../../src/ratelimit.c
 THEME_SRC = ../../src/theme.c
 RICHTEXT_SRC = ../../src/richtext.c
 EDITOR_SRC = ../../src/editor.c
+KEYMAP_SRC = ../../src/keymap.c
 
-TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_common test_client_outbox test_config_defaults test_theme test_richtext test_editor
+TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_common test_client_outbox test_config_defaults test_theme test_richtext test_editor test_keymap
 
 .PHONY: all clean run
 
@@ -59,6 +60,9 @@ test_richtext: test_richtext.c $(RICHTEXT_SRC) $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_editor: test_editor.c $(EDITOR_SRC) $(UTF8_SRC)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
+
+test_keymap: test_keymap.c $(KEYMAP_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_input_buffer: test_input_buffer.c $(INPUT_BUFFER_SRC) $(UTF8_SRC)
@@ -131,6 +135,9 @@ run: all
 	@echo ""
 	@echo "=== Running Editor Tests ==="
 	./test_editor
+	@echo ""
+	@echo "=== Running Keymap Tests ==="
+	./test_keymap
 	@echo ""
 	@echo "=== Running Input Buffer Tests ==="
 	./test_input_buffer

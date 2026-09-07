@@ -247,6 +247,22 @@ int main(int argc, char **argv) {
                 return rc;
             }
             i++;
+        } else if (strcmp(argv[i], "--keymap") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) {
+                return TNT_EXIT_USAGE;
+            }
+            /* Round-tripping through the name parser rejects a typo here
+             * rather than silently handing every session the wrong keys. */
+            if (tnt_keymap_from_name(argv[i + 1], TNT_KEYMAP_VIM) !=
+                    tnt_keymap_from_name(argv[i + 1], TNT_KEYMAP_DEFAULT)) {
+                fprintf(stderr, cli_text_invalid_value_format(lang), argv[i],
+                        argv[i + 1]);
+                return TNT_EXIT_USAGE;
+            }
+            if (set_env_option("TNT_KEYMAP", argv[i + 1]) != 0) {
+                return TNT_EXIT_ERROR;
+            }
+            i++;
         } else if (strcmp(argv[i], "--ssh-log-level") == 0) {
             if (!require_option_arg(argc, argv, i, lang)) {
                 return TNT_EXIT_USAGE;

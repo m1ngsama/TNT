@@ -13,6 +13,7 @@
 #include "exec.h"
 #include "history_view.h"
 #include "i18n.h"
+#include "keymap.h"
 #include "input_buffer.h"
 #include "message.h"
 #include "module_runtime.h"
@@ -36,6 +37,9 @@
 
 static int g_idle_timeout = TNT_DEFAULT_IDLE_TIMEOUT;
 static ui_lang_t g_default_ui_lang = UI_LANG_EN;
+/* Server-wide keymap default.  Still vim, so this commit changes nothing a
+ * user sees; the flip is its own commit. */
+static tnt_keymap_t g_default_keymap = TNT_KEYMAP_VIM;
 
 #define KEEPALIVE_INTERVAL_MS 15000
 #define DARWIN_HIGH_FD_POLL_MS 10
@@ -52,6 +56,8 @@ static const char *input_client_name(const struct client *client) {
 void input_init(void) {
     g_idle_timeout = tnt_config_env_int(&TNT_CONFIG_IDLE_TIMEOUT);
     g_default_ui_lang = i18n_default_ui_lang();
+    g_default_keymap = tnt_keymap_from_name(getenv("TNT_KEYMAP"),
+                                            g_default_keymap);
     room_set_client_notifier(g_room, client_wake);
     room_set_client_name_accessor(g_room, input_client_name);
 }
@@ -282,6 +288,9 @@ static void normal_scroll_by(client_t *client, int delta) {
 static void normal_enter_insert(client_t *client) {
     if (!client) return;
     client->mode = MODE_INSERT;
+    /* The login name selects neither identity nor nickname, which is what
+     * leaves `ssh vim@host` free to mean "give me the vim keys". */
+    client->keymap = tnt_keymap_from_login(client->ssh_login, g_default_keymap);
     client->follow_tail = true;
     client->unread_mentions = 0;
     tui_render_screen(client);
