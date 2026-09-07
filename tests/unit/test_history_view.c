@@ -113,6 +113,28 @@ TEST(latest_start_uses_prepared_date_cache) {
     assert(history_view_latest_start_for_height(messages, 4, 5) == 1);
 }
 
+TEST(history_view_counts_wrapped_message_rows) {
+    message_t msg = {0};
+
+    snprintf(msg.username, sizeof(msg.username), "u");
+    snprintf(msg.content, sizeof(msg.content),
+             "aaaaaaaaaa bbbbbbbbbb cccccccccc");
+
+    /* Wide enough for one row. */
+    assert(history_view_message_lines(&msg, 200) == 1);
+    /* Narrow enough that the content needs more than one row. */
+    assert(history_view_message_lines(&msg, 20) > 1);
+}
+
+TEST(history_view_message_lines_minimum_is_one) {
+    message_t msg = {0};
+
+    snprintf(msg.username, sizeof(msg.username), "u");
+    snprintf(msg.content, sizeof(msg.content), "x");
+    assert(history_view_message_lines(&msg, 1) == 1);
+    assert(history_view_message_lines(&msg, 0) == 1);
+}
+
 int main(void) {
     printf("=== History View Unit Tests ===\n");
 
@@ -124,6 +146,8 @@ int main(void) {
     RUN_TEST(latest_start_counts_date_dividers);
     RUN_TEST(latest_start_handles_empty_and_tiny_view);
     RUN_TEST(latest_start_uses_prepared_date_cache);
+    RUN_TEST(history_view_counts_wrapped_message_rows);
+    RUN_TEST(history_view_message_lines_minimum_is_one);
 
     printf("\nAll %d tests passed!\n", tests_passed);
     return 0;

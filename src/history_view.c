@@ -1,5 +1,20 @@
 #include "history_view.h"
 
+#include "richtext.h"
+
+int history_view_message_lines(const message_t *msg, int width) {
+    richtext_span_t spans[HISTORY_VIEW_MAX_WRAPPED_ROWS];
+    size_t rows;
+
+    if (!msg || width < 1) {
+        return 1;
+    }
+
+    rows = richtext_wrap(msg->content, width, spans,
+                         HISTORY_VIEW_MAX_WRAPPED_ROWS);
+    return rows < 1 ? 1 : (int)rows;
+}
+
 static void message_date_key(const message_t *msg, char out[11]) {
     if (msg->display_date[0] != '\0') {
         memcpy(out, msg->display_date, 11);
