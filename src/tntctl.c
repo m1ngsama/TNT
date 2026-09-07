@@ -264,6 +264,10 @@ int main(int argc, char **argv) {
     }
 
     ssh_argv[ssh_argc++] = "ssh";
+    /* Every tntctl operation is a self-contained remote exec command.  Do
+     * not let ssh consume the caller's pipeline or script input while the
+     * command is running. */
+    ssh_argv[ssh_argc++] = "-n";
     ssh_argv[ssh_argc++] = "-p";
     ssh_argv[ssh_argc++] = (char *)port;
     if (host_key_checking) {
