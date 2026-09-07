@@ -7,7 +7,7 @@ F: MAINTAINERS
 F: README.md
 F: SECURITY.md
 F: demos/**
-F: docs/superpowers/specs/**
+F: docs/superpowers/**
 F: include/.gitkeep
 F: scripts/check_maintainers.sh
 F: scripts/get_maintainer.sh
