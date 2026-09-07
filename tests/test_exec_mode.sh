@@ -494,7 +494,7 @@ set timeout 10
 spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT sender@localhost
 expect "请输入用户名"
 send "sender\r"
-expect "Esc NORMAL"
+expect "/help"
 send "\033"
 expect "NORMAL"
 send ":"

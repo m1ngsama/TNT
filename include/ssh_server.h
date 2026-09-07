@@ -2,6 +2,7 @@
 #define SSH_SERVER_H
 
 #include "common.h"
+#include "keymap.h"
 #include "chat_room.h"
 #include <arpa/inet.h>
 #include <libssh/libssh.h>
@@ -65,6 +66,7 @@ typedef struct client {
     _Atomic int unread_whispers;     /* whispers received since last :inbox view */
     char last_whisper_peer[MAX_USERNAME_LEN];  /* Most recent private-message peer */
     int theme_index;                 /* Per-session colour theme (see theme.h) */
+    tnt_keymap_t keymap;             /* Which key set this session uses */
     char *outbox;                    /* Bounded queued output for interactive writes */
     size_t outbox_head;
     size_t outbox_len;

@@ -32,7 +32,7 @@ SSH_OPTS="-e none -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/nul
 
 echo "=== TNT Empty View Test ==="
 
-TNT_LANG=en TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" --bind 127.0.0.1 \
+TNT_LANG=en TNT_KEYMAP=vim TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" --bind 127.0.0.1 \
     -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 

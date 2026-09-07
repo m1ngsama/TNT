@@ -93,6 +93,15 @@ static const command_catalog_entry_t entries[] = {
         3, true, false
     },
     {
+        {TNT_COMMAND_KEYMAP, "vim", {"vim", "keys", NULL}},
+        I18N_STRING(":vim, :vim off", ":vim, :vim off"),
+        I18N_STRING("Switch between vim keys and the plain keymap",
+                    "在 vim 键位与普通键位之间切换"),
+        I18N_STRING(":vim", ":vim"),
+        I18N_STRING("Usage: vim [off]\n", "用法: vim [off]\n"),
+        3, true, false
+    },
+    {
         {TNT_COMMAND_THEME, "theme", {"theme", "color", NULL}},
         I18N_STRING(":theme, :theme <name>", ":theme, :theme <name>"),
         I18N_STRING("Switch colour theme", "切换配色主题"),

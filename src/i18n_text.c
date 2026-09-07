@@ -33,6 +33,14 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "Enter · Esc",
         "Enter · Esc"
     ),
+    [I18N_PLAIN_HINT_WIDE] = I18N_STRING(
+        "Enter send · /help for commands · PgUp scrolls",
+        "Enter 发送 · /help 查看命令 · PgUp 翻阅"
+    ),
+    [I18N_PLAIN_HINT_NARROW] = I18N_STRING(
+        "Enter · /help",
+        "Enter · /help"
+    ),
     [I18N_NORMAL_LATEST] = I18N_STRING(
         "G latest",
         "G 最新"
@@ -80,6 +88,14 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
     [I18N_TITLE_HELP_HINT] = I18N_STRING(
         "? keys",
         "? 按键"
+    ),
+    [I18N_HINT_QUIT] = I18N_STRING(
+        "Type /quit to leave",
+        "输入 /quit 离开"
+    ),
+    [I18N_KEYMAP_SWITCHED_FORMAT] = I18N_STRING(
+        "Keys: %s\n",
+        "键位: %s\n"
     ),
     [I18N_EMPTY_ROOM] = I18N_STRING(
         "No messages yet",

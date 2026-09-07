@@ -4,6 +4,7 @@
 #include "chat_room.h"
 #include "help_text.h"
 #include "history_view.h"
+#include "keymap.h"
 #include "richtext.h"
 #include "editor.h"
 #include "i18n.h"
@@ -450,17 +451,21 @@ void tui_render_screen(client_t *client) {
     chips[chip_count].value_color = "\033[37m";
     chip_count++;
 
-    const char *mode_str;
-    const char *mode_color;
-    switch (client->mode) {
-        case MODE_INSERT:  mode_str = "INSERT";  mode_color = theme->accent; break;
-        case MODE_NORMAL:  mode_str = "NORMAL";  mode_color = "\033[33m"; break;
-        case MODE_COMMAND: mode_str = "COMMAND"; mode_color = "\033[35m"; break;
-        default:           mode_str = "HELP";    mode_color = "\033[34m"; break;
+    /* The default keymap has no modes, so naming one would only ask the
+     * reader to understand a concept that does not apply to them. */
+    if (tnt_keymap_uses_modes(client->keymap)) {
+        const char *mode_str;
+        const char *mode_color;
+        switch (client->mode) {
+            case MODE_INSERT:  mode_str = "INSERT";  mode_color = theme->accent; break;
+            case MODE_NORMAL:  mode_str = "NORMAL";  mode_color = "\033[33m"; break;
+            case MODE_COMMAND: mode_str = "COMMAND"; mode_color = "\033[35m"; break;
+            default:           mode_str = "HELP";    mode_color = "\033[34m"; break;
+        }
+        chips[chip_count].value = mode_str;
+        chips[chip_count].value_color = mode_color;
+        chip_count++;
     }
-    chips[chip_count].value = mode_str;
-    chips[chip_count].value_color = mode_color;
-    chip_count++;
 
     const char *hint = client->mode == MODE_NORMAL
                        ? i18n_text(client->ui_lang, I18N_TITLE_HELP_HINT)

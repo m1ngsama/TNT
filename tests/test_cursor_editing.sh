@@ -73,7 +73,7 @@ set timeout 15
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 sleep 1
 send -- "editor\r"
-expect "Esc NORMAL"
+expect "/help"
 $keys
 sleep 2
 close

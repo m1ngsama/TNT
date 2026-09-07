@@ -10,6 +10,7 @@
 #include "command_catalog.h"
 #include "common.h"
 #include "i18n.h"
+#include "keymap.h"
 #include "manual.h"
 #include "message.h"
 #include "system_message.h"
@@ -563,6 +564,21 @@ void commands_dispatch(client_t *client) {
                                  I18N_MUTE_JOINS_MUTED :
                                  I18N_MUTE_JOINS_UNMUTED));
 
+    } else if (command_id == TNT_COMMAND_KEYMAP) {
+        const char *want = arg;
+        while (*want == ' ') want++;
+
+        /* "off" returns to the plain keys; anything else asks for vim. */
+        client->keymap = (strcmp(want, "off") == 0) ? TNT_KEYMAP_DEFAULT
+                                                    : TNT_KEYMAP_VIM;
+        if (!tnt_keymap_uses_modes(client->keymap)) {
+            /* The modal states are unreachable from here on, so do not leave
+             * the session parked in one of them. */
+            client->mode = MODE_INSERT;
+        }
+        buffer_appendf(output, sizeof(output), &pos,
+                       i18n_text(client->ui_lang, I18N_KEYMAP_SWITCHED_FORMAT),
+                       tnt_keymap_name(client->keymap));
     } else if (command_id == TNT_COMMAND_THEME) {
         const char *name = arg;
         while (*name == ' ') name++;

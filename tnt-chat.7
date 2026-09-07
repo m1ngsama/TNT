@@ -4,8 +4,12 @@ tnt-chat \- use the TNT interactive terminal interface
 .SH DESCRIPTION
 The TNT interactive interface is a shared chat room presented through an
 SSH terminal session.
-It has INSERT, NORMAL, and COMMAND modes.
-A new session starts in INSERT mode after the user chooses a nickname.
+By default it has no modes: typing types, and commands begin with
+.BR / .
+The
+.B vim
+keymap restores the modal interface described under
+.BR "VIM KEYMAP" .
 .P
 Public messages are visible to the room and are persisted by the server.
 Private messages are kept only in the participating sessions.
@@ -36,7 +40,64 @@ prefix are reserved for internal messages.
 If the administrator configured an access token,
 enter it as the SSH password.
 The token is shared and does not authenticate the nickname.
-.SH MODES
+.SH KEYS
+Typing inserts at the caret.
+Nothing a user types moves the session into a different keyboard state.
+.TP
+.B Enter
+Send the current nonempty message, or run a command when the line begins
+with a recognised
+.BR / word.
+.TP
+.B Esc
+Dismiss the help or a command result.
+It never changes what the keyboard does.
+.TP
+.B Ctrl-C
+Clear the input.
+When the input is already empty, TNT shows how to leave.
+.TP
+.B PgUp, PgDn
+Scroll the room history without leaving the input.
+.TP
+.B Up, Down
+Recall this session's last 16 sent messages, and only while the input is
+empty, so a message being composed is never replaced.
+.SS Commands
+A line that begins with
+.B /
+and a recognised command word runs that command; the leading
+.B /
+is not part of it.
+Write
+.B //
+to send a message that really begins with a slash.
+Anything else, including a path such as
+.IR /usr/local/bin ,
+is sent as an ordinary message.
+.SH VIM KEYMAP
+The vim keymap is the modal interface: INSERT, NORMAL, and COMMAND, with
+.B :
+commands.
+It is unchanged.
+Enable it in any of three ways:
+.TP
+.B /vim
+Switch this session.
+.B /vim off
+returns to the default keys.
+.TP
+.BI "ssh vim@" host
+The SSH login name selects neither identity nor nickname, so it is free to
+carry this request.
+Put it in
+.BR ssh_config (5)
+once.
+.TP
+.B \-\-keymap vim
+Make vim the default for a whole server.
+See
+.BR tnt (8).
 .SS INSERT mode
 INSERT mode edits and sends public messages.
 .TP
