@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [ main, 'release/**' ]
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -18,6 +20,7 @@ concurrency:
 jobs:
   pr-gate:
     name: PR gate (${{ matrix.os }})
+    if: github.event_name != 'push'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -63,8 +66,30 @@ jobs:
         make connection-limit-test PORT=13730
         make security-test PORT=13740
 
+  main-smoke:
+    name: main smoke
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cpio expect fish libssh-dev mandoc ruby zsh
+
+    # A strict subset of the gate the pull request already passed: it exists to
+    # catch what only a merge can introduce, so no check may live here alone.
+    - name: Build and run the fast suites
+      run: |
+        make
+        make unit-test
+        make script-test
+
   musl-build:
     name: musl build (alpine)
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
 
     steps:
