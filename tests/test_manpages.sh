@@ -38,18 +38,14 @@ require_fixed() {
 
 echo "=== TNT Manual Page Tests ==="
 
-# Reference documentation lives in manual pages.  Two exceptions, neither of
-# which is reference material: the repository entry points, and the dated
-# design records and implementation plans under docs/superpowers, which
-# describe a decision at a point in time and are never the place to look up
-# how TNT behaves today.
+# Reference documentation lives in manual pages; the repository entry points
+# are the only Markdown the tree carries.
 markdown=$(find "$REPO_ROOT" -type f -name '*.md' \
     -not -path "$REPO_ROOT/.git/*" \
     -not -path "$REPO_ROOT/README.md" \
-    -not -path "$REPO_ROOT/SECURITY.md" \
-    -not -path "$REPO_ROOT/docs/superpowers/*" -print)
+    -not -path "$REPO_ROOT/SECURITY.md" -print)
 if [ -z "$markdown" ]; then
-    pass "Markdown is limited to entry points and dated design records"
+    pass "Markdown is limited to the repository entry points"
 else
     fail "reference documentation belongs in manual pages" "$markdown"
 fi
