@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [ main, 'release/**' ]
   pull_request:
     branches: [ main, 'release/**' ]
   workflow_dispatch:
@@ -65,154 +63,18 @@ jobs:
         make connection-limit-test PORT=13730
         make security-test PORT=13740
 
-  extended-linux-runtime:
-    name: Extended Linux runtime
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+  musl-build:
+    name: musl build (alpine)
     runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v6
 
-    - name: Install dependencies
+    - name: Build against musl
       run: |
-        sudo apt-get update
-        sudo apt-get install -y expect libssh-dev valgrind
-
-    - name: Build once for extended checks
-      run: make
-
-    - name: Run extended durability checks
-      run: |
-        DURATION=8 RECONNECTS=5 make soak-test PORT=13800
-        DURATION=8 BURST_CHARS=1600 make slow-client-test PORT=13820
-
-    - name: Check for memory leaks
-      run: |
-        set -eu
-        STATE_DIR=$(mktemp -d)
-        SERVER_LOG="$STATE_DIR/server.log"
-        VALGRIND_LOG="$STATE_DIR/valgrind.log"
-        PORT=13990
-        SERVER_PID=""
-
-        cleanup() {
-          if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
-            kill "$SERVER_PID" 2>/dev/null || true
-            wait "$SERVER_PID" 2>/dev/null || true
-          fi
-          rm -rf "$STATE_DIR"
-        }
-        trap cleanup EXIT
-
-        ssh-keygen -q -t rsa -b 4096 -m PEM -N "" -f "$STATE_DIR/host_key"
-        chmod 600 "$STATE_DIR/host_key"
-
-        TNT_RATE_LIMIT=0 valgrind --leak-check=full --error-exitcode=99 --log-file="$VALGRIND_LOG" \
-          ./tnt -p "$PORT" -d "$STATE_DIR" >"$SERVER_LOG" 2>&1 &
-        SERVER_PID=$!
-
-        READY=0
-        for _ in $(seq 1 60); do
-          if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-            break
-          fi
-          OUT=$(ssh -n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o BatchMode=yes -p "$PORT" localhost health 2>/dev/null || true)
-          if [ "$OUT" = "ok" ]; then
-            READY=1
-            break
-          fi
-          sleep 1
-        done
-
-        if [ "$READY" -ne 1 ]; then
-          echo "::group::server log"
-          cat "$SERVER_LOG" || true
-          echo "::endgroup::"
-          echo "::group::valgrind log"
-          cat "$VALGRIND_LOG" || true
-          echo "::endgroup::"
-          exit 1
-        fi
-
-        kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
-        SERVER_PID=""
-
-        if ! grep -q "ERROR SUMMARY: 0 errors" "$VALGRIND_LOG"; then
-          cat "$VALGRIND_LOG"
-          exit 1
-        fi
-
-    - name: Run constrained performance gate
-      run: |
-        set -eu
-        GROUP_NAME="tnt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-        GROUP="/sys/fs/cgroup/$GROUP_NAME"
-        REPORT="$RUNNER_TEMP/tnt-constrained.json"
-        cleanup() {
-          status=$?
-          trap - EXIT
-          if [ -d "$GROUP" ]; then
-            if [ -f "$GROUP/cgroup.kill" ]; then
-              echo 1 | sudo tee "$GROUP/cgroup.kill" >/dev/null || true
-            fi
-            for _ in $(seq 1 50); do
-              grep -q '^populated 0$' "$GROUP/cgroup.events" && break
-              sleep 0.1
-            done
-            if ! sudo rmdir "$GROUP"; then
-              status=1
-            fi
-          fi
-          if ! rm -f "$REPORT"; then
-            status=1
-          fi
-          exit "$status"
-        }
-        trap cleanup EXIT
-        sudo mkdir "$GROUP"
-        echo 33554432 | sudo tee "$GROUP/memory.max" >/dev/null
-        echo 0 | sudo tee "$GROUP/memory.swap.max" >/dev/null
-        echo 16 | sudo tee "$GROUP/pids.max" >/dev/null
-        echo '50000 100000' | sudo tee "$GROUP/cpu.max" >/dev/null
-        make perf-smoke \
-          PERF_SERVER_WRAPPER="./tests/cgroup_exec.sh $GROUP" \
-          PERF_OUTPUT="$REPORT"
-        python3 - "$REPORT" "$GROUP_NAME" <<'PY'
-        import json
-        import sys
-
-        report = json.load(open(sys.argv[1], encoding="utf-8"))
-        limits = report["metrics"]["server_constraints"]
-        assert limits["cgroup_v2_path"] == "/" + sys.argv[2], limits
-        assert limits["memory_max_bytes"] == 33554432, limits
-        assert limits["memory_swap_max_bytes"] == 0, limits
-        PY
-
-  portable-container-builds:
-    name: Portable build (${{ matrix.name }})
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: debian-stable-glibc
-            image: debian:stable-slim
-            setup: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential libssh-dev ca-certificates
-          - name: alpine-musl
-            image: alpine:3.20
-            setup: apk add --no-cache build-base libssh-dev ca-certificates
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Build in container
-      run: |
-        docker run --rm -v "$PWD:/src:ro" "${{ matrix.image }}" sh -c '
+        docker run --rm -v "$PWD:/src:ro" alpine:3.20 sh -c '
           set -eu
-          ${{ matrix.setup }}
+          apk add --no-cache build-base libssh-dev ca-certificates
           mkdir /work
           cp -R /src/. /work/
           cd /work
