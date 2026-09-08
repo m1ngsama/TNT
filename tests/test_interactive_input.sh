@@ -126,9 +126,9 @@ expect eof
 EOF
 
 if expect "$EXPECT_SCRIPT" >"$STATE_DIR/expect.log" 2>&1; then
-    if grep -q 'tester|line1 line2 line3' "$STATE_DIR/messages.log" &&
+    if grep -qF 'tester|line1\nline2\nline3' "$STATE_DIR/messages.log" &&
        ! grep -q 'tester|line1$' "$STATE_DIR/messages.log"; then
-        echo "✓ bracketed paste becomes one message"
+        echo "✓ bracketed paste becomes one message keeping its line breaks"
         PASS=$((PASS + 1))
     else
         echo "x bracketed paste message log unexpected"

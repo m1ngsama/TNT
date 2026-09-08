@@ -16,6 +16,7 @@
 #include "keymap.h"
 #include "input_buffer.h"
 #include "message.h"
+#include "message_log.h"
 #include "module_runtime.h"
 #include "ratelimit.h"
 #include "system_message.h"
@@ -270,6 +271,20 @@ static int normal_visible_message_count(const client_t *client) {
         }
     }
     return count;
+}
+
+/* Redraw the input region, and the history region with it when the input
+ * region just changed height.  Ordinary typing that wraps onto a new row
+ * grows the region as surely as Ctrl+J does, so the check is on the row
+ * count rather than on which key arrived. */
+static void render_input_region(client_t *client, const editor_t *ed) {
+    int rows = tui_input_rows(client, ed);
+
+    if (rows != client->input_rows) {
+        client->input_rows = rows;
+        tui_render_screen(client);
+    }
+    tui_render_input(client, ed);
 }
 
 static void normal_scroll_to_latest(client_t *client) {
@@ -594,20 +609,20 @@ static bool handle_insert_csi_tilde(client_t *client, editor_t *ed,
     switch (first) {
     case '1':
     case '7':
-        editor_move_home(ed, client->width - 3);
+        editor_move_home(ed, tui_input_content_width(client));
         break;
     case '3':
         editor_delete_next_cluster(ed);
         break;
     case '4':
     case '8':
-        editor_move_end(ed, client->width - 3);
+        editor_move_end(ed, tui_input_content_width(client));
         break;
     default:
         return true;
     }
 
-    tui_render_input(client, ed);
+    render_input_region(client, ed);
     return true;
 }
 
@@ -633,7 +648,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
              * disconnecting someone who pressed a habitual Ctrl+C. */
             if (editor_len(ed) > 0) {
                 editor_clear(ed);
-                tui_render_input(client, ed);
+                render_input_region(client, ed);
             } else {
                 client_printf(client, "\a");
                 tui_render_command_hint(
@@ -708,24 +723,35 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
             if (key == 27) {  /* ESC — may also be the start of an arrow seq */
                 char seq[2];
                 int n = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
+                if (n == 1 && seq[0] == '\r' &&
+                    !tnt_keymap_uses_modes(client->keymap)) {
+                    /* Alt+Enter.  Default keymap only: ESC is the way into
+                     * NORMAL when the vim keymap is active. */
+                    if (editor_insert_newline(ed)) {
+                        render_input_region(client, ed);
+                    } else {
+                        client_send(client, "\a", 1);
+                    }
+                    return true;
+                }
                 if (n == 1 && seq[0] == '[') {
                     n = ssh_channel_read_timeout(client->channel, &seq[1], 1, 0, 50);
                     if (n == 1) {
                         if (seq[1] == 'C') {  /* Right */
                             editor_move_right(ed);
-                            tui_render_input(client, ed);
+                            render_input_region(client, ed);
                             return true;
                         } else if (seq[1] == 'D') {  /* Left */
                             editor_move_left(ed);
-                            tui_render_input(client, ed);
+                            render_input_region(client, ed);
                             return true;
                         } else if (seq[1] == 'H') {  /* Home */
-                            editor_move_home(ed, client->width - 3);
-                            tui_render_input(client, ed);
+                            editor_move_home(ed, tui_input_content_width(client));
+                            render_input_region(client, ed);
                             return true;
                         } else if (seq[1] == 'F') {  /* End */
-                            editor_move_end(ed, client->width - 3);
-                            tui_render_input(client, ed);
+                            editor_move_end(ed, tui_input_content_width(client));
+                            render_input_region(client, ed);
                             return true;
                         } else if (seq[1] == '1' || seq[1] == '3' ||
                                    seq[1] == '4' || seq[1] == '7' ||
@@ -745,14 +771,19 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                                 normal_scroll_by(client,
                                                  seq[1] == '5' ? -page : page);
                                 tui_render_screen(client);
-                                tui_render_input(client, ed);
+                                render_input_region(client, ed);
                             }
                             return true;
                         } else if (seq[1] == 'A') {  /* Up — walk back through sent history */
-                            /* With a caret, Up must not silently replace text
-                             * the user is still composing. */
+                            /* With text in the buffer, Up moves the caret up a
+                             * display row; recalling sent history would
+                             * silently replace what is being composed. */
                             if (!tnt_keymap_uses_modes(client->keymap) &&
                                 editor_len(ed) > 0) {
+                                if (editor_move_up(
+                                        ed, tui_input_content_width(client))) {
+                                    render_input_region(client, ed);
+                                }
                                 return true;
                             }
                             if (client->insert_history_count > 0 &&
@@ -762,10 +793,18 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                                     ed,
                                     client->insert_history[
                                         client->insert_history_pos]);
-                                tui_render_input(client, ed);
+                                render_input_region(client, ed);
                             }
                             return true;
                         } else if (seq[1] == 'B') {  /* Down — walk forward */
+                            if (!tnt_keymap_uses_modes(client->keymap) &&
+                                editor_len(ed) > 0) {
+                                if (editor_move_down(
+                                        ed, tui_input_content_width(client))) {
+                                    render_input_region(client, ed);
+                                }
+                                return true;
+                            }
                             if (client->insert_history_pos <
                                 client->insert_history_count - 1) {
                                 client->insert_history_pos++;
@@ -778,7 +817,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                                     client->insert_history_count;
                                 editor_clear(ed);
                             }
-                            tui_render_input(client, ed);
+                            render_input_region(client, ed);
                             return true;
                         } else if (seq[1] == '2') {
                             /* Could be bracketed-paste start "ESC[200~".
@@ -857,7 +896,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                                                          pasted_len)) {
                                     overflow = true;
                                 }
-                                tui_render_input(client, ed);
+                                render_input_region(client, ed);
                                 if (overflow || invalid_utf8) {
                                     client_send(client, "\a", 1);
                                 }
@@ -877,8 +916,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                      * from the person typing. */
                     if (client->show_help) {
                         client->show_help = false;
-                        tui_render_screen(client);
-                        tui_render_input(client, ed);
+                        render_input_region(client, ed);
                     }
                     return true;
                 }
@@ -887,8 +925,24 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                 normal_scroll_to_latest(client);
                 tui_render_screen(client);
                 return true;
-            } else if (key == '\r' || key == '\n') {  /* Enter */
+            } else if (key == '\n') {  /* Ctrl+J — newline, never send */
+                if (editor_insert_newline(ed)) {
+                    /* The region may have just grown, so the history region
+                     * has to be redrawn shorter before the input region. */
+                    render_input_region(client, ed);
+                } else {
+                    client_send(client, "\a", 1);
+                }
+                return true;
+            } else if (key == '\r') {  /* Enter — send */
                 const char *input = editor_text(ed);
+
+                if (message_log_encoded_length(input) >= MAX_MESSAGE_LEN) {
+                    /* Escaping pushed the message past the field limit.  Keep
+                     * the text and say so rather than dropping it. */
+                    client_send(client, "\a", 1);
+                    return true;
+                }
                 if (!tnt_keymap_uses_modes(client->keymap) &&
                     input[0] == '/') {
                     tnt_command_id_t id;
@@ -979,18 +1033,18 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                 return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */
                 if (editor_delete_prev_cluster(ed)) {
-                    tui_render_input(client, ed);
+                    render_input_region(client, ed);
                 }
                 return true;  /* Key consumed */
             } else if (key == 23) { /* Ctrl+W (Delete Word) */
                 if (editor_delete_prev_word(ed)) {
-                    tui_render_input(client, ed);
+                    render_input_region(client, ed);
                 }
                 return true;
             } else if (key == 21) { /* Ctrl+U (Delete Line) */
                 if (editor_len(ed) > 0) {
                     editor_clear(ed);
-                    tui_render_input(client, ed);
+                    render_input_region(client, ed);
                 }
                 return true;
             } else if (key == 9) { /* Tab: complete @mention */
@@ -1039,7 +1093,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                             input[pos++] = ' ';
                             input[pos] = '\0';
                             editor_set_text(ed, input);
-                            tui_render_input(client, ed);
+                            render_input_region(client, ed);
                         }
                     }
                 }
