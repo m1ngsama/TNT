@@ -74,7 +74,7 @@ VIEW_SCRIPT="$STATE_DIR/wide-text-view.expect"
 cat >"$VIEW_SCRIPT" <<EOF
 set timeout 15
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "viewer\r"
 expect "/help"
 sleep 2

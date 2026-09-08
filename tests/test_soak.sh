@@ -110,7 +110,7 @@ IDLE_HOLD=$((DURATION + 20))
 cat >"$STATE_DIR/idle.expect" <<EOF
 set timeout [expr {$IDLE_HOLD + 20}]
 spawn ssh $SSH_TTY_OPTS idle@127.0.0.1
-sleep 1
+expect "): "
 send -- "soakidle\r"
 expect "›"
 exec touch "$IDLE_READY"
@@ -169,7 +169,7 @@ for i in $(seq 1 "$RECONNECTS"); do
     cat >"$STATE_DIR/reconnect-$i.expect" <<EOF
 set timeout 10
 spawn ssh $SSH_TTY_OPTS reconnect$i@127.0.0.1
-sleep 1
+expect "): "
 send -- "reconnect$i\r"
 expect "›"
 send -- "\003"
