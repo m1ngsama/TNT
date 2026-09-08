@@ -1,6 +1,45 @@
 #include "history_view.h"
 
 #include "richtext.h"
+#include "system_message.h"
+#include "utf8.h"
+
+#include <stdio.h>
+
+void history_view_message_time(const message_t *msg, char out[16]) {
+    if (msg->display_time[0] != '\0') {
+        snprintf(out, 16, "%s", msg->display_time);
+        return;
+    }
+    struct tm tmi;
+    localtime_r(&msg->timestamp, &tmi);
+    strftime(out, 16, "%H:%M", &tmi);
+}
+
+int history_view_message_prefix_width(const message_t *msg) {
+    char time_str[16];
+    char prefix_plain[MAX_USERNAME_LEN + 32];
+
+    if (!msg) {
+        return 0;
+    }
+
+    history_view_message_time(msg, time_str);
+    if (system_message_is_system(msg)) {
+        snprintf(prefix_plain, sizeof(prefix_plain), " --> ");
+    } else if (strcmp(msg->username, "*") == 0) {
+        snprintf(prefix_plain, sizeof(prefix_plain), " %s * ", time_str);
+    } else {
+        snprintf(prefix_plain, sizeof(prefix_plain), " %s %s: ", time_str,
+                 msg->username);
+    }
+    return utf8_string_width(prefix_plain);
+}
+
+int history_view_message_content_width(const message_t *msg, int width) {
+    int content = width - history_view_message_prefix_width(msg);
+    return content < 4 ? 4 : content;
+}
 
 int history_view_message_lines(const message_t *msg, int width) {
     richtext_span_t spans[HISTORY_VIEW_MAX_WRAPPED_ROWS];
@@ -10,7 +49,8 @@ int history_view_message_lines(const message_t *msg, int width) {
         return 1;
     }
 
-    rows = richtext_wrap(msg->content, width, spans,
+    rows = richtext_wrap(msg->content,
+                         history_view_message_content_width(msg, width), spans,
                          HISTORY_VIEW_MAX_WRAPPED_ROWS);
     return rows < 1 ? 1 : (int)rows;
 }

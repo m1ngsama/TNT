@@ -9,6 +9,14 @@
 /* Rows left for history once the input region takes input_rows.  At least 1. */
 int history_view_height(int terminal_height, int input_rows);
 
+/* The renderer prints " HH:MM name: " ahead of the first row and indents
+ * continuation rows to match, so content wraps at width minus that prefix.
+ * Row counting and rendering must agree on it or the newest messages fall off
+ * the bottom of a full screen. */
+void history_view_message_time(const message_t *msg, char out[16]);
+int history_view_message_prefix_width(const message_t *msg);
+int history_view_message_content_width(const message_t *msg, int width);
+
 /* Display rows one message occupies at the given render width.  Always at
  * least 1, including for width <= 0. */
 int history_view_message_lines(const message_t *msg, int width);
