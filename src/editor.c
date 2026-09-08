@@ -92,6 +92,117 @@ int editor_cursor_column(const editor_t *ed) {
     return width;
 }
 
+/* One shared layout pass.  Rows are byte ranges into the buffer; a hard
+ * newline and a soft wrap both end a row, which is exactly what the user
+ * sees. */
+static size_t layout(const editor_t *ed, int width, richtext_span_t *out) {
+    size_t rows;
+
+    if (width < 1) {
+        width = 1;
+    }
+    rows = richtext_wrap(ed->buf, width, out, EDITOR_ROW_TABLE);
+    if (rows == 0) {
+        out[0].offset = 0;
+        out[0].len = 0;
+        rows = 1;
+    }
+    return rows;
+}
+
+/* Index of the row holding the caret.  A caret sitting exactly on a row
+ * boundary belongs to the row that starts there, which is what puts it on the
+ * new line after Ctrl+J rather than at the end of the old one. */
+static size_t caret_row_index(const editor_t *ed, const richtext_span_t *rows,
+                              size_t row_count) {
+    size_t i;
+
+    for (i = 0; i < row_count; i++) {
+        if (ed->cursor < rows[i].offset + rows[i].len) {
+            return i;
+        }
+        if (ed->cursor == rows[i].offset + rows[i].len &&
+            (i + 1 == row_count || ed->cursor < rows[i + 1].offset)) {
+            return i;
+        }
+    }
+    return row_count - 1;
+}
+
+static int columns_between(const editor_t *ed, size_t from, size_t to) {
+    size_t offset = from;
+    int width = 0;
+
+    while (offset < to) {
+        size_t len = utf8_cluster_length(ed->buf + offset);
+
+        if (len == 0) {
+            break;
+        }
+        width += utf8_cluster_width(ed->buf + offset);
+        offset += len;
+    }
+    return width;
+}
+
+/* Byte offset within `row` at or before `column` display columns, always on a
+ * cluster boundary. */
+static size_t offset_for_column(const editor_t *ed,
+                                const richtext_span_t *row, int column) {
+    size_t offset = row->offset;
+    size_t end = row->offset + row->len;
+    int width = 0;
+
+    while (offset < end) {
+        size_t len = utf8_cluster_length(ed->buf + offset);
+        int w;
+
+        if (len == 0) {
+            break;
+        }
+        w = utf8_cluster_width(ed->buf + offset);
+        if (width + w > column) {
+            break;
+        }
+        width += w;
+        offset += len;
+    }
+    return offset;
+}
+
+int editor_display_rows(const editor_t *ed, int width) {
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+
+    if (!ed) {
+        return 1;
+    }
+    return (int)layout(ed, width, rows);
+}
+
+int editor_caret_row(const editor_t *ed, int width) {
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+    size_t count;
+
+    if (!ed) {
+        return 0;
+    }
+    count = layout(ed, width, rows);
+    return (int)caret_row_index(ed, rows, count);
+}
+
+int editor_caret_column(const editor_t *ed, int width) {
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+    size_t count;
+    size_t index;
+
+    if (!ed) {
+        return 0;
+    }
+    count = layout(ed, width, rows);
+    index = caret_row_index(ed, rows, count);
+    return columns_between(ed, rows[index].offset, ed->cursor);
+}
+
 bool editor_insert_bytes(editor_t *ed, const char *bytes, size_t n) {
     if (!ed || !bytes || n == 0) {
         return false;
@@ -107,6 +218,10 @@ bool editor_insert_bytes(editor_t *ed, const char *bytes, size_t n) {
     ed->cursor += n;
     ed->buf[ed->len] = '\0';
     return true;
+}
+
+bool editor_insert_newline(editor_t *ed) {
+    return editor_insert_bytes(ed, "\n", 1);
 }
 
 static void erase_range(editor_t *ed, size_t from, size_t to) {
@@ -206,14 +321,64 @@ bool editor_move_next_word(editor_t *ed) {
     return true;
 }
 
-void editor_move_home(editor_t *ed) {
-    if (ed) {
-        ed->cursor = 0;
+bool editor_move_up(editor_t *ed, int width) {
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+    size_t count;
+    size_t index;
+    int column;
+
+    if (!ed) {
+        return false;
     }
+    count = layout(ed, width, rows);
+    index = caret_row_index(ed, rows, count);
+    if (index == 0) {
+        return false;
+    }
+    column = columns_between(ed, rows[index].offset, ed->cursor);
+    ed->cursor = offset_for_column(ed, &rows[index - 1], column);
+    return true;
 }
 
-void editor_move_end(editor_t *ed) {
-    if (ed) {
-        ed->cursor = ed->len;
+bool editor_move_down(editor_t *ed, int width) {
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+    size_t count;
+    size_t index;
+    int column;
+
+    if (!ed) {
+        return false;
     }
+    count = layout(ed, width, rows);
+    index = caret_row_index(ed, rows, count);
+    if (index + 1 >= count) {
+        return false;
+    }
+    column = columns_between(ed, rows[index].offset, ed->cursor);
+    ed->cursor = offset_for_column(ed, &rows[index + 1], column);
+    return true;
+}
+
+void editor_move_home(editor_t *ed, int width) {
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+    size_t count;
+
+    if (!ed) {
+        return;
+    }
+    count = layout(ed, width, rows);
+    ed->cursor = rows[caret_row_index(ed, rows, count)].offset;
+}
+
+void editor_move_end(editor_t *ed, int width) {
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+    size_t count;
+    size_t index;
+
+    if (!ed) {
+        return;
+    }
+    count = layout(ed, width, rows);
+    index = caret_row_index(ed, rows, count);
+    ed->cursor = rows[index].offset + rows[index].len;
 }

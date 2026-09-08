@@ -594,14 +594,14 @@ static bool handle_insert_csi_tilde(client_t *client, editor_t *ed,
     switch (first) {
     case '1':
     case '7':
-        editor_move_home(ed);
+        editor_move_home(ed, client->width - 3);
         break;
     case '3':
         editor_delete_next_cluster(ed);
         break;
     case '4':
     case '8':
-        editor_move_end(ed);
+        editor_move_end(ed, client->width - 3);
         break;
     default:
         return true;
@@ -720,11 +720,11 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                             tui_render_input(client, ed);
                             return true;
                         } else if (seq[1] == 'H') {  /* Home */
-                            editor_move_home(ed);
+                            editor_move_home(ed, client->width - 3);
                             tui_render_input(client, ed);
                             return true;
                         } else if (seq[1] == 'F') {  /* End */
-                            editor_move_end(ed);
+                            editor_move_end(ed, client->width - 3);
                             tui_render_input(client, ed);
                             return true;
                         } else if (seq[1] == '1' || seq[1] == '3' ||
