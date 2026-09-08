@@ -208,6 +208,36 @@ TEST(message_save_stamps_the_format_on_a_fresh_log) {
     cleanup_state_dir();
 }
 
+TEST(message_save_keeps_a_newline) {
+    message_t msg = { .timestamp = time(NULL) };
+    message_t *messages = NULL;
+
+    setup_state_dir();
+    strcpy(msg.username, "alice");
+    strcpy(msg.content, "first\nsecond");
+
+    assert(message_save(&msg) == 0);
+    assert(message_load(&messages, 10) == 1);
+    assert(strcmp(messages[0].content, "first\nsecond") == 0);
+    free(messages);
+    cleanup_state_dir();
+}
+
+TEST(message_save_still_flattens_a_carriage_return) {
+    message_t msg = { .timestamp = time(NULL) };
+    message_t *messages = NULL;
+
+    setup_state_dir();
+    strcpy(msg.username, "alice");
+    strcpy(msg.content, "first\rsecond");
+
+    assert(message_save(&msg) == 0);
+    assert(message_load(&messages, 10) == 1);
+    assert(strcmp(messages[0].content, "first second") == 0);
+    free(messages);
+    cleanup_state_dir();
+}
+
 TEST(message_load_migrates_a_v1_log_once) {
     char ts[64];
     char log_path[PATH_MAX];
@@ -466,6 +496,8 @@ int main(void) {
     RUN_TEST(message_save_basic);
     RUN_TEST(message_save_rejects_control_characters);
     RUN_TEST(message_save_stamps_the_format_on_a_fresh_log);
+    RUN_TEST(message_save_keeps_a_newline);
+    RUN_TEST(message_save_still_flattens_a_carriage_return);
     RUN_TEST(message_load_migrates_a_v1_log_once);
     RUN_TEST(message_load_skips_malformed_records);
     RUN_TEST(message_search_skips_malformed_records);

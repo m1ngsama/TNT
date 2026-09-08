@@ -51,6 +51,8 @@ typedef struct client {
     char insert_history[16][MAX_MESSAGE_LEN];
     int insert_history_count;
     int insert_history_pos;
+    /* Cached by tui_render_input for tui_render_screen, which has no editor. */
+    int input_rows;
     char command_output[MAX_COMMAND_OUTPUT_LEN];
     int command_output_scroll;
     tnt_command_output_kind_t command_output_kind;

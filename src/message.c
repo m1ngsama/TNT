@@ -252,8 +252,9 @@ int message_save(const message_t *msg) {
             *p = '_';
         }
     }
+    /* A newline is content now; the record layer escapes it. */
     for (char *p = safe_msg.content; *p; p++) {
-        if (*p == '|' || *p == '\n' || *p == '\r') {
+        if (*p == '|' || *p == '\r') {
             *p = ' ';
         }
     }

@@ -23,10 +23,13 @@ static message_t make_msg(time_t timestamp, const char *content) {
 }
 
 TEST(height_clamps_to_message_area) {
-    assert(history_view_height(24) == 21);
-    assert(history_view_height(4) == 1);
-    assert(history_view_height(1) == 1);
-    assert(history_view_height(0) == 1);
+    assert(history_view_height(24, 1) == 21);
+    assert(history_view_height(24, 3) == 19);
+    assert(history_view_height(24, 6) == 16);
+    assert(history_view_height(4, 1) == 1);
+    assert(history_view_height(4, 6) == 1);   /* never below one row */
+    assert(history_view_height(1, 1) == 1);
+    assert(history_view_height(0, 1) == 1);
 }
 
 TEST(max_scroll_clamps_to_zero) {

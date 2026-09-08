@@ -248,6 +248,26 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# The interactive keymap composes newlines, but exec post stays single-line:
+# utf8_contains_control() admits no C0 byte at all, the newline exception
+# living only in the message log's own content check.
+NEWLINE_MARKER="newline-post-marker"
+NEWLINE_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "$NEWLINE_MARKER
+second line" 2>/dev/null)
+NEWLINE_STATUS=$?
+NEWLINE_TAIL=$(ssh $SSH_OPTS localhost "tail -n 5" 2>/dev/null || true)
+printf '%s\n' "$NEWLINE_TAIL" | grep -q "$NEWLINE_MARKER"
+NEWLINE_VISIBLE=$?
+if [ "$NEWLINE_STATUS" -ne 0 ] && [ "$NEWLINE_VISIBLE" -ne 0 ]; then
+    echo "✓ post refuses a newline and persists nothing"
+    PASS=$((PASS + 1))
+else
+    echo "✗ post accepted a newline"
+    printf '%s\n' "$NEWLINE_OUTPUT"
+    echo "exit status: $NEWLINE_STATUS"
+    FAIL=$((FAIL + 1))
+fi
+
 ACTION_FILL=$(awk 'BEGIN { for (i = 0; i < 994; i++) printf "a" }')
 ACTION_MARKER="action-boundary-${ACTION_FILL}中"
 ACTION_OUTPUT=$(ssh $SSH_OPTS execposter@localhost post "/me $ACTION_MARKER" \

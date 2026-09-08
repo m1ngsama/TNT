@@ -59,7 +59,7 @@ test_utf8: test_utf8.c $(UTF8_SRC)
 test_richtext: test_richtext.c $(RICHTEXT_SRC) $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
-test_editor: test_editor.c $(EDITOR_SRC) $(UTF8_SRC)
+test_editor: test_editor.c $(EDITOR_SRC) $(RICHTEXT_SRC) $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_keymap: test_keymap.c $(KEYMAP_SRC)

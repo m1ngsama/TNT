@@ -60,6 +60,7 @@ F: include/richtext.h
 F: src/richtext.c
 F: tests/unit/test_richtext.c
 F: tests/test_interactive_input.sh
+F: tests/test_multiline_input.sh
 F: tests/test_user_lifecycle.sh
 F: tnt-chat.7
 

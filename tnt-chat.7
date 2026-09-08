@@ -1,4 +1,4 @@
-.TH TNT-CHAT 7 "2026-09-07" "TNT 1.3.1"
+.TH TNT-CHAT 7 "2026-09-08" "TNT 1.3.1"
 .SH NAME
 tnt-chat \- use the TNT interactive terminal interface
 .SH DESCRIPTION
@@ -49,6 +49,18 @@ Send the current nonempty message, or run a command when the line begins
 with a recognised
 .BR / word.
 .TP
+.B Ctrl-J, Alt-Enter
+Insert a line break without sending.
+.B Ctrl-J
+is a literal line feed and works on every terminal;
+.B Alt-Enter
+depends on the terminal sending
+.B Esc
+before the carriage return, and is accepted only in this keymap, because
+.B Esc
+is how the vim keymap reaches NORMAL.
+Pasted text keeps the line breaks it arrived with.
+.TP
 .B Esc
 Dismiss the help or a command result.
 It never changes what the keyboard does.
@@ -61,8 +73,16 @@ When the input is already empty, TNT shows how to leave.
 Scroll the room history without leaving the input.
 .TP
 .B Up, Down
-Recall this session's last 16 sent messages, and only while the input is
-empty, so a message being composed is never replaced.
+Move the caret between the lines of the message being composed.
+While the input is empty they instead recall this session's last 16 sent
+messages, so a message being composed is never replaced.
+.SS Input region
+The input region is one row tall and grows with the message, to at most six
+rows.
+Past that it scrolls and keeps the caret in view.
+The room history shrinks by the rows the input region takes.
+A message may be at most 1023 bytes as stored, and a line break costs two of
+them; the counter that appears past 80 percent counts stored bytes.
 .SS Commands
 A line that begins with
 .B /
@@ -104,6 +124,13 @@ INSERT mode edits and sends public messages.
 .B Enter
 Send the current nonempty message.
 .TP
+.B Ctrl-J
+Insert a line break without sending.
+.B Alt-Enter
+is not accepted here, because
+.B Esc
+enters NORMAL mode.
+.TP
 .B Esc
 Enter NORMAL mode.
 .TP
@@ -112,7 +139,7 @@ Move the caret one character.
 Text typed next is inserted at the caret.
 .TP
 .B Home, End
-Move the caret to the start or the end of the line.
+Move the caret to the start or the end of the display line it is on.
 .TP
 .B Backspace
 Delete the character before the caret.
@@ -141,8 +168,10 @@ A caret movement never splits a character, an emoji, or a flag.
 An escape sequence this build does not recognise is ignored; it does not
 change modes.
 .P
-Bracketed multiline paste is inserted at the caret as one message.
-Line breaks in the pasted text become spaces.
+Bracketed multiline paste is inserted at the caret as one message, keeping
+its line breaks.
+A carriage return, alone or before a line feed, becomes one line break; a tab
+becomes a space.
 Input that exceeds the message limit or contains invalid UTF-8 is rejected
 with a terminal bell.
 .SS NORMAL mode
@@ -217,8 +246,10 @@ and
 .BR lang ,
 it also completes the first argument.
 .SH MESSAGES
-A public message must be valid UTF-8 and may contain at most 1023 bytes.
-C0 and C1 control characters and DEL are not accepted as message text.
+A public message must be valid UTF-8 and may contain at most 1023 bytes as
+stored, where a line break costs two.
+A line break is the only C0 or C1 control character accepted as message text;
+every other one, and DEL, is refused.
 .TP
 .BI "/me " action
 Send an action message.

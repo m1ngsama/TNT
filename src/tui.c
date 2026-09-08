@@ -8,6 +8,7 @@
 #include "richtext.h"
 #include "editor.h"
 #include "i18n.h"
+#include "message_log.h"
 #include "system_message.h"
 #include "theme.h"
 #include "tui_status.h"
@@ -296,7 +297,7 @@ void tui_render_screen(client_t *client) {
     /* Calculate which messages to show.  The initial slice is capped by
      * message count; the snapshot copy below tightens "latest" slices so
      * date dividers cannot push the newest messages off-screen. */
-    int msg_height = history_view_height(render_height);
+    int msg_height = history_view_height(render_height, client->input_rows);
 
     int start = 0;
     int latest_scroll_start = history_view_max_scroll(msg_count, msg_height);
@@ -660,6 +661,25 @@ void tui_render_screen(client_t *client) {
  * Format: "› <input>"  with optional right-aligned length indicator
  * once the buffer is past 80% full.  The indicator turns bold-yellow
  * past 95% so users can see further keystrokes will be dropped. */
+int tui_input_content_width(const client_t *client) {
+    int rw = client ? client->width : 0;
+
+    if (rw < 10) rw = 10;
+    return rw - 3;
+}
+
+int tui_input_rows(const client_t *client, const editor_t *ed) {
+    int rows;
+
+    if (!client || !ed) {
+        return 1;
+    }
+    rows = editor_display_rows(ed, tui_input_content_width(client));
+    if (rows < 1) rows = 1;
+    if (rows > EDITOR_MAX_ROWS) rows = EDITOR_MAX_ROWS;
+    return rows;
+}
+
 void tui_render_input(client_t *client, const editor_t *ed) {
     if (!client || !client->connected || !ed) return;
 
@@ -670,11 +690,27 @@ void tui_render_input(client_t *client, const editor_t *ed) {
     if (rw < 10) rw = 10;
     if (rh < 4) rh = 4;
 
-    char buffer[2048];
-    int input_width = utf8_string_width(input);
-    size_t input_bytes = strlen(input);
+    int content_width = tui_input_content_width(client);
+    richtext_span_t rows[EDITOR_ROW_TABLE];
+    size_t row_count = richtext_wrap(input, content_width, rows,
+                                     EDITOR_ROW_TABLE);
+    if (row_count == 0) {
+        rows[0].offset = 0;
+        rows[0].len = 0;
+        row_count = 1;
+    }
 
-    /* Decide whether to show the length gauge and how loud. */
+    int caret_row = editor_caret_row(ed, content_width);
+    int visible = (int)row_count;
+    if (visible > EDITOR_MAX_ROWS) visible = EDITOR_MAX_ROWS;
+
+    int first = caret_row - visible + 1;
+    if (first < 0) first = 0;
+    if (first > (int)row_count - visible) first = (int)row_count - visible;
+
+    client->input_rows = visible;
+
+    size_t input_bytes = message_log_encoded_length(input);
     int gauge_width = 0;
     char gauge[64] = "";
     if (input_bytes > (MAX_MESSAGE_LEN * 8) / 10) {  /* > 80 % */
@@ -682,75 +718,53 @@ void tui_render_input(client_t *client, const editor_t *ed) {
                            ? (MAX_MESSAGE_LEN - 1 - input_bytes) : 0;
         const char *color =
             (input_bytes > (MAX_MESSAGE_LEN * 95) / 100) ? "\033[1;33m"
-                                                          : "\033[2;37m";
-        snprintf(gauge, sizeof(gauge), "%s… %zu B\033[0m", color, remaining);
-        /* Plain-text width: " … 1234 B" → 4 + len(digits) + 2 */
+                                                         : "\033[2;37m";
         char digits[12];
+
+        snprintf(gauge, sizeof(gauge), "%s… %zu B\033[0m", color, remaining);
         snprintf(digits, sizeof(digits), "%zu", remaining);
-        gauge_width = 4 + (int)strlen(digits) + 2;  /* "… ", digits, " B" + leading space */
+        gauge_width = 4 + (int)strlen(digits) + 2;
     }
 
-    int avail = rw - 3 - (gauge_width > 0 ? gauge_width + 1 : 0);
-    if (avail < 1) avail = 1;
+    char buffer[(size_t)EDITOR_MAX_ROWS * (MAX_MESSAGE_LEN + 64) + 512];
+    size_t pos = 0;
+    buffer[0] = '\0';
 
-    /* Scroll horizontally so the caret stays visible.  Following the cursor
-     * rather than the end of the text is what makes editing at the start of
-     * a long line usable. */
-    char display[MAX_MESSAGE_LEN];
-    int scroll_columns = 0;
+    for (int i = 0; i < visible; i++) {
+        const richtext_span_t *span = &rows[first + i];
+        int screen_row = rh - visible + 1 + i;
+        char row_text[MAX_MESSAGE_LEN];
 
-    if (input_width > avail) {
-        int cursor_column = editor_cursor_column(ed);
-        int excess = input_width - avail;
-        int target = cursor_column - avail + 1;
+        snprintf(row_text, sizeof(row_text), "%.*s", (int)span->len,
+                 input + span->offset);
 
-        if (target < 0) target = 0;
-        if (target > excess) target = excess;
+        const char *prompt = (first + i == 0) ? "\033[2;37m›\033[0m " : "  ";
 
-        const char *p = input;
-        while (*p && scroll_columns < target) {
-            size_t len = utf8_cluster_length(p);
+        if (gauge_width > 0 && i == visible - 1) {
+            int displayed_width = utf8_string_width(row_text);
+            int padding = rw - 2 - displayed_width - gauge_width;
 
-            if (len == 0) {
-                break;
-            }
-            scroll_columns += utf8_cluster_width(p);
-            p += len;
+            if (padding < 1) padding = 1;
+            buffer_appendf(buffer, sizeof(buffer), &pos,
+                           "\033[%d;1H" ANSI_CLEAR_LINE "%s%s%*s%s",
+                           screen_row, prompt, row_text, padding, "", gauge);
+        } else {
+            buffer_appendf(buffer, sizeof(buffer), &pos,
+                           "\033[%d;1H" ANSI_CLEAR_LINE "%s%s",
+                           screen_row, prompt, row_text);
         }
-
-        strncpy(display, p, sizeof(display) - 1);
-        display[sizeof(display) - 1] = '\0';
-    } else {
-        strncpy(display, input, sizeof(display) - 1);
-        display[sizeof(display) - 1] = '\0';
     }
 
-    /* Compose: cursor to input row, clear line, "› " prompt, input.
-     * If a gauge is active, append it right-aligned. */
-    if (gauge_width > 0) {
-        int displayed_width = utf8_string_width(display);
-        int padding = rw - 2 - displayed_width - gauge_width;
-        if (padding < 1) padding = 1;
-        snprintf(buffer, sizeof(buffer),
-                 "\033[%d;1H" ANSI_CLEAR_LINE "\033[2;37m›\033[0m %s%*s%s",
-                 rh, display, padding, "", gauge);
-    } else {
-        snprintf(buffer, sizeof(buffer),
-                 "\033[%d;1H" ANSI_CLEAR_LINE "\033[2;37m›\033[0m %s",
-                 rh, display);
-    }
+    int caret_screen_row = rh - visible + 1 + (caret_row - first);
+    int caret_col = 3 + editor_caret_column(ed, content_width);
+    if (caret_col < 3) caret_col = 3;
+    if (caret_col > rw) caret_col = rw;
+    buffer_appendf(buffer, sizeof(buffer), &pos, "\033[%d;%dH",
+                   caret_screen_row, caret_col);
 
-    /* Park the terminal caret where the next character will land.  Text
-     * starts at column 3, after "› ". */
-    size_t used = strlen(buffer);
-    int cursor_col = 3 + editor_cursor_column(ed) - scroll_columns;
-    if (cursor_col < 3) cursor_col = 3;
-    if (cursor_col > rw) cursor_col = rw;
-    snprintf(buffer + used, sizeof(buffer) - used, "\033[%d;%dH", rh,
-             cursor_col);
-
-    client_send(client, buffer, strlen(buffer));
+    client_send(client, buffer, pos);
 }
+
 
 void tui_render_command_input(client_t *client) {
     if (!client || !client->connected) return;

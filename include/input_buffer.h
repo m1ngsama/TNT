@@ -14,6 +14,7 @@ typedef struct {
     char bytes[4];
     int len;
     int expected_len;
+    bool crlf_pending;   /* the last pasted byte was a CR */
 } tnt_input_utf8_state_t;
 
 void tnt_input_utf8_state_reset(tnt_input_utf8_state_t *state);
@@ -25,8 +26,7 @@ int tnt_input_append_utf8_sequence(char *input, size_t input_size,
                                    int len);
 
 /* Append one byte from a terminal stream, validating UTF-8 across calls.
- * In paste mode CR/LF/TAB are normalized to spaces so existing TNT 1.x
- * single-line message semantics are preserved. */
+ * In paste mode CR and CRLF both become one line feed and a tab a space. */
 int tnt_input_append_stream_byte(char *input, size_t input_size,
                                  size_t *input_len,
                                  tnt_input_utf8_state_t *state,

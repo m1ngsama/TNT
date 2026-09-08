@@ -54,7 +54,9 @@ A backslash followed by anything else is invalid.
 The 1023-byte limit applies to the escaped form, so a line feed costs two
 bytes on disk.
 A line feed is the only C0 or C1 control character a message may carry;
-usernames still reject every one of them.
+usernames still reject every one of them, as do
+.B exec post
+and the module protocol.
 .P
 Readers that present message text unescape these two sequences.
 Exec
@@ -93,9 +95,11 @@ Before appending a record, the server replaces
 .BR | ,
 line feed, and carriage return in a username with
 .BR _ .
-It replaces the same bytes in content with spaces, so this release stores no
-line feed even though the format admits one.
-Content is escaped after that replacement.
+In content it replaces the separator and a carriage return with spaces, and
+keeps a line feed, which the record layer then escapes.
+Interactive composition and paste can produce a line feed;
+.B exec post
+and module-created messages cannot, because both refuse every C0 byte.
 Timestamps are written in UTC.
 .P
 Interactive public messages, public room notices, exec posts, and
