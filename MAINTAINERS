@@ -69,6 +69,7 @@ F: include/message*.h
 F: src/message*.c
 F: scripts/logrotate.sh
 F: tests/test_message_log_tool.sh
+F: tests/test_log_migration.sh
 F: tests/test_logrotate.sh
 F: tnt-message-log.5
 

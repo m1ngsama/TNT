@@ -20,6 +20,12 @@ bool message_log_is_header(const char *line);
 bool message_log_encode_content(const char *in, char *out, size_t out_size);
 bool message_log_decode_content(const char *in, char *out, size_t out_size);
 
+/* Rewrite one pre-v2 log line with its content field escaped, preserving the
+ * line's own terminator.  A line that is not a record is copied through: the
+ * parser already skips it.  False means the record cannot be represented in
+ * v2, so it is dropped rather than rewritten to decode as something else. */
+bool message_log_upgrade_record(const char *line, char *out, size_t out_size);
+
 /* Bring a pre-v2 log up to the escaped format in place: back it up to
  * `<path>.v1.bak`, escape every content field, and prepend the header.  A
  * missing file and a file that already carries the header are both no-ops,

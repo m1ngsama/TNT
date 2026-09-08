@@ -5,6 +5,7 @@
 #include <errno.h>
 
 typedef struct {
+    int format_version;
     long records_seen;
     long valid_records;
     long invalid_records;
@@ -33,11 +34,13 @@ static void print_report(FILE *stream, const char *path,
                          const message_log_report_t *report) {
     fprintf(stream,
             "path %s\n"
+            "format_version %d\n"
             "records_seen %ld\n"
             "valid_records %ld\n"
             "invalid_records %ld\n"
             "first_invalid_line %ld\n",
             path,
+            report->format_version,
             report->records_seen,
             report->valid_records,
             report->invalid_records,
@@ -47,6 +50,7 @@ static void print_report(FILE *stream, const char *path,
 static int scan_log(const char *path, bool recover) {
     FILE *fp;
     char line[MESSAGE_LOG_MAX_LINE];
+    char upgraded[MESSAGE_LOG_MAX_LINE];
     long line_no = 0;
     time_t now = time(NULL);
     message_log_report_t report = {0};
@@ -62,6 +66,21 @@ static int scan_log(const char *path, bool recover) {
         return TNT_EXIT_ERROR;
     }
 
+    report.format_version = 1;
+    if (fgets(line, sizeof(line), fp) && message_log_is_header(line)) {
+        report.format_version = 2;
+        line_no++;
+    } else {
+        rewind(fp);
+    }
+
+    /* Recovered output is always v2, so it says so. */
+    if (recover && fputs(MESSAGE_LOG_HEADER "\n", stdout) < 0) {
+        fclose(fp);
+        fprintf(stderr, "log: failed to write recovered output\n");
+        return TNT_EXIT_ERROR;
+    }
+
     while (fgets(line, sizeof(line), fp)) {
         size_t line_len = strlen(line);
         message_t parsed = {0};
@@ -72,6 +91,12 @@ static int scan_log(const char *path, bool recover) {
 
         if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
             discard_line_remainder(fp);
+        } else if (report.format_version == 1) {
+            /* Escape before parsing, or a v1 `C:\new` is read as a newline and
+             * the recovered file would mean something the original did not. */
+            valid = message_log_upgrade_record(line, upgraded,
+                                               sizeof(upgraded)) &&
+                    message_log_parse_record(upgraded, &parsed, now);
         } else {
             valid = message_log_parse_record(line, &parsed, now);
         }

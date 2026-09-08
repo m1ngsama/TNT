@@ -139,11 +139,7 @@ static bool content_has_forbidden_control(const char *s) {
     return utf8_contains_control(stripped);
 }
 
-/* Rewrite one v1 record with its content field escaped.  A line that is not a
- * record is copied through: the parser already skips it, and the backup is the
- * authority if it ever mattered.  False means the record cannot be represented
- * in v2 and is dropped rather than written back decoding to something else. */
-static bool migrate_line(const char *line, char *out, size_t out_size) {
+bool message_log_upgrade_record(const char *line, char *out, size_t out_size) {
     const char *first_sep;
     const char *second_sep;
     const char *content_start;
@@ -151,6 +147,10 @@ static bool migrate_line(const char *line, char *out, size_t out_size) {
     char encoded[MESSAGE_LOG_MAX_LINE];
     size_t content_len;
     int written;
+
+    if (!line || !out || out_size == 0) {
+        return false;
+    }
 
     first_sep = strchr(line, '|');
     second_sep = first_sep ? strchr(first_sep + 1, '|') : NULL;
@@ -175,8 +175,11 @@ static bool migrate_line(const char *line, char *out, size_t out_size) {
         return false;
     }
 
-    written = snprintf(out, out_size, "%.*s%s\n",
-                       (int)(content_start - line), line, encoded);
+    /* The original terminator is copied rather than rebuilt, so an
+     * unterminated last line stays unterminated and still fails to parse. */
+    written = snprintf(out, out_size, "%.*s%s%s",
+                       (int)(content_start - line), line, encoded,
+                       content_start + content_len);
     return written >= 0 && (size_t)written < out_size;
 }
 
@@ -294,7 +297,8 @@ int message_log_migrate(const char *path) {
         const char *emit = line;
 
         if (at_record_start && complete) {
-            if (!migrate_line(line, migrated, sizeof(migrated))) {
+            if (!message_log_upgrade_record(line, migrated,
+                                            sizeof(migrated))) {
                 at_record_start = true;
                 continue;
             }
