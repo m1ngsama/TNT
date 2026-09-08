@@ -2,6 +2,7 @@
 
 #include "chat_room.h"
 #include "common.h"
+#include "config_defaults.h"
 #include "json_text.h"
 #include "module_protocol.h"
 #include "utf8.h"
@@ -20,7 +21,6 @@
 #define TNT_MODULE_LINE_MAX 4096
 #define TNT_MODULE_READ_BUFFER_SIZE 1024
 #define TNT_MODULE_HANDSHAKE_TIMEOUT_MS 2000
-#define TNT_MODULE_RESPONSE_TIMEOUT_MS 100
 #define TNT_MODULE_WRITE_TIMEOUT_MS 250
 #define TNT_MODULE_IO_POLL_SLICE_MS 25
 #define TNT_MODULE_MAX_RESPONSES_PER_EVENT 8
@@ -95,6 +95,10 @@ static uint64_t g_next_event_id = 0;
 static atomic_bool g_stop_requested = ATOMIC_VAR_INIT(true);
 static pthread_mutex_t g_dispatch_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_module_publish_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Read once at init: an event dispatch must not pay for getenv. */
+static int g_module_response_timeout_ms =
+    TNT_DEFAULT_MODULE_RESPONSE_TIMEOUT_MS;
 static pthread_mutex_t g_lifecycle_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static bool is_safe_relative_entrypoint(const char *entrypoint) {
@@ -894,7 +898,7 @@ static void deliver_message_to_module(module_process_t *module,
         return;
     }
 
-    response_deadline = monotonic_millis() + TNT_MODULE_RESPONSE_TIMEOUT_MS;
+    response_deadline = monotonic_millis() + g_module_response_timeout_ms;
     while (1) {
         int64_t remaining;
         int n;
@@ -1087,6 +1091,8 @@ int tnt_module_runtime_init(void) {
         return -1;
     }
     g_next_event_id = 0;
+    g_module_response_timeout_ms =
+        tnt_config_env_int(&TNT_CONFIG_MODULE_RESPONSE_TIMEOUT);
     pthread_mutex_unlock(&g_dispatch_lock);
 
     atomic_store_explicit(&g_stop_requested, false, memory_order_release);

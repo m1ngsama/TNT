@@ -13,6 +13,7 @@
 #define TNT_DEFAULT_MAX_CONN_RATE_PER_IP 10
 #define TNT_DEFAULT_RATE_LIMIT_ENABLED 1
 #define TNT_DEFAULT_IDLE_TIMEOUT 1800
+#define TNT_DEFAULT_MODULE_RESPONSE_TIMEOUT_MS 100
 
 #define TNT_MIN_PORT 1
 #define TNT_MAX_PORT 65535
@@ -24,6 +25,10 @@
 #define TNT_MAX_IDLE_TIMEOUT 86400
 #define TNT_MIN_SSH_LOG_LEVEL 0
 #define TNT_MAX_SSH_LOG_LEVEL 4
+/* Below the floor no real module can answer; above the ceiling one stuck
+ * module holds up every event in the room. */
+#define TNT_MIN_MODULE_RESPONSE_TIMEOUT_MS 10
+#define TNT_MAX_MODULE_RESPONSE_TIMEOUT_MS 5000
 
 typedef struct {
     const char *env_name;
@@ -39,6 +44,7 @@ extern const tnt_int_config_spec_t TNT_CONFIG_MAX_CONN_RATE_PER_IP;
 extern const tnt_int_config_spec_t TNT_CONFIG_RATE_LIMIT;
 extern const tnt_int_config_spec_t TNT_CONFIG_IDLE_TIMEOUT;
 extern const tnt_int_config_spec_t TNT_CONFIG_SSH_LOG_LEVEL;
+extern const tnt_int_config_spec_t TNT_CONFIG_MODULE_RESPONSE_TIMEOUT;
 
 int tnt_config_env_int(const tnt_int_config_spec_t *spec);
 bool tnt_config_parse_int(const char *value, const tnt_int_config_spec_t *spec,

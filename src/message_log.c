@@ -134,10 +134,9 @@ bool message_log_decode_content(const char *in, char *out, size_t out_size) {
     return true;
 }
 
-/* Content may hold a newline; nothing else below 0x20, no DEL, no C1.  That
- * single exception is what keeps a user from sending escape sequences to
+/* That single exception is what keeps a user from sending escape sequences to
  * every terminal in the room. */
-static bool content_has_forbidden_control(const char *s) {
+bool message_log_content_has_forbidden_control(const char *s) {
     char stripped[MAX_MESSAGE_LEN * 2];
     size_t pos = 0;
 
@@ -401,7 +400,7 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     if (!message_log_decode_content(content, decoded, sizeof(decoded))) {
         return false;
     }
-    if (content_has_forbidden_control(decoded)) {
+    if (message_log_content_has_forbidden_control(decoded)) {
         return false;
     }
 
@@ -433,7 +432,7 @@ int message_log_format_record(const message_t *msg, char *buffer,
     if (!msg || !utf8_is_valid_string(msg->username) ||
         !utf8_is_valid_string(msg->content) ||
         utf8_contains_control(msg->username) ||
-        content_has_forbidden_control(msg->content)) {
+        message_log_content_has_forbidden_control(msg->content)) {
         return -1;
     }
 

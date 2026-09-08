@@ -1,4 +1,4 @@
-.TH TNT-MODULE-PROTOCOL 7 "2026-09-07" "TNT 1.3.1"
+.TH TNT-MODULE-PROTOCOL 7 "2026-09-08" "TNT 1.3.1"
 .SH NAME
 tnt-module-protocol \- implement an external TNT message module
 .SH DESCRIPTION
@@ -191,7 +191,9 @@ Create a public message with:
 .P
 .B plain_text
 must contain 1 through 1023 UTF-8 bytes.
-It must contain no C0 or C1 control character or DEL.
+A line feed is the only C0 or C1 control character it may contain; every
+other one, and DEL, is refused.
+The log stores a line feed escaped, so it costs two of the 1023 bytes.
 TNT persists and broadcasts accepted text with sender
 .BI module: name .
 .P
@@ -204,8 +206,9 @@ Finish the event with:
 At most eight response records are accepted for one event, including the
 final acknowledgement.
 A module can therefore create at most seven messages for one event.
-All responses for the event must arrive within one 100-millisecond
-deadline.
+All responses for the event must arrive within one deadline, 100
+milliseconds by default and set by
+.BR TNT_MODULE_RESPONSE_TIMEOUT_MS .
 No record may follow
 .B event.ok
 for that event.
@@ -246,7 +249,9 @@ Handshake read and write deadline.
 Per-event write deadline from TNT to a module.
 .TP
 .B 100 milliseconds
-Whole response deadline for one event.
+Default whole response deadline for one event.
+.BR TNT_MODULE_RESPONSE_TIMEOUT_MS
+sets it, from 10 to 5000.
 .TP
 .B 8 records
 Maximum responses per event, including
