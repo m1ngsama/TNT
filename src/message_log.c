@@ -35,6 +35,106 @@ void message_log_format_timestamp_utc(time_t ts, char *buffer,
     strftime(buffer, buf_size, "%Y-%m-%dT%H:%M:%SZ", &tm_info);
 }
 
+bool message_log_is_header(const char *line) {
+    size_t len;
+
+    if (!line) {
+        return false;
+    }
+    len = strlen(MESSAGE_LOG_HEADER);
+    if (strncmp(line, MESSAGE_LOG_HEADER, len) != 0) {
+        return false;
+    }
+    /* Accept the line with or without its terminator. */
+    return line[len] == '\0' || line[len] == '\n';
+}
+
+bool message_log_encode_content(const char *in, char *out, size_t out_size) {
+    size_t pos = 0;
+
+    if (!in || !out || out_size == 0) {
+        return false;
+    }
+
+    for (; *in; in++) {
+        const char *escape = NULL;
+
+        if (*in == '\\') {
+            escape = "\\\\";
+        } else if (*in == '\n') {
+            escape = "\\n";
+        }
+
+        if (escape) {
+            if (pos + 2 >= out_size) {
+                return false;
+            }
+            out[pos++] = escape[0];
+            out[pos++] = escape[1];
+        } else {
+            if (pos + 1 >= out_size) {
+                return false;
+            }
+            out[pos++] = *in;
+        }
+    }
+
+    out[pos] = '\0';
+    return true;
+}
+
+bool message_log_decode_content(const char *in, char *out, size_t out_size) {
+    size_t pos = 0;
+
+    if (!in || !out || out_size == 0) {
+        return false;
+    }
+
+    while (*in) {
+        char decoded;
+
+        if (*in != '\\') {
+            decoded = *in++;
+        } else {
+            in++;
+            switch (*in) {
+            case '\\': decoded = '\\'; break;
+            case 'n':  decoded = '\n'; break;
+            default:
+                /* Not something the encoder can produce.  Refusing keeps a
+                 * corrupted record out of the room rather than guessing. */
+                return false;
+            }
+            in++;
+        }
+
+        if (pos + 1 >= out_size) {
+            return false;
+        }
+        out[pos++] = decoded;
+    }
+
+    out[pos] = '\0';
+    return true;
+}
+
+/* Content may hold a newline; nothing else below 0x20, no DEL, no C1.  That
+ * single exception is what keeps a user from sending escape sequences to
+ * every terminal in the room. */
+static bool content_has_forbidden_control(const char *s) {
+    char stripped[MAX_MESSAGE_LEN * 2];
+    size_t pos = 0;
+
+    for (; *s && pos + 1 < sizeof(stripped); s++) {
+        if (*s == '\n') {
+            continue;
+        }
+        stripped[pos++] = *s;
+    }
+    stripped[pos] = '\0';
+    return utf8_contains_control(stripped);
+}
+
 bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     char line_copy[MESSAGE_LOG_MAX_LINE];
     char *first_sep;
@@ -44,6 +144,7 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     char *content;
     time_t msg_time;
     size_t line_len;
+    char decoded[MAX_MESSAGE_LEN];
 
     if (!line || !out) {
         return false;
@@ -89,6 +190,14 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
         return false;
     }
 
+    /* The stored form is escaped; the room works with the decoded text. */
+    if (!message_log_decode_content(content, decoded, sizeof(decoded))) {
+        return false;
+    }
+    if (content_has_forbidden_control(decoded)) {
+        return false;
+    }
+
     msg_time = parse_rfc3339_utc(timestamp_str);
     if (msg_time == (time_t)-1) {
         return false;
@@ -100,7 +209,7 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     out->timestamp = msg_time;
     strncpy(out->username, username, MAX_USERNAME_LEN - 1);
     out->username[MAX_USERNAME_LEN - 1] = '\0';
-    strncpy(out->content, content, MAX_MESSAGE_LEN - 1);
+    strncpy(out->content, decoded, MAX_MESSAGE_LEN - 1);
     out->content[MAX_MESSAGE_LEN - 1] = '\0';
     out->display_time[0] = '\0';
     out->display_date[0] = '\0';
@@ -112,17 +221,25 @@ int message_log_format_record(const message_t *msg, char *buffer,
     char timestamp[64];
     int needed;
 
+    char encoded[MAX_MESSAGE_LEN];
+
     if (!msg || !utf8_is_valid_string(msg->username) ||
         !utf8_is_valid_string(msg->content) ||
         utf8_contains_control(msg->username) ||
-        utf8_contains_control(msg->content)) {
+        content_has_forbidden_control(msg->content)) {
+        return -1;
+    }
+
+    /* The length limit applies to the stored form, so the parser contract is
+     * unchanged: a newline costs two bytes on disk. */
+    if (!message_log_encode_content(msg->content, encoded, sizeof(encoded))) {
         return -1;
     }
 
     message_log_format_timestamp_utc(msg->timestamp, timestamp,
                                      sizeof(timestamp));
     needed = snprintf(buffer, buf_size, "%s|%s|%s\n", timestamp,
-                      msg->username, msg->content);
+                      msg->username, encoded);
     if (needed < 0) {
         return -1;
     }
