@@ -1,14 +1,18 @@
-.TH TNT-MESSAGE-LOG 5 "2026-09-07" "TNT 1.3.1"
+.TH TNT-MESSAGE-LOG 5 "2026-09-08" "TNT 1.3.1"
 .SH NAME
 tnt-message-log \- TNT public message log format
 .SH DESCRIPTION
 TNT stores public room history in an append-only UTF-8 file named
 .IR messages.log .
-This page defines version 1 of the record format used for replay, search,
+This page defines version 2 of the record format used for replay, search,
 export, validation, and recovery.
 .P
-The file has no header or version marker.
-Its version is defined by the record contract below.
+A version 2 file begins with the marker line
+.BR "#tnt-message-log v2" .
+A file without it is version 1 and is migrated in place at server start.
+See
+.B VERSIONS
+below.
 .SH FORMAT
 Each record occupies one newline-terminated line.
 It has exactly three fields and two literal
@@ -16,6 +20,7 @@ It has exactly three fields and two literal
 separators:
 .P
 .EX
+#tnt\-message\-log v2
 2026-05-27T12:34:56Z|alice|hello
 .EE
 .P
@@ -29,12 +34,32 @@ A UTC timestamp in the form
 A nonempty UTF-8 string of at most 63 bytes.
 .TP
 .I content
-A nonempty UTF-8 string of at most 1023 bytes.
+A nonempty UTF-8 string of at most 1023 bytes, escaped as described below.
 .P
 Neither string field may contain
 .BR | ,
 a C0 or C1 control character, or DEL.
 Every record, including the final record, must end with a newline.
+.SH CONTENT ENCODING
+The stored content field is escaped so that a message may hold a line feed
+while records stay one per line:
+.TP
+.B \e\e
+A single backslash.
+.TP
+.B \en
+A line feed.
+.P
+A backslash followed by anything else is invalid.
+The 1023-byte limit applies to the escaped form, so a line feed costs two
+bytes on disk.
+A line feed is the only C0 or C1 control character a message may carry;
+usernames still reject every one of them.
+.P
+Readers that present message text unescape these two sequences.
+Exec
+.B dump
+and the recovery modes emit the escaped form, one record per line.
 .SH VALIDATION
 One parser is used by server replay, interactive search, exec
 .BR dump ,
@@ -45,7 +70,10 @@ does not have exactly two separators and three nonempty fields;
 .IP \(bu 2
 does not end with a newline;
 .IP \(bu 2
-contains invalid UTF-8, a C0 or C1 control character, or DEL;
+contains invalid UTF-8, a C0 or C1 control character other than an escaped
+line feed, or DEL;
+.IP \(bu 2
+contains a backslash escape the encoding does not define;
 .IP \(bu 2
 exceeds either field limit; or
 .IP \(bu 2
@@ -58,11 +86,16 @@ through 24 hours after it.
 Normal readers skip invalid records and continue with later records.
 A truncated final append is therefore ignored rather than replayed.
 .SH WRITING
+The server writes the marker line when it creates the file, so a new
+installation is version 2 from its first message.
+.P
 Before appending a record, the server replaces
 .BR | ,
 line feed, and carriage return in a username with
 .BR _ .
-It replaces the same bytes in content with spaces.
+It replaces the same bytes in content with spaces, so this release stores no
+line feed even though the format admits one.
+Content is escaped after that replacement.
 Timestamps are written in UTC.
 .P
 Interactive public messages, public room notices, exec posts, and
@@ -91,7 +124,8 @@ Neither mode starts the SSH server.
 Validate every physical record and write a summary to standard output.
 .TP
 .BI "tnt \-\-log\-recover " file
-Write each valid record in canonical version 1 form to standard output.
+Write the marker line and each valid record in canonical version 2 form to
+standard output.
 Write the summary to standard error.
 The source file is not modified.
 .P
@@ -99,17 +133,24 @@ The summary has these line-oriented fields:
 .P
 .EX
 path /var/lib/tnt/messages.log
+format_version 2
 records_seen 120
 valid_records 119
 invalid_records 1
 first_invalid_line 120
 .EE
 .P
+.B format_version
+reports the version of the file as read.
+The marker line is not counted as a record.
 .B first_invalid_line
 is 0 when no invalid record was found.
 Both modes return 0 when all records are valid.
 They return 1 when invalid records or
 I/O errors occur.
+.P
+Given a version 1 file, both modes escape each content field before
+validating it, so recovery output means what the original meant.
 .SH FILES
 .TP
 .I state-directory/messages.log
@@ -117,10 +158,41 @@ Active public message log.
 .TP
 .I state-directory/messages.log.1
 Single rotated predecessor of the active log.
+.TP
+.I state-directory/messages.log.v1.bak
+Copy of the log as it stood before migration.
 .SH VERSIONS
-The control-free UTF-8 fields and framing contract are stable throughout
+The three-field, control-free UTF-8 framing contract is stable throughout
 TNT 1.x.
-Well-formed version 1 logs without control characters remain readable.
+Version 2 adds the marker line and the content encoding above.
+.P
+At start, the server migrates a log that has no marker line.
+It copies the file to
+.IR messages.log.v1.bak ,
+writes a replacement containing the marker line followed by every record with
+its backslashes escaped, and renames that over the original.
+A record whose escaped content would exceed the field limit is left in the
+backup only.
+.P
+Migration is idempotent: a file that already carries the marker line is not
+touched, so a restart, a restore, or a copy cannot escape an escaped file.
+Escaping is not reversible by a second pass, which is why the marker travels
+inside the file rather than beside it.
+.P
+The migration exists because a version 1 record could already contain a
+backslash, as in
+.BR C:\enew .
+Read under version 2 rules without escaping, that content would decode to
+.B C:
+followed by a line feed and
+.BR ew .
+.P
+A TNT 1.3.x binary reads a version 2 log without dropping records.
+It skips the marker line as unparseable and shows
+.B \en
+and
+.B \e\e
+literally.
 .SH CAVEATS
 The file is append-only operational state, not an editable configuration
 file.

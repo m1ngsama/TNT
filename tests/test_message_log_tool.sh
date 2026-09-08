@@ -94,6 +94,45 @@ else
     echo "exit status: $RECOVER_STATUS"
 fi
 
+V2_LOG="$STATE_DIR/v2.log"
+printf '#tnt-message-log v2\n' > "$V2_LOG"
+printf '%s|alice|one\n' "$TS" >> "$V2_LOG"
+printf '%s|bob|C:\\\\new\n' "$TS" >> "$V2_LOG"
+
+V2_OUTPUT=$("$BIN" --log-check "$V2_LOG" 2>&1)
+V2_STATUS=$?
+if [ "$V2_STATUS" -eq 0 ] &&
+   printf '%s\n' "$V2_OUTPUT" | grep -q '^format_version 2$' &&
+   printf '%s\n' "$V2_OUTPUT" | grep -q '^records_seen 2$' &&
+   printf '%s\n' "$V2_OUTPUT" | grep -q '^invalid_records 0$'; then
+    pass "the header is accepted and is not counted as a record"
+else
+    fail "v2 log check"
+    printf '%s\n' "$V2_OUTPUT"
+    echo "exit status: $V2_STATUS"
+fi
+
+V1_LOG="$STATE_DIR/v1-backslash.log"
+printf '%s|alice|C:\\new\n' "$TS" > "$V1_LOG"
+
+V1_CHECK_OUTPUT=$("$BIN" --log-check "$V1_LOG" 2>&1)
+if printf '%s\n' "$V1_CHECK_OUTPUT" | grep -q '^format_version 1$'; then
+    pass "an unmigrated log reports v1"
+else
+    fail "v1 log check"
+    printf '%s\n' "$V1_CHECK_OUTPUT"
+fi
+
+UPGRADED="$STATE_DIR/upgraded.log"
+"$BIN" --log-recover "$V1_LOG" > "$UPGRADED" 2>/dev/null
+if head -n 1 "$UPGRADED" | grep -qx '#tnt-message-log v2' &&
+   grep -qF 'C:\\new' "$UPGRADED"; then
+    pass "recover writes the header and escapes a v1 backslash"
+else
+    fail "v1 recovery"
+    cat "$UPGRADED" 2>/dev/null
+fi
+
 MISSING_OUTPUT=$("$BIN" --log-check "$STATE_DIR/missing.log" 2>&1)
 MISSING_STATUS=$?
 if [ "$MISSING_STATUS" -eq 1 ] &&

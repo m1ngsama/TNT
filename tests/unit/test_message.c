@@ -1,5 +1,6 @@
 /* Unit tests for message functions */
 #include "../../include/message.h"
+#include "../../include/message_log.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
@@ -29,6 +30,8 @@ static void cleanup_state_dir(void) {
     if (test_state_dir[0] != '\0') {
         char log_path[PATH_MAX];
         snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+        unlink(log_path);
+        strncat(log_path, ".v1.bak", sizeof(log_path) - strlen(log_path) - 1);
         unlink(log_path);
         rmdir(test_state_dir);
         test_state_dir[0] = '\0';
@@ -179,6 +182,68 @@ TEST(message_save_rejects_control_characters) {
     assert(message_save(&msg) == -1);
     strcpy(msg.content, "unsafe \xC2\x9B" "31m text");
     assert(message_save(&msg) == -1);
+    cleanup_state_dir();
+}
+
+TEST(message_save_stamps_the_format_on_a_fresh_log) {
+    message_t msg = { .timestamp = time(NULL) };
+    char log_path[PATH_MAX];
+    char line[MESSAGE_LOG_MAX_LINE];
+    FILE *fp;
+
+    setup_state_dir();
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+    strcpy(msg.username, "alice");
+    strcpy(msg.content, "hello");
+
+    assert(message_save(&msg) == 0);
+
+    fp = fopen(log_path, "r");
+    assert(fp != NULL);
+    assert(fgets(line, sizeof(line), fp) != NULL);
+    assert(message_log_is_header(line));
+    assert(fgets(line, sizeof(line), fp) != NULL);
+    assert(strstr(line, "|alice|hello\n") != NULL);
+    fclose(fp);
+    cleanup_state_dir();
+}
+
+TEST(message_load_migrates_a_v1_log_once) {
+    char ts[64];
+    char log_path[PATH_MAX];
+    char backup_path[PATH_MAX];
+    char line[MESSAGE_LOG_MAX_LINE];
+    message_t *messages = NULL;
+    FILE *fp;
+
+    setup_state_dir();
+    format_rfc3339_now(ts, sizeof(ts));
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+    snprintf(backup_path, sizeof(backup_path), "%s.v1.bak", log_path);
+
+    fp = fopen(log_path, "wb");
+    assert(fp != NULL);
+    fprintf(fp, "%s|alice|C:\\new\n", ts);
+    fclose(fp);
+
+    assert(message_load(&messages, 10) == 1);
+    assert(strcmp(messages[0].content, "C:\\new") == 0);
+    free(messages);
+    assert(access(backup_path, F_OK) == 0);
+
+    fp = fopen(log_path, "r");
+    assert(fp != NULL);
+    assert(fgets(line, sizeof(line), fp) != NULL);
+    assert(message_log_is_header(line));
+    assert(fgets(line, sizeof(line), fp) != NULL);
+    assert(strstr(line, "|alice|C:\\\\new\n") != NULL);
+    fclose(fp);
+
+    /* A second load must leave the escaped form alone. */
+    messages = NULL;
+    assert(message_load(&messages, 10) == 1);
+    assert(strcmp(messages[0].content, "C:\\new") == 0);
+    free(messages);
     cleanup_state_dir();
 }
 
@@ -400,6 +465,8 @@ int main(void) {
     RUN_TEST(message_format_width_limits);
     RUN_TEST(message_save_basic);
     RUN_TEST(message_save_rejects_control_characters);
+    RUN_TEST(message_save_stamps_the_format_on_a_fresh_log);
+    RUN_TEST(message_load_migrates_a_v1_log_once);
     RUN_TEST(message_load_skips_malformed_records);
     RUN_TEST(message_search_skips_malformed_records);
     RUN_TEST(message_search_keeps_last_matches_in_order);
