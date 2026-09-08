@@ -51,14 +51,8 @@ static bool format_message_row(const message_t *msg, int row, char *buffer,
                                size_t buf_size, int width,
                                const char *my_username,
                                const theme_t *theme) {
-    char time_str[32];
-    if (msg->display_time[0] != '\0') {
-        snprintf(time_str, sizeof(time_str), "%s", msg->display_time);
-    } else {
-        struct tm tm_info;
-        localtime_r(&msg->timestamp, &tm_info);
-        strftime(time_str, sizeof(time_str), "%H:%M", &tm_info);
-    }
+    char time_str[16];
+    history_view_message_time(msg, time_str);
 
     /* Is this message from the local user?  Used to draw a 1-column gutter
      * marker so they can scan their own contributions when scrolling. */
@@ -99,21 +93,8 @@ static bool format_message_row(const message_t *msg, int row, char *buffer,
     const char *hl_start = mentioned ? "\033[1;33m" : "";
     const char *hl_end = mentioned ? "\033[0m" : "";
 
-    /* Plain-text prefix, used only for its display width — the gutter is one
-     * column, so it is part of the budget the content has to fit into. */
-    char prefix_plain[256];
-    if (system_message_is_system(msg)) {
-        snprintf(prefix_plain, sizeof(prefix_plain), " --> ");
-    } else if (strcmp(msg->username, "*") == 0) {
-        snprintf(prefix_plain, sizeof(prefix_plain), " %s * ", time_str);
-    } else {
-        snprintf(prefix_plain, sizeof(prefix_plain), " %s %s: ",
-                 time_str, msg->username);
-    }
-
-    int prefix_width = utf8_string_width(prefix_plain);
-    int content_width = width - prefix_width;
-    if (content_width < 4) content_width = 4;
+    int prefix_width = history_view_message_prefix_width(msg);
+    int content_width = history_view_message_content_width(msg, width);
 
     richtext_span_t spans[HISTORY_VIEW_MAX_WRAPPED_ROWS];
     size_t rows = richtext_wrap(msg->content, content_width, spans,

@@ -149,9 +149,52 @@ TEST(latest_start_accounts_for_wrapped_rows) {
     /* Wide: one row each, plus one divider row, so all three fit in five. */
     assert(history_view_latest_start_for_height(messages, 3, 5, 200) == 0);
 
-    /* Narrow: two rows each.  Divider + newest (3) + one more (5) fills the
+    /* Narrow: 24 columns less the 13-column " HH:MM user: " prefix leaves 11,
+     * so two rows each.  Divider + newest (3) + one more (5) fills the
      * height, so the oldest message no longer fits. */
-    assert(history_view_latest_start_for_height(messages, 3, 5, 10) == 1);
+    assert(history_view_latest_start_for_height(messages, 3, 5, 24) == 1);
+}
+
+/* The renderer indents wrapped rows under the sender prefix, so a message
+ * wraps at width minus that prefix.  Counting rows at the full width made the
+ * newest messages fall off the bottom of a full screen. */
+TEST(wrapped_rows_account_for_the_sender_prefix) {
+    message_t msg = {0};
+
+    snprintf(msg.username, sizeof(msg.username), "slow-pressure");
+    snprintf(msg.display_time, sizeof(msg.display_time), "14:44");
+    memset(msg.content, 'x', 900);
+    msg.content[900] = '\0';
+
+    /* " 14:44 slow-pressure: " is 22 columns, leaving 58 for content. */
+    assert(history_view_message_lines(&msg, 80) == 16);
+}
+
+TEST(latest_slice_fits_the_screen_after_a_wrapped_message) {
+    message_t messages[6];
+
+    messages[0] = make_msg(1704067200, "");
+    snprintf(messages[0].username, sizeof(messages[0].username),
+             "slow-pressure");
+    memset(messages[0].content, 'x', 900);
+    messages[0].content[900] = '\0';
+
+    for (int i = 1; i < 6; i++) {
+        messages[i] = make_msg(1704067200, "slow-fast");
+        snprintf(messages[i].username, sizeof(messages[i].username),
+                 "slow-probe");
+    }
+    for (int i = 0; i < 6; i++) {
+        snprintf(messages[i].display_time, sizeof(messages[i].display_time),
+                 "14:44");
+        snprintf(messages[i].display_date, sizeof(messages[i].display_date),
+                 "2024-01-01");
+    }
+
+    /* Divider + five one-row messages is 6 rows; the wrapped message needs 16
+     * more, which overflows 20.  Including it costs the newest message its
+     * row, so the slice has to start past it. */
+    assert(history_view_latest_start_for_height(messages, 6, 20, 80) == 1);
 }
 
 int main(void) {
@@ -167,6 +210,8 @@ int main(void) {
     RUN_TEST(latest_start_uses_prepared_date_cache);
     RUN_TEST(history_view_counts_wrapped_message_rows);
     RUN_TEST(history_view_message_lines_minimum_is_one);
+    RUN_TEST(wrapped_rows_account_for_the_sender_prefix);
+    RUN_TEST(latest_slice_fits_the_screen_after_a_wrapped_message);
     RUN_TEST(latest_start_accounts_for_wrapped_rows);
 
     printf("\nAll %d tests passed!\n", tests_passed);
