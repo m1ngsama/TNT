@@ -26,6 +26,12 @@ void tui_render_motd(struct client *client);
 /* Render the input line */
 void tui_render_input(struct client *client, const struct editor *ed);
 
+/* Columns the input text may use, and the rows it currently occupies.  The
+ * caret movers in input.c must lay the text out at the same width the
+ * renderer does, or Home lands on the wrong row. */
+int tui_input_content_width(const struct client *client);
+int tui_input_rows(const struct client *client, const struct editor *ed);
+
 /* Render only the command input/status line */
 void tui_render_command_input(struct client *client);
 

@@ -276,14 +276,14 @@ static void normal_scroll_to_latest(client_t *client) {
     if (!client) return;
     history_view_scroll_to_latest(&client->scroll_pos, &client->follow_tail,
                                   normal_visible_message_count(client),
-                                  history_view_height(client->height));
+                                  history_view_height(client->height, client->input_rows));
 }
 
 static void normal_scroll_by(client_t *client, int delta) {
     if (!client) return;
     history_view_scroll_by(&client->scroll_pos, &client->follow_tail,
                            normal_visible_message_count(client),
-                           history_view_height(client->height), delta);
+                           history_view_height(client->height, client->input_rows), delta);
 }
 
 static void normal_enter_insert(client_t *client) {
@@ -741,7 +741,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                                                              &tilde, 1, 0, 50);
                             if (t == 1 && tilde == '~' &&
                                 !tnt_keymap_uses_modes(client->keymap)) {
-                                int page = history_view_height(client->height);
+                                int page = history_view_height(client->height, client->input_rows);
                                 normal_scroll_by(client,
                                                  seq[1] == '5' ? -page : page);
                                 tui_render_screen(client);
@@ -1048,7 +1048,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
             break;
 
         case MODE_NORMAL: {
-            int nm_msg_height = history_view_height(client->height);
+            int nm_msg_height = history_view_height(client->height, client->input_rows);
 
             if (key == 'i' || key == 'a' || key == 'A' ||
                 key == 'o' || key == 'O') {
@@ -1334,6 +1334,7 @@ static int input_flush_client_output(client_t *client) {
 void input_run_session(client_t *client) {
     editor_t ed;
     editor_reset(&ed);
+    client->input_rows = 1;
     size_t command_input_len = 0;
     char buf[4];
     bool joined_room = false;

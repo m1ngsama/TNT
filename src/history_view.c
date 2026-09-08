@@ -25,8 +25,13 @@ static void message_date_key(const message_t *msg, char out[11]) {
     strftime(out, 11, "%Y-%m-%d", &tmi);
 }
 
-int history_view_height(int terminal_height) {
-    int height = terminal_height - 3;
+int history_view_height(int terminal_height, int input_rows) {
+    int height;
+
+    if (input_rows < 1) {
+        input_rows = 1;
+    }
+    height = terminal_height - 3 - (input_rows - 1);
     return height < 1 ? 1 : height;
 }
 

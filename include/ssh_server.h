@@ -51,6 +51,10 @@ typedef struct client {
     char insert_history[16][MAX_MESSAGE_LEN];
     int insert_history_count;
     int insert_history_pos;
+    /* Rows the input region currently occupies.  Cached by tui_render_input
+     * so tui_render_screen, which has no editor, knows how much of the bottom
+     * of the screen is not history. */
+    int input_rows;
     char command_output[MAX_COMMAND_OUTPUT_LEN];
     int command_output_scroll;
     tnt_command_output_kind_t command_output_kind;
