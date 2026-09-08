@@ -8,6 +8,10 @@
 #include "message_log.h"
 #include "utf8.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 static time_t parse_rfc3339_utc(const char *timestamp_str) {
     struct tm tm = {0};
 
@@ -133,6 +137,193 @@ static bool content_has_forbidden_control(const char *s) {
     }
     stripped[pos] = '\0';
     return utf8_contains_control(stripped);
+}
+
+/* Rewrite one v1 record with its content field escaped.  A line that is not a
+ * record is copied through: the parser already skips it, and the backup is the
+ * authority if it ever mattered.  False means the record cannot be represented
+ * in v2 and is dropped rather than written back decoding to something else. */
+static bool migrate_line(const char *line, char *out, size_t out_size) {
+    const char *first_sep;
+    const char *second_sep;
+    const char *content_start;
+    char content[MESSAGE_LOG_MAX_LINE];
+    char encoded[MESSAGE_LOG_MAX_LINE];
+    size_t content_len;
+    int written;
+
+    first_sep = strchr(line, '|');
+    second_sep = first_sep ? strchr(first_sep + 1, '|') : NULL;
+    if (!second_sep) {
+        written = snprintf(out, out_size, "%s", line);
+        return written >= 0 && (size_t)written < out_size;
+    }
+
+    content_start = second_sep + 1;
+    content_len = strlen(content_start);
+    while (content_len > 0 && (content_start[content_len - 1] == '\n' ||
+                               content_start[content_len - 1] == '\r')) {
+        content_len--;
+    }
+    if (content_len >= sizeof(content)) {
+        return false;
+    }
+    memcpy(content, content_start, content_len);
+    content[content_len] = '\0';
+
+    if (!message_log_encode_content(content, encoded, sizeof(encoded))) {
+        return false;
+    }
+
+    written = snprintf(out, out_size, "%.*s%s\n",
+                       (int)(content_start - line), line, encoded);
+    return written >= 0 && (size_t)written < out_size;
+}
+
+static int copy_file(const char *src, const char *dst) {
+    FILE *in = fopen(src, "r");
+    FILE *out;
+    char buf[8192];
+    size_t n;
+    int rc = 0;
+
+    if (!in) {
+        return -1;
+    }
+    out = fopen(dst, "w");
+    if (!out) {
+        fclose(in);
+        return -1;
+    }
+
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n) {
+            rc = -1;
+            break;
+        }
+    }
+    if (ferror(in) || fflush(out) != 0 || fsync(fileno(out)) != 0) {
+        rc = -1;
+    }
+    fclose(in);
+    if (fclose(out) != 0) {
+        rc = -1;
+    }
+    if (rc < 0) {
+        unlink(dst);
+    }
+    return rc;
+}
+
+/* Make a rename durable: without this the log can come back from a crash
+ * pointing at the file the rename replaced. */
+static void sync_parent_dir(const char *path) {
+    char dir[PATH_MAX];
+    const char *slash = strrchr(path, '/');
+    int fd;
+
+    if (!slash) {
+        snprintf(dir, sizeof(dir), ".");
+    } else {
+        size_t len = slash == path ? 1 : (size_t)(slash - path);
+        if (len >= sizeof(dir)) {
+            return;
+        }
+        memcpy(dir, path, len);
+        dir[len] = '\0';
+    }
+
+    fd = open(dir, O_RDONLY);
+    if (fd < 0) {
+        return;
+    }
+    fsync(fd);
+    close(fd);
+}
+
+int message_log_migrate(const char *path) {
+    char backup[PATH_MAX];
+    char tmp[PATH_MAX];
+    char line[MESSAGE_LOG_MAX_LINE];
+    char migrated[MESSAGE_LOG_MAX_LINE];
+    FILE *in;
+    FILE *out;
+    bool at_record_start = true;
+    int rc = 0;
+
+    if (!path || path[0] == '\0') {
+        return -1;
+    }
+    if ((size_t)snprintf(backup, sizeof(backup), "%s.v1.bak", path) >=
+            sizeof(backup) ||
+        (size_t)snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= sizeof(tmp)) {
+        return -1;
+    }
+
+    in = fopen(path, "r");
+    if (!in) {
+        return errno == ENOENT ? 0 : -1;
+    }
+    if (!fgets(line, sizeof(line), in) || message_log_is_header(line)) {
+        /* Empty, or already v2.  message_save writes the header when it
+         * creates the file, so a fresh install never migrates. */
+        fclose(in);
+        return 0;
+    }
+    rewind(in);
+
+    if (copy_file(path, backup) < 0) {
+        fclose(in);
+        return -1;
+    }
+
+    out = fopen(tmp, "w");
+    if (!out) {
+        fclose(in);
+        return -1;
+    }
+    if (fputs(MESSAGE_LOG_HEADER "\n", out) < 0) {
+        rc = -1;
+    }
+
+    while (rc == 0 && fgets(line, sizeof(line), in)) {
+        size_t len = strlen(line);
+        bool complete = len > 0 && line[len - 1] == '\n';
+        /* A line too long for the buffer arrives in pieces; only the first
+         * piece is a record, the rest is copied byte for byte. */
+        const char *emit = line;
+
+        if (at_record_start && complete) {
+            if (!migrate_line(line, migrated, sizeof(migrated))) {
+                at_record_start = true;
+                continue;
+            }
+            emit = migrated;
+        }
+        at_record_start = complete;
+
+        if (fputs(emit, out) < 0) {
+            rc = -1;
+        }
+    }
+    if (ferror(in)) {
+        rc = -1;
+    }
+
+    if (rc == 0 && (fflush(out) != 0 || fsync(fileno(out)) != 0)) {
+        rc = -1;
+    }
+    fclose(in);
+    if (fclose(out) != 0) {
+        rc = -1;
+    }
+
+    if (rc < 0 || rename(tmp, path) != 0) {
+        unlink(tmp);
+        return -1;
+    }
+    sync_parent_dir(path);
+    return 0;
 }
 
 bool message_log_parse_record(const char *line, message_t *out, time_t now) {

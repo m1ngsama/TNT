@@ -1,8 +1,10 @@
 /* Unit tests for the message log record encoding */
 #include "../../include/message_log.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include <assert.h>
 
 #define TEST(name) static void test_##name()
@@ -14,6 +16,28 @@
 } while(0)
 
 static int tests_passed = 0;
+
+static void write_file(const char *path, const char *text) {
+    FILE *fp = fopen(path, "w");
+
+    assert(fp != NULL);
+    assert(fputs(text, fp) >= 0);
+    assert(fclose(fp) == 0);
+}
+
+static void read_file(const char *path, char *out, size_t out_size) {
+    FILE *fp = fopen(path, "r");
+    size_t n;
+
+    assert(fp != NULL);
+    n = fread(out, 1, out_size - 1, fp);
+    out[n] = '\0';
+    fclose(fp);
+}
+
+static bool file_exists(const char *path) {
+    return access(path, F_OK) == 0;
+}
 
 TEST(encode_escapes_backslash_and_newline) {
     char out[64];
@@ -123,6 +147,88 @@ TEST(a_v1_record_with_a_backslash_survives_migration) {
     assert(strcmp(dec, "C:\\new") == 0);
 }
 
+TEST(migration_escapes_backslashes_and_is_idempotent) {
+    char dir[] = "/tmp/tnt-migrate-XXXXXX";
+    char path[512];
+    char backup[512];
+    char first[512];
+    char second[512];
+
+    assert(mkdtemp(dir) != NULL);
+    snprintf(path, sizeof(path), "%s/messages.log", dir);
+    snprintf(backup, sizeof(backup), "%s/messages.log.v1.bak", dir);
+
+    write_file(path, "2024-01-01T00:00:00Z|alice|C:\\new\n"
+                     "2024-01-01T00:00:01Z|bob|plain\n");
+
+    assert(message_log_migrate(path) == 0);
+    read_file(path, first, sizeof(first));
+    assert(strncmp(first, MESSAGE_LOG_HEADER, strlen(MESSAGE_LOG_HEADER)) == 0);
+    assert(strstr(first, "|alice|C:\\\\new\n") != NULL);
+    assert(strstr(first, "|bob|plain\n") != NULL);
+    assert(file_exists(backup));
+
+    /* A second run must not escape the escape. */
+    assert(message_log_migrate(path) == 0);
+    read_file(path, second, sizeof(second));
+    assert(strcmp(first, second) == 0);
+
+    unlink(path);
+    unlink(backup);
+    rmdir(dir);
+}
+
+TEST(migration_preserves_what_a_record_means) {
+    /* The decoded content after migration equals the raw content before it. */
+    message_t out = {0};
+    char line[MESSAGE_LOG_MAX_LINE];
+
+    snprintf(line, sizeof(line), "2024-01-01T00:00:00Z|alice|C:\\\\new\n");
+    assert(message_log_parse_record(line, &out, 1704067200));
+    assert(strcmp(out.content, "C:\\new") == 0);
+}
+
+TEST(migration_of_a_missing_file_is_not_a_failure) {
+    assert(message_log_migrate("/tmp/tnt-migrate-does-not-exist/messages.log")
+           == 0);
+}
+
+TEST(migration_keeps_a_line_it_cannot_represent_out_of_the_log) {
+    /* Escaping can push content past the field limit.  Such a record stays in
+     * the backup rather than being written back in a form that decodes to
+     * something else. */
+    char dir[] = "/tmp/tnt-migrate-XXXXXX";
+    char path[512];
+    char backup[512];
+    char seed[MESSAGE_LOG_MAX_LINE * 2];
+    char migrated[MESSAGE_LOG_MAX_LINE * 2];
+    char slashes[MAX_MESSAGE_LEN];
+    size_t i;
+
+    assert(mkdtemp(dir) != NULL);
+    snprintf(path, sizeof(path), "%s/messages.log", dir);
+    snprintf(backup, sizeof(backup), "%s/messages.log.v1.bak", dir);
+
+    for (i = 0; i < sizeof(slashes) - 1; i++) {
+        slashes[i] = '\\';
+    }
+    slashes[sizeof(slashes) - 1] = '\0';
+    snprintf(seed, sizeof(seed),
+             "2024-01-01T00:00:00Z|alice|%s\n"
+             "2024-01-01T00:00:01Z|bob|kept\n", slashes);
+    write_file(path, seed);
+
+    assert(message_log_migrate(path) == 0);
+    read_file(path, migrated, sizeof(migrated));
+    assert(strstr(migrated, "|alice|") == NULL);
+    assert(strstr(migrated, "|bob|kept\n") != NULL);
+    assert(file_exists(backup));
+
+    unlink(path);
+    unlink(backup);
+    rmdir(dir);
+}
+
 int main(void) {
     printf("Running message log unit tests...\n\n");
     RUN_TEST(encode_escapes_backslash_and_newline);
@@ -134,6 +240,10 @@ int main(void) {
     RUN_TEST(username_still_rejects_newline);
     RUN_TEST(header_is_recognised_and_is_not_a_record);
     RUN_TEST(a_v1_record_with_a_backslash_survives_migration);
+    RUN_TEST(migration_escapes_backslashes_and_is_idempotent);
+    RUN_TEST(migration_preserves_what_a_record_means);
+    RUN_TEST(migration_of_a_missing_file_is_not_a_failure);
+    RUN_TEST(migration_keeps_a_line_it_cannot_represent_out_of_the_log);
     printf("\nAll %d message log tests passed!\n", tests_passed);
     return 0;
 }

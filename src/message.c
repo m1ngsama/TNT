@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 static pthread_mutex_t g_message_file_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -103,6 +104,15 @@ int message_load(message_t **messages, int max_messages) {
     }
 
     pthread_mutex_lock(&g_message_file_lock);
+
+    /* A pre-v2 log must be escaped before anything decodes it, or a stored
+     * `C:\new` reads back as `C:` plus a newline. */
+    if (message_log_migrate(log_path) < 0) {
+        fprintf(stderr,
+                "message: could not migrate %s to the escaped log format; "
+                "history containing a backslash may read back wrong\n",
+                log_path);
+    }
 
     FILE *fp = fopen(log_path, "r");
     if (!fp) {
@@ -217,6 +227,15 @@ int message_save(const message_t *msg) {
     if (!fp) {
         pthread_mutex_unlock(&g_message_file_lock);
         return -1;
+    }
+
+    /* Stamping the format on creation is what keeps a fresh install, and the
+     * file left by a rotation, from ever looking like a log that needs
+     * migrating. */
+    struct stat st;
+    if (fstat(fileno(fp), &st) == 0 && st.st_size == 0 &&
+        fputs(MESSAGE_LOG_HEADER "\n", fp) < 0) {
+        rc = -1;
     }
 
     /* Sanitize username and content to prevent log injection */

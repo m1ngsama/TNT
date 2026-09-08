@@ -20,6 +20,13 @@ bool message_log_is_header(const char *line);
 bool message_log_encode_content(const char *in, char *out, size_t out_size);
 bool message_log_decode_content(const char *in, char *out, size_t out_size);
 
+/* Bring a pre-v2 log up to the escaped format in place: back it up to
+ * `<path>.v1.bak`, escape every content field, and prepend the header.  A
+ * missing file and a file that already carries the header are both no-ops,
+ * which is what makes this safe to run at every start.  Returns -1 only when
+ * the log was left untouched by a failure. */
+int message_log_migrate(const char *path);
+
 /* Parse one complete messages.log record and decode its content.  `now` is
  * used to reject records outside TNT's accepted replay window. */
 bool message_log_parse_record(const char *line, message_t *out, time_t now);
