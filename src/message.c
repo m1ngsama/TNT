@@ -252,8 +252,11 @@ int message_save(const message_t *msg) {
             *p = '_';
         }
     }
+    /* A newline is content now; the record layer escapes it.  The separator
+     * and a carriage return are still flattened, the first because it would
+     * break the record and the second because only `\n` is admitted. */
     for (char *p = safe_msg.content; *p; p++) {
-        if (*p == '|' || *p == '\n' || *p == '\r') {
+        if (*p == '|' || *p == '\r') {
             *p = ' ';
         }
     }

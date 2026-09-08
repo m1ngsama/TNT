@@ -147,6 +147,14 @@ TEST(a_v1_record_with_a_backslash_survives_migration) {
     assert(strcmp(dec, "C:\\new") == 0);
 }
 
+TEST(encoded_length_counts_the_escapes) {
+    assert(message_log_encoded_length("plain") == 5);
+    assert(message_log_encoded_length("a\\b") == 4);
+    assert(message_log_encoded_length("one\ntwo") == 8);
+    assert(message_log_encoded_length("") == 0);
+    assert(message_log_encoded_length(NULL) == 0);
+}
+
 TEST(migration_escapes_backslashes_and_is_idempotent) {
     char dir[] = "/tmp/tnt-migrate-XXXXXX";
     char path[512];
@@ -240,6 +248,7 @@ int main(void) {
     RUN_TEST(username_still_rejects_newline);
     RUN_TEST(header_is_recognised_and_is_not_a_record);
     RUN_TEST(a_v1_record_with_a_backslash_survives_migration);
+    RUN_TEST(encoded_length_counts_the_escapes);
     RUN_TEST(migration_escapes_backslashes_and_is_idempotent);
     RUN_TEST(migration_preserves_what_a_record_means);
     RUN_TEST(migration_of_a_missing_file_is_not_a_failure);

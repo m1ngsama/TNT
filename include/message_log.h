@@ -20,6 +20,11 @@ bool message_log_is_header(const char *line);
 bool message_log_encode_content(const char *in, char *out, size_t out_size);
 bool message_log_decode_content(const char *in, char *out, size_t out_size);
 
+/* Bytes the content occupies once escaped, excluding the terminator.  The
+ * 1023-byte field limit applies to this number, not to the decoded text, so
+ * the input gauge and the send guard both count it. */
+size_t message_log_encoded_length(const char *in);
+
 /* Rewrite one pre-v2 log line with its content field escaped, preserving the
  * line's own terminator.  A line that is not a record is copied through: the
  * parser already skips it.  False means the record cannot be represented in

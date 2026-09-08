@@ -87,6 +87,18 @@ bool message_log_encode_content(const char *in, char *out, size_t out_size) {
     return true;
 }
 
+size_t message_log_encoded_length(const char *in) {
+    size_t n = 0;
+
+    if (!in) {
+        return 0;
+    }
+    for (; *in; in++) {
+        n += (*in == '\\' || *in == '\n') ? 2 : 1;
+    }
+    return n;
+}
+
 bool message_log_decode_content(const char *in, char *out, size_t out_size) {
     size_t pos = 0;
 
