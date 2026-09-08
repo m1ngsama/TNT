@@ -155,9 +155,6 @@ TEST(latest_start_accounts_for_wrapped_rows) {
     assert(history_view_latest_start_for_height(messages, 3, 5, 24) == 1);
 }
 
-/* The renderer indents wrapped rows under the sender prefix, so a message
- * wraps at width minus that prefix.  Counting rows at the full width made the
- * newest messages fall off the bottom of a full screen. */
 TEST(wrapped_rows_account_for_the_sender_prefix) {
     message_t msg = {0};
 
