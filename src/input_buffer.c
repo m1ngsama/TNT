@@ -6,6 +6,7 @@ void tnt_input_utf8_state_reset(tnt_input_utf8_state_t *state) {
     if (!state) return;
     state->len = 0;
     state->expected_len = 0;
+    state->crlf_pending = false;
     memset(state->bytes, 0, sizeof(state->bytes));
 }
 
@@ -135,8 +136,33 @@ int tnt_input_append_stream_byte(char *input, size_t input_size,
                                  unsigned char b, bool paste_mode) {
     int status = TNT_INPUT_APPEND_OK;
 
-    if (paste_mode && (b == '\r' || b == '\n' || b == '\t')) {
-        b = ' ';
+    if (paste_mode) {
+        bool was_cr = (b == '\r');
+
+        if (b == '\t') {
+            b = ' ';
+        }
+        /* A CR already produced the break, so the LF completing a CRLF pair
+         * is dropped.  Two line feeds in a row are a blank line, not a pair,
+         * which is why only a CR arms this. */
+        if (b == '\n' && state && state->crlf_pending) {
+            state->crlf_pending = false;
+            return status;
+        }
+        if (state) {
+            state->crlf_pending = was_cr;
+        }
+        if (was_cr) {
+            b = '\n';
+        }
+        if (b == '\n') {
+            if (state && state->len > 0) {
+                tnt_input_utf8_state_reset(state);
+                status |= TNT_INPUT_APPEND_INVALID_UTF8;
+            }
+            return status | append_bytes(input, input_size, input_len,
+                                         "\n", 1);
+        }
     }
 
     if (b < 32) {
