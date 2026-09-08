@@ -704,15 +704,12 @@ void tui_render_input(client_t *client, const editor_t *ed) {
     int visible = (int)row_count;
     if (visible > EDITOR_MAX_ROWS) visible = EDITOR_MAX_ROWS;
 
-    /* Scroll the region so the caret stays inside it. */
     int first = caret_row - visible + 1;
     if (first < 0) first = 0;
     if (first > (int)row_count - visible) first = (int)row_count - visible;
 
     client->input_rows = visible;
 
-    /* The gauge counts what the record layer will store, so a newline shows
-     * as the two bytes it costs. */
     size_t input_bytes = message_log_encoded_length(input);
     int gauge_width = 0;
     char gauge[64] = "";
@@ -741,8 +738,6 @@ void tui_render_input(client_t *client, const editor_t *ed) {
         snprintf(row_text, sizeof(row_text), "%.*s", (int)span->len,
                  input + span->offset);
 
-        /* The prompt marks the message's first row; later rows align under it
-         * so a wrapped or multi-line message reads as one thing. */
         const char *prompt = (first + i == 0) ? "\033[2;37m›\033[0m " : "  ";
 
         if (gauge_width > 0 && i == visible - 1) {

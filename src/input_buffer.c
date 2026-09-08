@@ -142,9 +142,7 @@ int tnt_input_append_stream_byte(char *input, size_t input_size,
         if (b == '\t') {
             b = ' ';
         }
-        /* A CR already produced the break, so the LF completing a CRLF pair
-         * is dropped.  Two line feeds in a row are a blank line, not a pair,
-         * which is why only a CR arms this. */
+        /* Only a CR arms this, so two line feeds stay a blank line. */
         if (b == '\n' && state && state->crlf_pending) {
             state->crlf_pending = false;
             return status;

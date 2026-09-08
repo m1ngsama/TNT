@@ -10,9 +10,6 @@
 /* Display rows the input region may occupy before it scrolls internally. */
 #define EDITOR_MAX_ROWS 6
 
-/* Upper bound on one layout pass.  A message longer than this many display
- * rows is still edited correctly; only the rows past the table are invisible
- * to the geometry helpers, which never need more than the caret's row. */
 #define EDITOR_ROW_TABLE 128
 
 /* A message buffer with a cursor, which may contain newlines.
@@ -36,15 +33,10 @@ const char *editor_text(const editor_t *ed);
 size_t editor_len(const editor_t *ed);
 size_t editor_cursor(const editor_t *ed);
 
-/* Display columns occupied by the text before the cursor, counted from the
- * start of the whole buffer.  Callers laying out a multi-row input region
- * want editor_caret_column() instead. */
+/* Columns before the cursor from the start of the buffer, not of its row. */
 int editor_cursor_column(const editor_t *ed);
 
-/* Display-line geometry at the given render width, which is treated as 1 when
- * below it.  Rows are always at least 1, including for an empty buffer.  A
- * newline is a hard break and a full row is a soft one, so these count what
- * the user actually sees. */
+/* Display-line geometry at a render width.  Rows are always at least 1. */
 int editor_display_rows(const editor_t *ed, int width);
 int editor_caret_row(const editor_t *ed, int width);
 int editor_caret_column(const editor_t *ed, int width);
@@ -63,9 +55,7 @@ bool editor_move_right(editor_t *ed);
 bool editor_move_prev_word(editor_t *ed);
 bool editor_move_next_word(editor_t *ed);
 
-/* Vertical movement and Home/End are scoped to the caret's display row, which
- * is what the user sees; they need the render width to know where the rows
- * are.  Up and Down preserve the caret's column, clamping to a shorter row. */
+/* Scoped to the caret's display row.  Up and Down keep the column, clamped. */
 bool editor_move_up(editor_t *ed, int width);
 bool editor_move_down(editor_t *ed, int width);
 void editor_move_home(editor_t *ed, int width);

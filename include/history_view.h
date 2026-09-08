@@ -6,8 +6,7 @@
 /* Upper bound on display rows one message may occupy. */
 #define HISTORY_VIEW_MAX_WRAPPED_ROWS 64
 
-/* Rows left for the history region once the input region takes `input_rows`
- * of the bottom of the screen.  Always at least 1. */
+/* Rows left for history once the input region takes input_rows.  At least 1. */
 int history_view_height(int terminal_height, int input_rows);
 
 /* Display rows one message occupies at the given render width.  Always at

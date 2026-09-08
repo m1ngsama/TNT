@@ -26,9 +26,7 @@ int tnt_input_append_utf8_sequence(char *input, size_t input_size,
                                    int len);
 
 /* Append one byte from a terminal stream, validating UTF-8 across calls.
- * In paste mode a line feed is kept, CR and CRLF both become one line feed,
- * and a tab becomes a space; outside paste mode every control byte is a key
- * and is ignored here. */
+ * In paste mode CR and CRLF both become one line feed and a tab a space. */
 int tnt_input_append_stream_byte(char *input, size_t input_size,
                                  size_t *input_len,
                                  tnt_input_utf8_state_t *state,

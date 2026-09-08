@@ -92,9 +92,6 @@ int editor_cursor_column(const editor_t *ed) {
     return width;
 }
 
-/* One shared layout pass.  Rows are byte ranges into the buffer; a hard
- * newline and a soft wrap both end a row, which is exactly what the user
- * sees. */
 static size_t layout(const editor_t *ed, int width, richtext_span_t *out) {
     size_t rows;
 
@@ -110,9 +107,8 @@ static size_t layout(const editor_t *ed, int width, richtext_span_t *out) {
     return rows;
 }
 
-/* Index of the row holding the caret.  A caret sitting exactly on a row
- * boundary belongs to the row that starts there, which is what puts it on the
- * new line after Ctrl+J rather than at the end of the old one. */
+/* A caret on a row boundary belongs to the row starting there, which is what
+ * puts it on the new line after Ctrl+J. */
 static size_t caret_row_index(const editor_t *ed, const richtext_span_t *rows,
                               size_t row_count) {
     size_t i;
@@ -145,8 +141,7 @@ static int columns_between(const editor_t *ed, size_t from, size_t to) {
     return width;
 }
 
-/* Byte offset within `row` at or before `column` display columns, always on a
- * cluster boundary. */
+/* Offset in `row` at or before `column`, always on a cluster boundary. */
 static size_t offset_for_column(const editor_t *ed,
                                 const richtext_span_t *row, int column) {
     size_t offset = row->offset;

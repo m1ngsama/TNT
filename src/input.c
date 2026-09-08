@@ -273,10 +273,8 @@ static int normal_visible_message_count(const client_t *client) {
     return count;
 }
 
-/* Redraw the input region, and the history region with it when the input
- * region just changed height.  Ordinary typing that wraps onto a new row
- * grows the region as surely as Ctrl+J does, so the check is on the row
- * count rather than on which key arrived. */
+/* Keyed on the row count, not the key: ordinary typing that wraps grows the
+ * region as surely as Ctrl+J does. */
 static void render_input_region(client_t *client, const editor_t *ed) {
     int rows = tui_input_rows(client, ed);
 
@@ -725,8 +723,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                 int n = ssh_channel_read_timeout(client->channel, seq, 1, 0, 50);
                 if (n == 1 && seq[0] == '\r' &&
                     !tnt_keymap_uses_modes(client->keymap)) {
-                    /* Alt+Enter.  Default keymap only: ESC is the way into
-                     * NORMAL when the vim keymap is active. */
+                    /* Default keymap only: ESC means NORMAL in vim. */
                     if (editor_insert_newline(ed)) {
                         render_input_region(client, ed);
                     } else {
@@ -775,9 +772,8 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                             }
                             return true;
                         } else if (seq[1] == 'A') {  /* Up — walk back through sent history */
-                            /* With text in the buffer, Up moves the caret up a
-                             * display row; recalling sent history would
-                             * silently replace what is being composed. */
+                            /* Recalling history here would replace what is
+                             * being composed. */
                             if (!tnt_keymap_uses_modes(client->keymap) &&
                                 editor_len(ed) > 0) {
                                 if (editor_move_up(
@@ -927,8 +923,6 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                 return true;
             } else if (key == '\n') {  /* Ctrl+J — newline, never send */
                 if (editor_insert_newline(ed)) {
-                    /* The region may have just grown, so the history region
-                     * has to be redrawn shorter before the input region. */
                     render_input_region(client, ed);
                 } else {
                     client_send(client, "\a", 1);
@@ -938,8 +932,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                 const char *input = editor_text(ed);
 
                 if (message_log_encoded_length(input) >= MAX_MESSAGE_LEN) {
-                    /* Escaping pushed the message past the field limit.  Keep
-                     * the text and say so rather than dropping it. */
+                    /* Escaped form is over the limit; keep the text. */
                     client_send(client, "\a", 1);
                     return true;
                 }
