@@ -67,7 +67,7 @@ CONNECT_SCRIPT="$STATE_DIR/connect.expect"
 cat >"$CONNECT_SCRIPT" <<EOF
 set timeout 10
 spawn ssh -e none -p $PORT -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "basic\r"
 expect "›"
 send -- "\003"
@@ -90,7 +90,7 @@ MESSAGE_SCRIPT="$STATE_DIR/message.expect"
 cat >"$MESSAGE_SCRIPT" <<EOF
 set timeout 10
 spawn ssh -e none -p $PORT -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "testuser\r"
 expect "›"
 send -- "test message\r"

@@ -68,7 +68,7 @@ MODES_SCRIPT="$STATE_DIR/modes.expect"
 cat >"$MODES_SCRIPT" <<EOF
 set timeout 15
 spawn ssh $SSH_OPTS vim@127.0.0.1
-sleep 1
+expect "): "
 send -- "vimuser\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -107,7 +107,7 @@ COMMAND_SCRIPT="$STATE_DIR/command.expect"
 cat >"$COMMAND_SCRIPT" <<EOF
 set timeout 15
 spawn ssh $SSH_OPTS vim@127.0.0.1
-sleep 1
+expect "): "
 send -- "vimcmd\r"
 expect "Esc NORMAL"
 send -- "\033"

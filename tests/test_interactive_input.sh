@@ -65,7 +65,7 @@ USERNAME_CANCEL_SCRIPT="$STATE_DIR/username-cancel.expect"
 cat >"$USERNAME_CANCEL_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "\003"
 expect eof
 EOF
@@ -84,7 +84,7 @@ USERNAME_EDIT_SCRIPT="$STATE_DIR/username-edit.expect"
 cat >"$USERNAME_EDIT_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "wrong\025editeduser\r"
 expect "Esc NORMAL"
 send -- "\003"
@@ -110,7 +110,7 @@ EXPECT_SCRIPT="$STATE_DIR/bracketed-paste.expect"
 cat >"$EXPECT_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "tester\r"
 expect "Esc NORMAL"
 send -- "\033\[200~"
@@ -182,7 +182,7 @@ cat >"$LONG_SCRIPT" <<EOF
 set timeout 10
 set payload [string repeat a 1100]
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "longer\r"
 expect "›"
 send -- "\033\[200~"
@@ -268,7 +268,7 @@ HELP_SCRIPT="$STATE_DIR/help.expect"
 cat >"$HELP_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "helper\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -323,7 +323,7 @@ cat >"$HELP_PAGER_KEYS_SCRIPT" <<EOF
 set timeout 10
 stty rows 8 columns 80
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "helppager\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -361,7 +361,7 @@ UNKNOWN_SCRIPT="$STATE_DIR/unknown-command.expect"
 cat >"$UNKNOWN_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "mistype\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -393,7 +393,7 @@ LOCALIZED_COMMANDS_SCRIPT="$STATE_DIR/localized-commands.expect"
 cat >"$LOCALIZED_COMMANDS_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "localized\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -443,7 +443,7 @@ THEME_SCRIPT="$STATE_DIR/theme.expect"
 cat >"$THEME_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "themer\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -496,7 +496,7 @@ COMPLETION_SCRIPT="$STATE_DIR/completion.expect"
 cat >"$COMPLETION_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "completer\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -550,7 +550,7 @@ COMMAND_USAGE_SCRIPT="$STATE_DIR/command-usage.expect"
 cat >"$COMMAND_USAGE_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "usageuser\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -643,7 +643,7 @@ cat >"$COMMAND_OUTPUT_SCROLL_SCRIPT" <<EOF
 set timeout 10
 stty rows 8 columns 80
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "pageruser\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -687,7 +687,7 @@ cat >"$COMMAND_INPUT_WRAP_SCRIPT" <<EOF
 set timeout 10
 stty rows 10 columns 40
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "wrapcmd\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -717,7 +717,7 @@ SYSTEM_MESSAGES_SCRIPT="$STATE_DIR/system-messages.expect"
 cat >"$SYSTEM_MESSAGES_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "systemuser\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -760,7 +760,7 @@ MOTD_SCRIPT="$STATE_DIR/motd.expect"
 cat >"$MOTD_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "motduser\r"
 expect "公告"
 expect "维护窗口"
@@ -788,7 +788,7 @@ VIM_INSERT_ALIASES_SCRIPT="$STATE_DIR/vim-insert-aliases.expect"
 cat >"$VIM_INSERT_ALIASES_SCRIPT" <<EOF
 set timeout 10
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "vimalias\r"
 expect "Esc NORMAL"
 send -- "\033"

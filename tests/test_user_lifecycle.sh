@@ -81,7 +81,7 @@ cat >"$STATE_DIR/bob.expect" <<EOF
 set timeout 30
 set stty_init "rows 24 columns 80"
 spawn ssh $SSH_OPTS bob@127.0.0.1
-sleep 1
+expect "): "
 send -- "bob\r"
 expect "Esc NORMAL"
 send -- "\033"
@@ -155,7 +155,7 @@ cat >"$STATE_DIR/alice.expect" <<EOF
 set timeout 30
 set stty_init "rows 24 columns 80"
 spawn ssh $SSH_OPTS alice@127.0.0.1
-sleep 1
+expect "): "
 send -- "alice\r"
 expect "Esc NORMAL"
 send -- "\033"

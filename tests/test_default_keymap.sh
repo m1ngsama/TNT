@@ -68,7 +68,7 @@ run_case() {
     cat >"$SCRIPT" <<EOF
 set timeout 15
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "plain\r"
 expect "/help"
 $keys

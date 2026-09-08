@@ -77,7 +77,7 @@ cat >"$VIEW_SCRIPT" <<EOF
 set timeout 10
 stty rows 12 columns 100
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
-sleep 1
+expect "): "
 send -- "viewer\r"
 expect "Esc NORMAL"
 send -- "\033"
