@@ -1,10 +1,8 @@
 #!/bin/sh
-# Run the server-launching integration suites concurrently.  Each suite owns a
-# port offset, so the only shared resource is the machine itself.
 set -u
 
 BASE_PORT=${PORT:-2222}
-JOBS=${INTEGRATION_JOBS:-4}
+JOBS=${INTEGRATION_JOBS:-2}
 
 # Slowest first, so the last job slot never waits on a long suite.
 SUITES="interactive_input 2
@@ -28,14 +26,12 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 printf '%s\n' "$SUITES" >"$WORK_DIR/suites"
 
 export BASE_PORT WORK_DIR
-# A suite's own exit status goes to a file so one failure does not stop the
-# rest; xargs would abandon the remaining slots.
+# Status goes to a file because a non-zero exit makes xargs abandon its slots.
 printf '%s\n' "$SUITES" | xargs -P "$JOBS" -n 2 sh -c '
     PORT=$((BASE_PORT + $2)) "./test_$1.sh" >"$WORK_DIR/$1.log" 2>&1
     echo $? >"$WORK_DIR/$1.status"
 ' sh
 
-# Replay in list order so a parallel run reads like a serial one.
 failed=0
 while read -r name _; do
     [ -n "$name" ] || continue

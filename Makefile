@@ -77,9 +77,8 @@ PERF_SERVER_WRAPPER ?=
 PERF_ENFORCE ?= none
 PERF_OUTPUT ?=
 
-# Integration suites that run concurrently.  Each owns a port, so this only
-# bounds how much load one machine takes.
-INTEGRATION_JOBS ?= 4
+# Above 2 the TUI suites flake; see issue 82.
+INTEGRATION_JOBS ?= 2
 
 .PHONY: all clean install install-systemd uninstall uninstall-systemd debug release small release-smoke release-check release-check-strict package-publish-check debian-source-package asan ubsan ubsan-test valgrind check check-cppcheck check-clang-tidy test package-test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test login-timeout-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
 

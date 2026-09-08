@@ -79,8 +79,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cpio expect fish libssh-dev mandoc ruby zsh
 
-    # A strict subset of the gate the pull request already passed: it exists to
-    # catch what only a merge can introduce, so no check may live here alone.
+    # Keep this a subset of pr-gate: no check may live only on push.
     - name: Build and run the fast suites
       run: |
         make
