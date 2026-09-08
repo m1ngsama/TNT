@@ -454,7 +454,10 @@ fi
 stop_server
 
 rm -f "$ISOLATION_COORD_FILE.event-1" "$ISOLATION_COORD_FILE.event-2"
+# Eight /bin/sh modules coordinate through marker files here; the shipped
+# 100 ms deadline made this the suite's load-sensitive case on CI.
 start_server "$ISOLATION_MODULE_PATHS" "$STATE_DIR/isolation-server.log" \
+    TNT_MODULE_RESPONSE_TIMEOUT_MS=3000 \
     TNT_MODULE_COORD_FILE="$ISOLATION_COORD_FILE"
 wait_for_health "$STATE_DIR/isolation-server.log" "isolation server"
 
@@ -504,9 +507,8 @@ done
 # deadline.
 #
 # A later response timeout on some *other* event says nothing about
-# concurrency, and on a loaded runner the deadline
-# (TNT_MODULE_RESPONSE_TIMEOUT_MS, a 100 ms compile-time constant) is easy to
-# miss.  It is reported, not failed.
+# concurrency, and this case already raises TNT_MODULE_RESPONSE_TIMEOUT_MS so
+# a loaded runner cannot miss the deadline.  It is reported, not failed.
 if [ "$ISOLATED_RESPONSES" -eq 1 ]; then
     echo "✓ module workers resolve both forward and reverse dependencies"
     PASS=$((PASS + 1))

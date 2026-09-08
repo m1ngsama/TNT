@@ -90,7 +90,7 @@ bool tnt_module_parse_message_create(const char *line,
     if (plain_text[0] == '\0' ||
         strlen(plain_text) >= sizeof(out->plain_text) ||
         !utf8_is_valid_string(plain_text) ||
-        utf8_contains_control(plain_text)) {
+        message_log_content_has_forbidden_control(plain_text)) {
         return false;
     }
 

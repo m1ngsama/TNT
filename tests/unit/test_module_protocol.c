@@ -77,14 +77,20 @@ TEST(parse_message_create_rejects_empty_or_control_text) {
     assert(!tnt_module_parse_message_create(
         "{\"type\":\"message.create\",\"plain_text\":\"\"}", &response));
     assert(!tnt_module_parse_message_create(
-        "{\"type\":\"message.create\",\"plain_text\":\"line\\nnext\"}",
-        &response));
-    assert(!tnt_module_parse_message_create(
         "{\"type\":\"message.create\",\"plain_text\":\"\\u001b[2J\"}",
         &response));
     assert(!tnt_module_parse_message_create(
         "{\"type\":\"message.create\",\"plain_text\":\"next \xC2\x9B"
         "31m\"}", &response));
+}
+
+TEST(parse_message_create_accepts_a_newline) {
+    tnt_module_message_create_t response;
+
+    assert(tnt_module_parse_message_create(
+        "{\"type\":\"message.create\",\"plain_text\":\"line\\nnext\"}",
+        &response));
+    assert(strcmp(response.plain_text, "line\nnext") == 0);
 }
 
 TEST(parse_message_create_rejects_invalid_utf8_text) {
@@ -118,6 +124,7 @@ int main(void) {
     RUN_TEST(parse_message_create_accepts_utf8_plain_text);
     RUN_TEST(parse_message_create_rejects_wrong_type);
     RUN_TEST(parse_message_create_rejects_empty_or_control_text);
+    RUN_TEST(parse_message_create_accepts_a_newline);
     RUN_TEST(parse_message_create_rejects_invalid_utf8_text);
     RUN_TEST(parse_message_create_rejects_overlong_text);
 

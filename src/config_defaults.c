@@ -52,6 +52,13 @@ const tnt_int_config_spec_t TNT_CONFIG_SSH_LOG_LEVEL = {
     TNT_MAX_SSH_LOG_LEVEL,
 };
 
+const tnt_int_config_spec_t TNT_CONFIG_MODULE_RESPONSE_TIMEOUT = {
+    "TNT_MODULE_RESPONSE_TIMEOUT_MS",
+    TNT_DEFAULT_MODULE_RESPONSE_TIMEOUT_MS,
+    TNT_MIN_MODULE_RESPONSE_TIMEOUT_MS,
+    TNT_MAX_MODULE_RESPONSE_TIMEOUT_MS,
+};
+
 int tnt_config_env_int(const tnt_int_config_spec_t *spec) {
     if (!spec) {
         return 0;

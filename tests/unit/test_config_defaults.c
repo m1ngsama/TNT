@@ -22,8 +22,37 @@ TEST(specs_expose_runtime_defaults) {
     assert(TNT_CONFIG_RATE_LIMIT.fallback ==
            TNT_DEFAULT_RATE_LIMIT_ENABLED);
     assert(TNT_CONFIG_IDLE_TIMEOUT.fallback == TNT_DEFAULT_IDLE_TIMEOUT);
+    assert(TNT_CONFIG_MODULE_RESPONSE_TIMEOUT.fallback ==
+           TNT_DEFAULT_MODULE_RESPONSE_TIMEOUT_MS);
     assert(TNT_CONFIG_PORT.min_value == TNT_MIN_PORT);
     assert(TNT_CONFIG_PORT.max_value == TNT_MAX_PORT);
+}
+
+TEST(module_response_timeout_keeps_its_shipped_default) {
+    int out = 0;
+
+    /* Making the deadline tunable must not move it. */
+    assert(TNT_DEFAULT_MODULE_RESPONSE_TIMEOUT_MS == 100);
+
+    assert(tnt_config_parse_int("250", &TNT_CONFIG_MODULE_RESPONSE_TIMEOUT,
+                                &out));
+    assert(out == 250);
+    /* Below the floor nothing real can answer; above the ceiling one stuck
+     * module holds up the whole room. */
+    assert(!tnt_config_parse_int("9", &TNT_CONFIG_MODULE_RESPONSE_TIMEOUT,
+                                 &out));
+    assert(!tnt_config_parse_int("5001", &TNT_CONFIG_MODULE_RESPONSE_TIMEOUT,
+                                 &out));
+
+    unsetenv(TNT_CONFIG_MODULE_RESPONSE_TIMEOUT.env_name);
+    assert(tnt_config_env_int(&TNT_CONFIG_MODULE_RESPONSE_TIMEOUT) ==
+           TNT_DEFAULT_MODULE_RESPONSE_TIMEOUT_MS);
+    setenv(TNT_CONFIG_MODULE_RESPONSE_TIMEOUT.env_name, "1500", 1);
+    assert(tnt_config_env_int(&TNT_CONFIG_MODULE_RESPONSE_TIMEOUT) == 1500);
+    setenv(TNT_CONFIG_MODULE_RESPONSE_TIMEOUT.env_name, "0", 1);
+    assert(tnt_config_env_int(&TNT_CONFIG_MODULE_RESPONSE_TIMEOUT) ==
+           TNT_DEFAULT_MODULE_RESPONSE_TIMEOUT_MS);
+    unsetenv(TNT_CONFIG_MODULE_RESPONSE_TIMEOUT.env_name);
 }
 
 TEST(parse_uses_spec_ranges) {
@@ -59,8 +88,9 @@ TEST(env_reader_uses_fallback_and_range) {
 int main(void) {
     printf("Running config defaults unit tests...\n\n");
     RUN_TEST(specs_expose_runtime_defaults);
+    RUN_TEST(module_response_timeout_keeps_its_shipped_default);
     RUN_TEST(parse_uses_spec_ranges);
     RUN_TEST(env_reader_uses_fallback_and_range);
-    printf("\nAll 3 tests passed!\n");
+    printf("\nAll 4 tests passed!\n");
     return 0;
 }
