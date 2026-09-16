@@ -12,7 +12,7 @@ pkgbase = tnt-chat
 	depends = openssh
 	source = tnt-chat-v1.3.2-source.tar.gz::https://github.com/m1ngsama/TNT/releases/download/v1.3.2/tnt-chat-v1.3.2-source.tar.gz
 	source = tnt-chat.sysusers
-	sha256sums = SKIP
+	sha256sums = 8f7f7a60f2c0766b8648122bcdf72121d409453f4d0cb4a3f095dc793cee09b4
 	sha256sums = 8a1f7dfbdc9f1305c4ed50d80e89f91333ffdf937890c497f93e41abaf76e3ed
 
 pkgname = tnt-chat
