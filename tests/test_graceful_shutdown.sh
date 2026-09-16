@@ -61,7 +61,7 @@ wait_for_health() {
         out=$(ssh_exec localhost health 2>/dev/null || true)
         [ "$out" = "ok" ] && return 0
         [ "$(date +%s)" -lt "$deadline" ] || return 1
-        sleep 0.05
+        sleep 0.5
     done
 }
 

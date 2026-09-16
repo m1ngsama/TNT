@@ -37,6 +37,7 @@ wait_for_health() {
     label=$2
     HEALTH_OUTPUT=""
     deadline=$(( $(date +%s) + 10 ))
+    tnt_wait_listening "$log_file" 10 || true
     while :; do
         if ! kill -0 "$SERVER_PID" 2>/dev/null; then
             echo "x $label failed to start"
@@ -46,7 +47,7 @@ wait_for_health() {
         HEALTH_OUTPUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
         [ "$HEALTH_OUTPUT" = "ok" ] && return
         [ "$(date +%s)" -lt "$deadline" ] || break
-        sleep 0.05
+        sleep 0.5
     done
     return 1
 }

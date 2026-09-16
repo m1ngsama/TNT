@@ -2,6 +2,8 @@
 # Basic functional tests
 # Usage: ./test_basic.sh
 
+. ./lib.sh
+
 PORT=${PORT:-2222}
 PASS=0
 FAIL=0
@@ -23,6 +25,7 @@ trap cleanup EXIT
 wait_for_health() {
     out=""
     deadline=$(( $(date +%s) + 15 ))
+    tnt_wait_listening "$STATE_DIR/server.log" 15 || return 1
     while :; do
         if [ -n "$SERVER_PID" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
             return 1
@@ -30,7 +33,7 @@ wait_for_health() {
         out=$(ssh $SSH_HEALTH_OPTS localhost health 2>/dev/null || true)
         [ "$out" = "ok" ] && return 0
         [ "$(date +%s)" -lt "$deadline" ] || return 1
-        sleep 0.05
+        sleep 0.5
     done
 }
 

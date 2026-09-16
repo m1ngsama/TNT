@@ -155,3 +155,9 @@ tnt_summary() {
     echo "Some tests failed"
     exit 1
 }
+
+# Wait for the listening line in $1, then confirm once over ssh.  Polling the
+# health command itself burns an ephemeral port per attempt, so a tight
+# interval there exhausts the local port range and the next connect fails with
+# EADDRNOTAVAIL.  The log file is free to poll; the connection is not.
+tnt_wait_listening() { tnt_poll_until "${2:-15}" tnt_file_has "$1" "TNT chat server listening"; }
