@@ -62,6 +62,12 @@ tnt_file_count_at_least() {
     [ "$(grep -c "$2" "$1" 2>/dev/null || echo 0)" -ge "$3" ]
 }
 
+tnt_file_exists() { [ -f "$1" ]; }
+tnt_pid_gone() { ! kill -0 "$1" 2>/dev/null; }
+
+tnt_wait_for_file() { tnt_poll_until "${2:-5}" tnt_file_exists "$1"; }
+tnt_wait_for_exit() { tnt_poll_until "${2:-5}" tnt_pid_gone "$1"; }
+
 tnt_wait_for() { tnt_poll_until "${3:-5}" tnt_file_has "$1" "$2"; }
 tnt_wait_for_fixed() { tnt_poll_until "${3:-5}" tnt_file_has_fixed "$1" "$2"; }
 

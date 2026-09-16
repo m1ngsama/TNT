@@ -1,5 +1,7 @@
 #!/bin/sh
 
+. ./lib.sh
+
 PORT=${PORT:-12352}
 PASS=0
 FAIL=0
@@ -34,7 +36,8 @@ wait_for_health() {
     log_file=$1
     label=$2
     HEALTH_OUTPUT=""
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
+    deadline=$(( $(date +%s) + 10 ))
+    while :; do
         if ! kill -0 "$SERVER_PID" 2>/dev/null; then
             echo "x $label failed to start"
             sed -n '1,220p' "$log_file"
@@ -42,7 +45,8 @@ wait_for_health() {
         fi
         HEALTH_OUTPUT=$(ssh $SSH_OPTS localhost health 2>/dev/null || true)
         [ "$HEALTH_OUTPUT" = "ok" ] && return
-        sleep 1
+        [ "$(date +%s)" -lt "$deadline" ] || break
+        sleep 0.05
     done
     return 1
 }
@@ -358,15 +362,12 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-FOUND=0
-for _ in 1 2 3 4 5; do
+echo_module_answered() {
     TAIL_OUTPUT=$(ssh $SSH_OPTS localhost "tail -n 5" 2>/dev/null || true)
-    if printf '%s\n' "$TAIL_OUTPUT" | grep -q 'module:echo-module.*echo: hello module'; then
-        FOUND=1
-        break
-    fi
-    sleep 1
-done
+    printf '%s\n' "$TAIL_OUTPUT" | grep -q 'module:echo-module.*echo: hello module'
+}
+FOUND=0
+tnt_poll_until 5 echo_module_answered && FOUND=1
 
 if [ "$FOUND" -eq 1 ]; then
     echo "✓ batched module responses are persisted and visible"
@@ -403,24 +404,13 @@ else
 fi
 
 TIMEOUT_DISABLED=0
-for _ in 1 2 3 4 5; do
-    if grep -q 'disabling timeout-module after response timeout' \
-        "$STATE_DIR/timeout-server.log"; then
-        TIMEOUT_DISABLED=1
-        break
-    fi
-    sleep 1
-done
+tnt_poll_until 5 tnt_file_has "$STATE_DIR/timeout-server.log" \
+    'disabling timeout-module after response timeout' && TIMEOUT_DISABLED=1
 
 HELPER_PID=$(sed -n '1p' "$TIMEOUT_MODULE_DIR/helper.pid")
+helper_child_gone() { ! kill -0 "$HELPER_PID" 2>/dev/null; }
 HELPER_STOPPED=0
-for _ in 1 2 3 4 5; do
-    if ! kill -0 "$HELPER_PID" 2>/dev/null; then
-        HELPER_STOPPED=1
-        break
-    fi
-    sleep 1
-done
+tnt_poll_until 5 helper_child_gone && HELPER_STOPPED=1
 
 if [ "$TIMEOUT_DISABLED" -eq 1 ] && [ "$HELPER_STOPPED" -eq 1 ]; then
     echo "✓ response timeout disables module and terminates its process group"
@@ -482,22 +472,19 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-ISOLATED_RESPONSES=0
-for _ in 1 2 3 4 5; do
+both_isolated_modules_answered_twice() {
     TAIL_OUTPUT=$(ssh $SSH_OPTS localhost "tail -n 50" 2>/dev/null || true)
-    if printf '%s\n' "$TAIL_OUTPUT" | \
-           grep -q 'module:isolation-1.*event 1 isolation-1' &&
-       printf '%s\n' "$TAIL_OUTPUT" | \
-           grep -q 'module:isolation-8.*event 1 isolation-8' &&
-       printf '%s\n' "$TAIL_OUTPUT" | \
-           grep -q 'module:isolation-1.*event 2 isolation-1' &&
-       printf '%s\n' "$TAIL_OUTPUT" | \
-           grep -q 'module:isolation-8.*event 2 isolation-8'; then
-        ISOLATED_RESPONSES=1
-        break
-    fi
-    sleep 1
-done
+    printf '%s\n' "$TAIL_OUTPUT" | \
+        grep -q 'module:isolation-1.*event 1 isolation-1' &&
+    printf '%s\n' "$TAIL_OUTPUT" | \
+        grep -q 'module:isolation-8.*event 1 isolation-8' &&
+    printf '%s\n' "$TAIL_OUTPUT" | \
+        grep -q 'module:isolation-1.*event 2 isolation-1' &&
+    printf '%s\n' "$TAIL_OUTPUT" | \
+        grep -q 'module:isolation-8.*event 2 isolation-8'
+}
+ISOLATED_RESPONSES=0
+tnt_poll_until 5 both_isolated_modules_answered_twice && ISOLATED_RESPONSES=1
 
 # All four messages proves the workers ran concurrently: isolation-1 blocks on
 # a marker only isolation-8 can write, and isolation-8 blocks on one only
@@ -548,13 +535,8 @@ else
 fi
 
 DISABLED=0
-for _ in 1 2 3 4 5; do
-    if grep -q 'too many responses' "$STATE_DIR/flood-server.log"; then
-        DISABLED=1
-        break
-    fi
-    sleep 1
-done
+tnt_poll_until 5 tnt_file_has "$STATE_DIR/flood-server.log" 'too many responses' &&
+    DISABLED=1
 
 if [ "$DISABLED" -eq 1 ]; then
     echo "✓ flood module is disabled after too many responses"
@@ -611,13 +593,8 @@ else
 fi
 
 DISABLED=0
-for _ in 1 2 3 4 5; do
-    if grep -q 'invalid-module after invalid responses' "$STATE_DIR/invalid-server.log"; then
-        DISABLED=1
-        break
-    fi
-    sleep 1
-done
+tnt_poll_until 5 tnt_file_has "$STATE_DIR/invalid-server.log" \
+    'invalid-module after invalid responses' && DISABLED=1
 
 if [ "$DISABLED" -eq 1 ]; then
     echo "✓ invalid-response module is disabled after repeated errors"
