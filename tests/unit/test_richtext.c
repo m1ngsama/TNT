@@ -81,6 +81,196 @@ TEST(wrap_rejects_bad_arguments) {
     assert(richtext_wrap("x", 10, spans, 0) == 0);
 }
 
+
+static size_t parse(const char *in, char *out, size_t out_size, size_t *len,
+                    richtext_run_t *runs, size_t max_runs) {
+    return richtext_parse(in, out, out_size, len, runs, max_runs);
+}
+
+static int run_is(const char *visible, richtext_run_t run,
+                  richtext_style_t style, const char *expected) {
+    size_t len = strlen(expected);
+    return run.style == style && run.len == len &&
+           memcmp(visible + run.offset, expected, len) == 0;
+}
+
+TEST(parse_plain_text_has_no_runs) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("hello world", out, sizeof(out), &len, runs, 8) == 0);
+    assert(strcmp(out, "hello world") == 0);
+    assert(len == 11);
+}
+
+TEST(parse_strips_bold_markers) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("a **big** deal", out, sizeof(out), &len, runs, 8) == 1);
+    assert(strcmp(out, "a big deal") == 0);
+    assert(run_is(out, runs[0], RICHTEXT_BOLD, "big"));
+}
+
+TEST(parse_strips_inline_code_markers) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("run `make test` now", out, sizeof(out), &len, runs, 8) == 1);
+    assert(strcmp(out, "run make test now") == 0);
+    assert(run_is(out, runs[0], RICHTEXT_CODE, "make test"));
+}
+
+TEST(parse_leaves_an_unclosed_marker_literal) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("**never closed", out, sizeof(out), &len, runs, 8) == 0);
+    assert(strcmp(out, "**never closed") == 0);
+
+    assert(parse("a `dangling", out, sizeof(out), &len, runs, 8) == 0);
+    assert(strcmp(out, "a `dangling") == 0);
+}
+
+TEST(parse_leaves_empty_markers_literal) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("****", out, sizeof(out), &len, runs, 8) == 0);
+    assert(strcmp(out, "****") == 0);
+
+    assert(parse("``", out, sizeof(out), &len, runs, 8) == 0);
+    assert(strcmp(out, "``") == 0);
+}
+
+TEST(parse_does_not_read_bold_inside_code) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("`a **b** c`", out, sizeof(out), &len, runs, 8) == 1);
+    assert(strcmp(out, "a **b** c") == 0);
+    assert(run_is(out, runs[0], RICHTEXT_CODE, "a **b** c"));
+}
+
+TEST(parse_marks_a_fenced_block_as_code) {
+    char out[128];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("before\n```\nx = 1\ny = 2\n```\nafter", out, sizeof(out),
+                 &len, runs, 8) == 1);
+    assert(strcmp(out, "before\nx = 1\ny = 2\nafter") == 0);
+    assert(run_is(out, runs[0], RICHTEXT_CODE, "x = 1\ny = 2"));
+}
+
+TEST(parse_leaves_an_unclosed_fence_literal) {
+    char out[128];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("```\nstill open", out, sizeof(out), &len, runs, 8) == 0);
+    assert(strcmp(out, "```\nstill open") == 0);
+}
+
+TEST(parse_highlights_a_bare_url) {
+    char out[128];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("see https://tnt.example/x now", out, sizeof(out), &len,
+                 runs, 8) == 1);
+    assert(strcmp(out, "see https://tnt.example/x now") == 0);
+    assert(run_is(out, runs[0], RICHTEXT_URL, "https://tnt.example/x"));
+}
+
+TEST(parse_does_not_highlight_a_url_inside_code) {
+    char out[128];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("`https://x.example`", out, sizeof(out), &len, runs, 8) == 1);
+    assert(run_is(out, runs[0], RICHTEXT_CODE, "https://x.example"));
+}
+
+TEST(parse_keeps_runs_ordered_and_disjoint) {
+    char out[128];
+    size_t len;
+    richtext_run_t runs[8];
+    size_t count = parse("**a** plain `b` https://c.example", out, sizeof(out),
+                         &len, runs, 8);
+
+    assert(count == 3);
+    assert(runs[0].style == RICHTEXT_BOLD);
+    assert(runs[1].style == RICHTEXT_CODE);
+    assert(runs[2].style == RICHTEXT_URL);
+    for (size_t i = 1; i < count; i++) {
+        assert(runs[i].offset >= runs[i - 1].offset + runs[i - 1].len);
+    }
+}
+
+TEST(parse_wrapping_measures_the_visible_text) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[8];
+    richtext_span_t spans[4];
+
+    /* The markers must not count towards the width, or the row the renderer
+     * draws and the row count the history uses disagree. */
+    parse("**abcde**", out, sizeof(out), &len, runs, 8);
+    assert(richtext_wrap(out, 5, spans, 4) == 1);
+}
+
+TEST(parse_without_a_run_list_strips_the_same_markers) {
+    char with[64];
+    char without[64];
+    size_t a, b;
+    richtext_run_t runs[8];
+
+    /* The row count asks for no runs and the renderer asks for runs; if the
+     * two stripped differently they would disagree on where a line breaks,
+     * which is the bug PR #79 fixed. */
+    parse("**a** `b` c", with, sizeof(with), &a, runs, 8);
+    parse("**a** `b` c", without, sizeof(without), &b, NULL, 8);
+    assert(a == b && strcmp(with, without) == 0);
+}
+
+TEST(parse_full_run_table_keeps_markers_literal) {
+    char out[64];
+    size_t len;
+    richtext_run_t runs[1];
+
+    /* The second pair has nowhere to go, so it must survive as text rather
+     * than lose its markers and its styling both. */
+    assert(parse("**a** **b**", out, sizeof(out), &len, runs, 1) == 1);
+    assert(strcmp(out, "a **b**") == 0);
+}
+
+TEST(parse_rejects_bad_arguments) {
+    char out[8];
+    size_t len;
+    richtext_run_t runs[4];
+
+    assert(parse(NULL, out, sizeof(out), &len, runs, 4) == 0);
+    assert(parse("x", NULL, sizeof(out), &len, runs, 4) == 0);
+    assert(parse("x", out, 0, &len, runs, 4) == 0);
+}
+
+TEST(parse_truncates_rather_than_overflowing) {
+    char out[8];
+    size_t len;
+    richtext_run_t runs[4];
+
+    parse("**abcdefghijklmnop**", out, sizeof(out), &len, runs, 4);
+    assert(len < sizeof(out));
+    assert(out[len] == '\0');
+}
+
 int main(void) {
     printf("Running richtext unit tests...\n\n");
     RUN_TEST(wrap_short_text_is_one_line);
@@ -90,6 +280,22 @@ int main(void) {
     RUN_TEST(wrap_never_splits_an_emoji_cluster);
     RUN_TEST(wrap_treats_newline_as_a_hard_break);
     RUN_TEST(wrap_rejects_bad_arguments);
+    RUN_TEST(parse_plain_text_has_no_runs);
+    RUN_TEST(parse_strips_bold_markers);
+    RUN_TEST(parse_strips_inline_code_markers);
+    RUN_TEST(parse_leaves_an_unclosed_marker_literal);
+    RUN_TEST(parse_leaves_empty_markers_literal);
+    RUN_TEST(parse_does_not_read_bold_inside_code);
+    RUN_TEST(parse_marks_a_fenced_block_as_code);
+    RUN_TEST(parse_leaves_an_unclosed_fence_literal);
+    RUN_TEST(parse_highlights_a_bare_url);
+    RUN_TEST(parse_does_not_highlight_a_url_inside_code);
+    RUN_TEST(parse_keeps_runs_ordered_and_disjoint);
+    RUN_TEST(parse_wrapping_measures_the_visible_text);
+    RUN_TEST(parse_without_a_run_list_strips_the_same_markers);
+    RUN_TEST(parse_full_run_table_keeps_markers_literal);
+    RUN_TEST(parse_rejects_bad_arguments);
+    RUN_TEST(parse_truncates_rather_than_overflowing);
     printf("\nAll %d richtext tests passed!\n", tests_passed);
     return 0;
 }

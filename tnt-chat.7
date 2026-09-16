@@ -263,6 +263,32 @@ The recipient receives a terminal bell and highlight.
 A message that is wider than the terminal wraps onto as many rows as it
 needs, and the continuation rows align under the first row's text.
 Wrapping never splits a character, an emoji, or a flag.
+.SS Formatting
+A small subset of markdown is rendered when the message is drawn.
+The markers are ordinary printable characters and are removed from the
+screen; the log keeps the text as it was typed.
+.TP
+.BI ** text **
+Bold.
+.TP
+.BI \(ga text \(ga
+Inline code.
+Markers inside it are literal.
+.TP
+.B \(ga\(ga\(ga
+On a line of its own, opens and closes a code block.
+.TP
+.BI http:// ...
+An
+.B http
+or
+.B https
+URL is underlined where it stands.
+.P
+Headings, lists, tables, italics, and nesting are not rendered.
+A marker that never closes stays literal, so ordinary text is never eaten.
+Rendering adds no control character that the message itself may not
+contain: the accepted input is unchanged.
 .P
 The room keeps the 100 most recent public messages in memory.
 Use

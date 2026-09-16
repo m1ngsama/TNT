@@ -43,13 +43,18 @@ int history_view_message_content_width(const message_t *msg, int width) {
 
 int history_view_message_lines(const message_t *msg, int width) {
     richtext_span_t spans[HISTORY_VIEW_MAX_WRAPPED_ROWS];
+    char visible[MAX_MESSAGE_LEN];
     size_t rows;
 
     if (!msg || width < 1) {
         return 1;
     }
 
-    rows = richtext_wrap(msg->content,
+    /* Count rows over the same visible text the renderer draws, or markers
+     * that never reach the screen push the count out by a row. */
+    richtext_parse(msg->content, visible, sizeof(visible), NULL, NULL,
+                   RICHTEXT_MAX_RUNS);
+    rows = richtext_wrap(visible,
                          history_view_message_content_width(msg, width), spans,
                          HISTORY_VIEW_MAX_WRAPPED_ROWS);
     return rows < 1 ? 1 : (int)rows;
