@@ -1,0 +1,49 @@
+# Expect helpers shared by the interactive suites.
+
+# The server redraws the input region once per key and every redraw opens with
+# this prompt, so matching it means the key was processed.  It carries no
+# width or content, unlike the hint bar that several suites used to wait on.
+# Only rows scrolled into view carry it, so input taller than EDITOR_MAX_ROWS
+# needs a different barrier.
+set TNT_INPUT_PROMPT "\033\[2;37m›\033\[0m "
+
+# Send one key and wait for its redraw.  Keys batched into a single send are
+# redrawn once per key only when the server reads them in one go, so send them
+# one at a time with send_repeat rather than trusting the batch to coalesce.
+proc send_wait {keys} {
+    send -- $keys
+    expect {
+        -exact $::TNT_INPUT_PROMPT {}
+        timeout {
+            puts "\nsend_wait: no input redraw after: $keys"
+            exit 1
+        }
+    }
+    # Absorb redraws this key already produced, so the next barrier waits on
+    # the next key instead of being satisfied by output that has landed.
+    expect {
+        -timeout 0 -exact $::TNT_INPUT_PROMPT { exp_continue }
+        timeout {}
+    }
+}
+
+# A lone ESC only reads as one once the server's 50 ms sequence window closes
+# (ssh_channel_read_timeout in src/input.c); sending the next key sooner has
+# it swallowed as the sequence body.  The idle time here is the scenario, not
+# a synchronisation guess, and the server may not redraw at all for it.
+proc send_lone_escape {} {
+    send -- "\033"
+    sleep 0.2
+}
+
+proc send_repeat {keys count} {
+    for {set i 0} {$i < $count} {incr i} {
+        send_wait $keys
+    }
+}
+
+# Send the final Enter and wait for the redraw that follows it.  Closing the
+# session without this drops the connection before the server reads the CR.
+proc send_enter {} {
+    send_wait "\r"
+}

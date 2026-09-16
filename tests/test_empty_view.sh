@@ -1,63 +1,22 @@
 #!/bin/sh
 # Regression test for the empty/filtered-empty main view.
 
+. ./lib.sh
+
 PORT=${PORT:-12350}
-PASS=0
-FAIL=0
-BIN="../tnt"
-SERVER_PID=""
-STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-empty-view-test.XXXXXX")
+trap tnt_cleanup EXIT
 
-cleanup() {
-    if [ -n "$SERVER_PID" ]; then
-        kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
-    fi
-    rm -rf "$STATE_DIR"
-}
-
-trap cleanup EXIT
-
-if ! command -v expect >/dev/null 2>&1; then
-    echo "expect not installed; skipping empty view test"
-    exit 0
-fi
-
-if [ ! -f "$BIN" ]; then
-    echo "Error: Binary $BIN not found. Run make first."
-    exit 1
-fi
-
-SSH_OPTS="-e none -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
+tnt_skip_without_expect "empty view test"
+tnt_require_binary
+tnt_state_dir empty-view-test
 
 echo "=== TNT Empty View Test ==="
 
-TNT_LANG=en TNT_KEYMAP=vim TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" --bind 127.0.0.1 \
-    -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
-SERVER_PID=$!
+TNT_KEYMAP=vim
+export TNT_KEYMAP
+tnt_start_server "$PORT" "$STATE_DIR"
 
-SERVER_READY=0
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "x Server failed to start"
-        sed -n '1,120p' "$STATE_DIR/server.log"
-        exit 1
-    fi
-    if grep -q "TNT chat server listening" "$STATE_DIR/server.log"; then
-        SERVER_READY=1
-        break
-    fi
-    sleep 1
-done
-
-if [ "$SERVER_READY" -eq 1 ]; then
-    echo "✓ server started"
-    PASS=$((PASS + 1))
-else
-    echo "x Server did not become ready"
-    sed -n '1,120p' "$STATE_DIR/server.log"
-    exit 1
-fi
+SSH_OPTS=$(tnt_ssh_opts "$PORT")
 
 VIEW_SCRIPT="$STATE_DIR/empty-view.expect"
 cat >"$VIEW_SCRIPT" <<EOF
@@ -93,17 +52,11 @@ expect eof
 EOF
 
 if expect "$VIEW_SCRIPT" >"$STATE_DIR/empty-view.log" 2>&1; then
-    echo "✓ filtered-empty main view shows a state hint"
-    PASS=$((PASS + 1))
+    pass "filtered-empty main view shows a state hint"
 else
-    echo "x filtered-empty main view did not show state hint"
+    fail "filtered-empty main view did not show state hint"
     sed -n '1,220p' "$STATE_DIR/empty-view.log"
     sed -n '1,120p' "$STATE_DIR/server.log"
-    FAIL=$((FAIL + 1))
 fi
 
-echo ""
-echo "PASSED: $PASS"
-echo "FAILED: $FAIL"
-[ "$FAIL" -eq 0 ] && echo "All tests passed" || echo "Some tests failed"
-exit "$FAIL"
+tnt_summary
