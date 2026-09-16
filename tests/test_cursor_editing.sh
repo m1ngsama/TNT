@@ -21,11 +21,12 @@ tnt_start_server "$PORT" "$STATE_DIR"
 LOG="$STATE_DIR/messages.log"
 
 check_case() {
-    if tnt_wait_for "$LOG" "$1"; then
-        pass "$2"
+    if tnt_wait_for "$LOG" "$2"; then
+        pass "$3"
     else
-        fail "$3"
+        fail "$4"
         cat "$LOG" 2>/dev/null
+        tnt_dump_session "$1"
     fi
 }
 
@@ -37,7 +38,7 @@ send_repeat "\033\[D" 7
 send_wait "l"
 send_enter
 '
-check_case "hello world" \
+check_case "left-arrow" "hello world" \
     "left arrow edits in place instead of discarding the message" \
     "message was lost or not edited at the cursor"
 
@@ -48,7 +49,7 @@ send_wait "\033\[H"
 send_wait "X"
 send_enter
 '
-check_case "Xabc" \
+check_case "home" "Xabc" \
     "Home moves the caret to the start of the line" \
     "Home did not move the caret"
 
@@ -59,7 +60,7 @@ send_repeat "\033\[D" 2
 send_wait "\033\[3~"
 send_enter
 '
-check_case "|abc$" \
+check_case "delete" "|abc$" \
     "Delete removes the character under the caret" \
     "Delete did not remove the character under the caret"
 

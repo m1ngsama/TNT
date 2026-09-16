@@ -22,11 +22,12 @@ tnt_start_server "$PORT" "$STATE_DIR"
 LOG="$STATE_DIR/messages.log"
 
 check_case() {
-    if tnt_wait_for "$LOG" "$1"; then
-        pass "$2"
+    if tnt_wait_for "$LOG" "$2"; then
+        pass "$3"
     else
-        fail "$3"
+        fail "$4"
         cat "$LOG" 2>/dev/null
+        tnt_dump_session "$1"
     fi
 }
 
@@ -35,7 +36,7 @@ tnt_expect_session "plain" '
 send_wait ":list"
 send_enter
 '
-check_case "|:list$" \
+check_case "plain" "|:list$" \
     "a colon types instead of opening COMMAND" \
     "the colon was treated as a command prefix"
 
@@ -45,7 +46,7 @@ send_lone_escape
 send_wait "after-escape"
 send_enter
 '
-check_case "|after-escape$" \
+check_case "plain" "|after-escape$" \
     "Esc does not leave the input" \
     "Esc changed modes, so the following keys were lost"
 
@@ -54,7 +55,7 @@ tnt_expect_session "plain" '
 send_wait "/me waves"
 send_enter
 '
-check_case "|\*|plain waves$" \
+check_case "plain" "|\*|plain waves$" \
     "a leading slash runs the command" \
     "/me was not dispatched as a command"
 
@@ -64,7 +65,7 @@ tnt_expect_session "plain" '
 send_wait "//slash"
 send_enter
 '
-check_case "|/slash$" \
+check_case "plain" "|/slash$" \
     "a doubled slash sends a literal slash" \
     "// did not produce a literal slash"
 
@@ -73,7 +74,7 @@ tnt_expect_session "plain" '
 send_wait "/usr/local/bin is where it lives"
 send_enter
 '
-check_case "|/usr/local/bin is where it lives$" \
+check_case "plain" "|/usr/local/bin is where it lives$" \
     "an unknown slash word sends as text" \
     "a path starting with / was swallowed"
 

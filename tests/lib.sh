@@ -129,7 +129,13 @@ expect "/help"
 $_body
 close
 EOF
-    expect -f "$_script" >/dev/null 2>&1
+    expect -f "$_script" >"$STATE_DIR/$_name.session.log" 2>&1
+}
+
+# Dump what a session actually saw.  Discarding it hides the case where ssh
+# never connected at all, which reads identically to a failed assertion.
+tnt_dump_session() {
+    [ -f "$STATE_DIR/$1.session.log" ] && sed -n '1,60p' "$STATE_DIR/$1.session.log"
 }
 
 tnt_summary() {
