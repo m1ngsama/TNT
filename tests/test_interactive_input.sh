@@ -80,8 +80,10 @@ send -- "tester\r"
 expect "Esc NORMAL"
 send -- "\033\[200~"
 send -- "line1\nline2\nline3"
-send_wait "\033\[201~"
-send_enter
+send -- "\033\[201~"
+sleep 1
+send -- "\r"
+sleep 1
 send -- "\003"
 sleep 0.2
 send -- "\003"

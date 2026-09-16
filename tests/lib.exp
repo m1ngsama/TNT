@@ -14,6 +14,9 @@ match_max -d 200000
 # Send one key and wait for its redraw.  Keys batched into a single send are
 # redrawn once per key only when the server reads them in one go, so send them
 # one at a time with send_repeat rather than trusting the batch to coalesce.
+#
+# Bracketed paste is out of scope: it redraws on its own schedule and its
+# cases kept their waits after this barrier lost records under a parallel run.
 proc send_wait {keys} {
     send -- $keys
     expect {
