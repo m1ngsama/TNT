@@ -142,7 +142,7 @@ bob_listed_online() {
     printf '%s\n' "$USERS_JSON" | grep -q '"bob"'
 }
 USERS_JSON=""
-tnt_poll_until 5 bob_listed_online
+tnt_poll_connection 5 bob_listed_online
 if printf '%s\n' "$USERS_JSON" | grep -q '"bob"'; then
     echo "✓ exec users sees active TUI user"
     PASS=$((PASS + 1))

@@ -181,7 +181,7 @@ PY
         users=$(ssh_exec localhost users --json 2>/dev/null || true)
         printf '%s\n' "$users" | grep -q 'graceful-user'
     }
-    tnt_poll_until 5 graceful_user_online && active_ready=1
+    tnt_poll_connection 5 graceful_user_online && active_ready=1
 
     if [ "$active_ready" -eq 1 ] && wait_for_file "$STATE_DIR/preauth.ready" &&
        kill -TERM "$SERVER_PID" 2>/dev/null; then

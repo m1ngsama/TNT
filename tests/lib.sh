@@ -62,6 +62,21 @@ tnt_file_count_at_least() {
     [ "$(grep -c "$2" "$1" 2>/dev/null || echo 0)" -ge "$3" ]
 }
 
+# For probes that open a connection.  A fifty-millisecond interval burns an
+# ephemeral port per attempt and the next connect fails with EADDRNOTAVAIL.
+tnt_poll_connection() {
+    _timeout=$1
+    shift
+    _deadline=$(( $(date +%s) + _timeout ))
+    while :; do
+        if "$@"; then
+            return 0
+        fi
+        [ "$(date +%s)" -lt "$_deadline" ] || return 1
+        sleep 0.5
+    done
+}
+
 tnt_file_exists() { [ -f "$1" ]; }
 tnt_pid_gone() { ! kill -0 "$1" 2>/dev/null; }
 

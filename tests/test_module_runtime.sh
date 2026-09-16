@@ -368,7 +368,7 @@ echo_module_answered() {
     printf '%s\n' "$TAIL_OUTPUT" | grep -q 'module:echo-module.*echo: hello module'
 }
 FOUND=0
-tnt_poll_until 5 echo_module_answered && FOUND=1
+tnt_poll_connection 5 echo_module_answered && FOUND=1
 
 if [ "$FOUND" -eq 1 ]; then
     echo "✓ batched module responses are persisted and visible"
@@ -485,7 +485,7 @@ both_isolated_modules_answered_twice() {
         grep -q 'module:isolation-8.*event 2 isolation-8'
 }
 ISOLATED_RESPONSES=0
-tnt_poll_until 5 both_isolated_modules_answered_twice && ISOLATED_RESPONSES=1
+tnt_poll_connection 5 both_isolated_modules_answered_twice && ISOLATED_RESPONSES=1
 
 # All four messages proves the workers ran concurrently: isolation-1 blocks on
 # a marker only isolation-8 can write, and isolation-8 blocks on one only
