@@ -7,6 +7,10 @@
 # needs a different barrier.
 set TNT_INPUT_PROMPT "\033\[2;37m›\033\[0m "
 
+# A redraw of a full screen is far past expect's 2000-byte default, and an
+# overflowing buffer silently discards the bytes the barrier matches on.
+match_max -d 200000
+
 # Send one key and wait for its redraw.  Keys batched into a single send are
 # redrawn once per key only when the server reads them in one go, so send them
 # one at a time with send_repeat rather than trusting the batch to coalesce.

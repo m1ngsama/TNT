@@ -1,33 +1,16 @@
 #!/bin/sh
 # Interactive input regression tests for TNT.
 
+. ./lib.sh
+
 PORT=${PORT:-12347}
-PASS=0
-FAIL=0
-BIN="../tnt"
-SERVER_PID=""
-STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-input-test.XXXXXX")
+trap tnt_cleanup EXIT
 
-cleanup() {
-    if [ -n "$SERVER_PID" ]; then
-        kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
-    fi
-    rm -rf "$STATE_DIR"
-}
+tnt_skip_without_expect "interactive input tests"
+tnt_require_binary
+tnt_state_dir input-test
 
-trap cleanup EXIT
-
-if ! command -v expect >/dev/null 2>&1; then
-    echo "expect not installed; skipping interactive input tests"
-    exit 0
-fi
-
-if [ ! -f "$BIN" ]; then
-    echo "Error: Binary $BIN not found. Run make first."
-    exit 1
-fi
-
+# This suite reads raw bytes back, so it drives ssh without a forced tty.
 SSH_OPTS="-e none -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
 
 echo "=== TNT Interactive Input Tests ==="
@@ -35,35 +18,15 @@ echo "=== TNT Interactive Input Tests ==="
 # This suite drives the modal interface — Esc, NORMAL, and ":" commands —
 # so it states that requirement rather than depending on whichever keymap
 # happens to be the server default.
-TNT_LANG=zh TNT_KEYMAP=vim TNT_RATE_LIMIT=0 TNT_MAX_CONN_PER_IP=256 TNT_MAX_CONNECTIONS=256 "$BIN" -p "$PORT" -d "$STATE_DIR" >"$STATE_DIR/server.log" 2>&1 &
-SERVER_PID=$!
-
-SERVER_READY=0
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "x Server failed to start"
-        sed -n '1,120p' "$STATE_DIR/server.log"
-        exit 1
-    fi
-    if grep -q "TNT chat server listening" "$STATE_DIR/server.log"; then
-        SERVER_READY=1
-        break
-    fi
-    sleep 1
-done
-
-if [ "$SERVER_READY" -eq 1 ]; then
-    echo "✓ server started"
-    PASS=$((PASS + 1))
-else
-    echo "x Server did not become ready"
-    sed -n '1,120p' "$STATE_DIR/server.log"
-    exit 1
-fi
+TNT_LANG=zh
+TNT_KEYMAP=vim
+export TNT_LANG TNT_KEYMAP
+tnt_start_server "$PORT" "$STATE_DIR"
 
 USERNAME_CANCEL_SCRIPT="$STATE_DIR/username-cancel.expect"
 cat >"$USERNAME_CANCEL_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "\003"
@@ -83,6 +46,7 @@ fi
 USERNAME_EDIT_SCRIPT="$STATE_DIR/username-edit.expect"
 cat >"$USERNAME_EDIT_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "wrong\025editeduser\r"
@@ -109,16 +73,15 @@ fi
 EXPECT_SCRIPT="$STATE_DIR/bracketed-paste.expect"
 cat >"$EXPECT_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "tester\r"
 expect "Esc NORMAL"
 send -- "\033\[200~"
 send -- "line1\nline2\nline3"
-send -- "\033\[201~"
-sleep 1
-send -- "\r"
-sleep 1
+send_wait "\033\[201~"
+send_enter
 send -- "\003"
 sleep 0.2
 send -- "\003"
@@ -145,10 +108,11 @@ fi
 CONTROL_SCRIPT="$STATE_DIR/control-input.expect"
 cat >"$CONTROL_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 set c1 [binary format H* c29b]
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 fconfigure \$spawn_id -encoding binary -translation binary
-sleep 1
+expect "): "
 send -- "c1"
 send -- \$c1
 send -- "user\r"
@@ -158,6 +122,7 @@ send -- "safe"
 send -- \$c1
 send -- "tail"
 send -- "\033\[201~"
+sleep 1
 send -- "\r"
 sleep 1
 send -- "\003"
@@ -219,12 +184,13 @@ fi
 ACTION_SCRIPT="$STATE_DIR/action-boundary.expect"
 cat >"$ACTION_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 set suffix [binary format H* e4b8ad]
 set accepted [format "action-fit-%s%s" [string repeat a 1003] \$suffix]
 set rejected [format "action-reject-%s%s" [string repeat a 1001] \$suffix]
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 fconfigure \$spawn_id -encoding binary -translation binary
-sleep 1
+expect "): "
 send -- "actor\r"
 expect "Esc NORMAL"
 send -- "/me \$accepted\r"
@@ -267,6 +233,7 @@ fi
 HELP_SCRIPT="$STATE_DIR/help.expect"
 cat >"$HELP_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "helper\r"
@@ -360,6 +327,7 @@ fi
 UNKNOWN_SCRIPT="$STATE_DIR/unknown-command.expect"
 cat >"$UNKNOWN_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "mistype\r"
@@ -392,6 +360,7 @@ fi
 LOCALIZED_COMMANDS_SCRIPT="$STATE_DIR/localized-commands.expect"
 cat >"$LOCALIZED_COMMANDS_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "localized\r"
@@ -442,6 +411,7 @@ fi
 THEME_SCRIPT="$STATE_DIR/theme.expect"
 cat >"$THEME_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "themer\r"
@@ -495,6 +465,7 @@ fi
 COMPLETION_SCRIPT="$STATE_DIR/completion.expect"
 cat >"$COMPLETION_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "completer\r"
@@ -549,6 +520,7 @@ fi
 COMMAND_USAGE_SCRIPT="$STATE_DIR/command-usage.expect"
 cat >"$COMMAND_USAGE_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "usageuser\r"
@@ -716,6 +688,7 @@ fi
 SYSTEM_MESSAGES_SCRIPT="$STATE_DIR/system-messages.expect"
 cat >"$SYSTEM_MESSAGES_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "systemuser\r"
@@ -759,6 +732,7 @@ printf '维护窗口\n' >"$STATE_DIR/motd.txt"
 MOTD_SCRIPT="$STATE_DIR/motd.expect"
 cat >"$MOTD_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "motduser\r"
@@ -787,6 +761,7 @@ fi
 VIM_INSERT_ALIASES_SCRIPT="$STATE_DIR/vim-insert-aliases.expect"
 cat >"$VIM_INSERT_ALIASES_SCRIPT" <<EOF
 set timeout 10
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS anonymous@127.0.0.1
 expect "): "
 send -- "vimalias\r"
@@ -816,8 +791,4 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-echo ""
-echo "PASSED: $PASS"
-echo "FAILED: $FAIL"
-[ "$FAIL" -eq 0 ] && echo "All tests passed" || echo "Some tests failed"
-exit "$FAIL"
+tnt_summary
