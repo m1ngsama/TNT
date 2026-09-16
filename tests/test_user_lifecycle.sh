@@ -1,6 +1,8 @@
 #!/bin/sh
 # End-to-end user lifecycle test for TNT's interactive TUI.
 
+. ./lib.sh
+
 PORT=${PORT:-2222}
 BIN="../tnt"
 PASS=0
@@ -41,15 +43,17 @@ REPLY_SENT="$STATE_DIR/reply.sent"
 
 wait_for_health() {
     out=""
-    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    deadline=$(( $(date +%s) + 15 ))
+    tnt_wait_listening "$STATE_DIR/server.log" 15 || true
+    while :; do
         if [ -n "$SERVER_PID" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
             return 1
         fi
         out=$(ssh $SSH_EXEC_OPTS localhost health 2>/dev/null || true)
         [ "$out" = "ok" ] && return 0
-        sleep 1
+        [ "$(date +%s)" -lt "$deadline" ] || return 1
+        sleep 0.5
     done
-    return 1
 }
 
 echo "=== TNT User Lifecycle Test ==="
@@ -119,13 +123,10 @@ EOF
 expect "$STATE_DIR/bob.expect" >"$STATE_DIR/bob.log" 2>&1 &
 BOB_PID=$!
 
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    [ -f "$BOB_READY" ] && break
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        break
-    fi
-    sleep 1
-done
+bob_ready_or_server_gone() {
+    [ -f "$BOB_READY" ] || ! kill -0 "$SERVER_PID" 2>/dev/null
+}
+tnt_poll_until 10 bob_ready_or_server_gone
 
 if [ -f "$BOB_READY" ]; then
     echo "✓ second user reached chat"
@@ -136,12 +137,12 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-USERS_JSON=""
-for _ in 1 2 3 4 5; do
+bob_listed_online() {
     USERS_JSON=$(ssh $SSH_EXEC_OPTS localhost users --json 2>/dev/null || true)
-    printf '%s\n' "$USERS_JSON" | grep -q '"bob"' && break
-    sleep 1
-done
+    printf '%s\n' "$USERS_JSON" | grep -q '"bob"'
+}
+USERS_JSON=""
+tnt_poll_connection 5 bob_listed_online
 if printf '%s\n' "$USERS_JSON" | grep -q '"bob"'; then
     echo "✓ exec users sees active TUI user"
     PASS=$((PASS + 1))

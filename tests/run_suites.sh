@@ -9,17 +9,17 @@ SUITES="interactive_input 2
 login_timeouts 8
 exec_mode 1
 user_lifecycle 3
-default_keymap 11
-graceful_shutdown 7
 basic 0
-cursor_editing 10
+graceful_shutdown 7
 module_runtime 6
-multiline_input 14
-vim_keymap 12
-wide_text_view 9
-empty_view 5
 mute_joins_view 4
-log_migration 13"
+log_migration 13
+default_keymap 11
+empty_view 5
+multiline_input 14
+cursor_editing 10
+vim_keymap 12
+wide_text_view 9"
 
 WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-suites.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT

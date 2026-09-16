@@ -2,6 +2,8 @@
 # SIGINT/SIGTERM graceful-shutdown regressions: the listener stops, active
 # and pre-auth sessions are reclaimed, and module children are reaped.
 
+. ./lib.sh
+
 PORT=${PORT:-12361}
 BIN=${BIN:-../tnt}
 PASS=0
@@ -51,34 +53,20 @@ ssh_exec() {
 }
 
 wait_for_health() {
-    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    deadline=$(( $(date +%s) + 15 ))
+    while :; do
         if [ -n "$SERVER_PID" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
             return 1
         fi
         out=$(ssh_exec localhost health 2>/dev/null || true)
         [ "$out" = "ok" ] && return 0
-        sleep 1
+        [ "$(date +%s)" -lt "$deadline" ] || return 1
+        sleep 0.5
     done
-    return 1
 }
 
-wait_for_file() {
-    path=$1
-    for _ in 1 2 3 4 5; do
-        [ -f "$path" ] && return 0
-        sleep 1
-    done
-    return 1
-}
-
-wait_for_exit() {
-    pid=$1
-    for _ in 1 2 3 4 5; do
-        ! kill -0 "$pid" 2>/dev/null && return 0
-        sleep 1
-    done
-    return 1
-}
+wait_for_file() { tnt_wait_for_file "$1"; }
+wait_for_exit() { tnt_wait_for_exit "$1"; }
 
 start_server() {
     log=$1
@@ -189,14 +177,11 @@ PY
     PREAUTH_PID=$!
 
     active_ready=0
-    for _ in 1 2 3 4 5; do
+    graceful_user_online() {
         users=$(ssh_exec localhost users --json 2>/dev/null || true)
-        if printf '%s\n' "$users" | grep -q 'graceful-user'; then
-            active_ready=1
-            break
-        fi
-        sleep 1
-    done
+        printf '%s\n' "$users" | grep -q 'graceful-user'
+    }
+    tnt_poll_connection 5 graceful_user_online && active_ready=1
 
     if [ "$active_ready" -eq 1 ] && wait_for_file "$STATE_DIR/preauth.ready" &&
        kill -TERM "$SERVER_PID" 2>/dev/null; then
