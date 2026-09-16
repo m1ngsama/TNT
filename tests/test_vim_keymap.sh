@@ -55,6 +55,7 @@ fi
 COMMAND_SCRIPT="$STATE_DIR/command.expect"
 cat >"$COMMAND_SCRIPT" <<EOF
 set timeout 15
+source "$PWD/lib.exp"
 spawn ssh $SSH_OPTS vim@127.0.0.1
 expect "): "
 send -- "vimcmd\r"
