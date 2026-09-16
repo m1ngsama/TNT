@@ -1,3 +1,15 @@
+tnt-chat (1.3.2-1) unstable; urgency=medium
+
+  * Make the non-modal keymap the default; reach vim with /vim or vim@host.
+  * Compose multi-line messages with Ctrl-J and Alt-Enter.
+  * Render text at its true width and wrap long messages instead of truncating.
+  * Edit the message line at the caret with the arrow, Home, End, and Delete keys.
+  * Render a markdown subset: bold, inline code, fenced blocks, and bare URLs.
+  * Escape message log content and migrate existing logs on first start.
+  * Make the module response deadline configurable and let modules send newlines.
+
+ -- M1ng <contact@m1ng.space>  Wed, 16 Sep 2026 00:00:00 +0800
+
 tnt-chat (1.3.1-1) unstable; urgency=medium
 
   * Replace the Markdown documentation set with installed manual pages.
