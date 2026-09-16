@@ -12,6 +12,7 @@ user_lifecycle 3
 basic 0
 graceful_shutdown 7
 module_runtime 6
+markdown_view 15
 mute_joins_view 4
 log_migration 13
 default_keymap 11
