@@ -322,8 +322,10 @@ static void dismiss_command_output(client_t *client) {
         client->follow_tail = true;
         client->unread_mentions = 0;
         normal_scroll_to_latest(client);
-    } else {
+    } else if (tnt_keymap_uses_modes(client->keymap)) {
         client->mode = MODE_NORMAL;
+    } else {
+        client->mode = MODE_INSERT;
     }
     tui_render_screen(client);
 }

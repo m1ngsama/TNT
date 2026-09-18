@@ -78,6 +78,18 @@ check_case "plain" "|/usr/local/bin is where it lives$" \
     "an unknown slash word sends as text" \
     "a path starting with / was swallowed"
 
+# 6. Closing a pager returns to the input, not to a mode this keymap lacks.
+tnt_expect_session "plain" '
+send -- "/last\r"
+expect "Last "
+send -- "q"
+send_wait "after-pager"
+send_enter
+'
+check_case "plain" "|after-pager$" \
+    "closing a pager returns to the input" \
+    "closing a pager left the session in NORMAL"
+
 tnt_check_server_alive "server survived the default keymap session"
 
 tnt_summary
