@@ -225,6 +225,7 @@ start_server "$STATE_DIR/accept-churn.log" env
 if wait_for_health; then
     python3 - "$PORT" <<'PY' &
 import socket
+import struct
 import sys
 import time
 
@@ -232,6 +233,9 @@ deadline = time.monotonic() + 4
 while time.monotonic() < deadline:
     try:
         s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=.2)
+        # Reset, not FIN: each FIN close parks a local port in TIME_WAIT, and
+        # this loop fills the whole ephemeral range for every concurrent suite.
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
         s.close()
     except OSError:
         pass
