@@ -413,10 +413,8 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     }
 
     out->timestamp = msg_time;
-    strncpy(out->username, username, MAX_USERNAME_LEN - 1);
-    out->username[MAX_USERNAME_LEN - 1] = '\0';
-    strncpy(out->content, decoded, MAX_MESSAGE_LEN - 1);
-    out->content[MAX_MESSAGE_LEN - 1] = '\0';
+    snprintf(out->username, sizeof(out->username), "%s", username);
+    snprintf(out->content, sizeof(out->content), "%s", decoded);
     out->display_time[0] = '\0';
     out->display_date[0] = '\0';
     return true;
