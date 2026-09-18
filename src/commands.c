@@ -24,10 +24,6 @@
 #include <strings.h>
 #include <time.h>
 
-/* Append visible text with every case-insensitive match of `needle` wrapped
- * in a reverse-yellow chip.  Inside a chip the highlight replaces the
- * markdown style; around it the styles resume.  NULL or empty needle skips
- * highlighting. */
 static void append_highlighted(char *output, size_t buf_size, size_t *pos,
                                const char *visible,
                                const richtext_run_t *runs, size_t run_count,

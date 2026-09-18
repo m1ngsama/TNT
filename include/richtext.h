@@ -51,10 +51,8 @@ size_t richtext_parse(const char *text, char *out, size_t out_size,
 const char *richtext_style_on(richtext_style_t style);
 const char *richtext_style_off(richtext_style_t style);
 
-/* Append visible bytes [from, to) with the styles covering them.  A run ends
- * by restoring `resume` rather than resetting, so a styled word inside a
- * mention highlight keeps the highlight, and it closes before each newline so
- * every line carries its own styling. */
+/* Runs end by restoring `resume`, not resetting, and close at each newline
+ * because the pager draws line by line. */
 void richtext_append_styled(char *out, size_t out_size, size_t *pos,
                             const char *visible, size_t from, size_t to,
                             const richtext_run_t *runs, size_t run_count,
