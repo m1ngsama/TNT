@@ -2,7 +2,7 @@
 set -u
 
 BASE_PORT=${PORT:-2222}
-JOBS=${INTEGRATION_JOBS:-2}
+JOBS=${INTEGRATION_JOBS:-4}
 
 # Slowest first, so the last job slot never waits on a long suite.
 SUITES="interactive_input 2
