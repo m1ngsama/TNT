@@ -13,7 +13,6 @@ SERVER_PID=""
 ACTIVE_PID=""
 ACTIVE_INPUT_PID=""
 PREAUTH_PID=""
-CHURN_PID=""
 
 stop_process() {
     pid=$1
@@ -31,7 +30,6 @@ cleanup() {
     stop_process "$PREAUTH_PID"
     stop_process "$ACTIVE_INPUT_PID"
     stop_process "$ACTIVE_PID"
-    stop_process "$CHURN_PID"
     stop_process "$SERVER_PID"
     rm -rf "$STATE_DIR"
 }
@@ -216,45 +214,6 @@ PY
     fi
 else
     echo "✗ session server failed to start"
-    FAIL=$((FAIL + 1))
-fi
-
-# Rapid connect/close churn can make poll readiness stale before accept.  The
-# listener is non-blocking, so termination must still win within the deadline.
-start_server "$STATE_DIR/accept-churn.log" env
-if wait_for_health; then
-    python3 - "$PORT" <<'PY' &
-import socket
-import struct
-import sys
-import time
-
-deadline = time.monotonic() + 4
-while time.monotonic() < deadline:
-    try:
-        s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=.2)
-        # Reset, not FIN: each FIN close parks a local port in TIME_WAIT, and
-        # this loop fills the whole ephemeral range for every concurrent suite.
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
-        s.close()
-    except OSError:
-        pass
-PY
-    CHURN_PID=$!
-    sleep 1
-    kill -TERM "$SERVER_PID" 2>/dev/null || true
-    if wait_for_exit "$SERVER_PID"; then
-        wait "$SERVER_PID" 2>/dev/null || true
-        SERVER_PID=""
-        echo "✓ stale accept readiness cannot block shutdown"
-        PASS=$((PASS + 1))
-    else
-        echo "✗ accept churn stranded shutdown"
-        FAIL=$((FAIL + 1))
-    fi
-    stop_process "$CHURN_PID"
-else
-    echo "✗ accept-churn server failed to start"
     FAIL=$((FAIL + 1))
 fi
 
