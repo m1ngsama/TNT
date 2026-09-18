@@ -1,5 +1,6 @@
 #include "richtext.h"
 
+#include "common.h"
 #include "utf8.h"
 
 #include <stdbool.h>
@@ -286,5 +287,56 @@ const char *richtext_style_off(richtext_style_t style) {
         case RICHTEXT_CODE: return "\033[39m";
         case RICHTEXT_URL:  return "\033[24m";
         default:            return "";
+    }
+}
+
+static void append_run(char *out, size_t out_size, size_t *pos,
+                       const char *text, size_t len, richtext_style_t style,
+                       const char *resume) {
+    while (len > 0) {
+        const char *nl = memchr(text, '\n', len);
+        size_t piece = nl ? (size_t)(nl - text) : len;
+
+        if (piece > 0) {
+            buffer_appendf(out, out_size, pos, "%s",
+                           richtext_style_on(style));
+            buffer_append_bytes(out, out_size, pos, text, piece);
+            buffer_appendf(out, out_size, pos, "%s%s",
+                           richtext_style_off(style), resume);
+        }
+        if (!nl) {
+            break;
+        }
+        buffer_append_bytes(out, out_size, pos, "\n", 1);
+        text += piece + 1;
+        len -= piece + 1;
+    }
+}
+
+void richtext_append_styled(char *out, size_t out_size, size_t *pos,
+                            const char *visible, size_t from, size_t to,
+                            const richtext_run_t *runs, size_t run_count,
+                            const char *resume) {
+    size_t at = from;
+
+    for (size_t i = 0; i < run_count && at < to; i++) {
+        size_t run_end = runs[i].offset + runs[i].len;
+        size_t end;
+
+        if (run_end <= at || runs[i].offset >= to) {
+            continue;
+        }
+        if (runs[i].offset > at) {
+            buffer_append_bytes(out, out_size, pos, visible + at,
+                                runs[i].offset - at);
+            at = runs[i].offset;
+        }
+        end = run_end < to ? run_end : to;
+        append_run(out, out_size, pos, visible + at, end - at, runs[i].style,
+                   resume);
+        at = end;
+    }
+    if (at < to) {
+        buffer_append_bytes(out, out_size, pos, visible + at, to - at);
     }
 }

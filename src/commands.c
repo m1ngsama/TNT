@@ -13,6 +13,7 @@
 #include "keymap.h"
 #include "manual.h"
 #include "message.h"
+#include "richtext.h"
 #include "system_message.h"
 #include "theme.h"
 #include "tui.h"
@@ -23,31 +24,61 @@
 #include <strings.h>
 #include <time.h>
 
-/* Append `text` to the output buffer with every case-insensitive match of
- * `needle` wrapped in a reverse-yellow ANSI chip.  Preserves the original
- * casing of the matched substring.  needle == NULL or empty appends raw. */
+/* Append visible text with every case-insensitive match of `needle` wrapped
+ * in a reverse-yellow chip.  Inside a chip the highlight replaces the
+ * markdown style; around it the styles resume.  NULL or empty needle skips
+ * highlighting. */
 static void append_highlighted(char *output, size_t buf_size, size_t *pos,
-                               const char *text, const char *needle) {
-    if (!needle || !*needle) {
-        buffer_appendf(output, buf_size, pos, "%s", text);
-        return;
-    }
-    size_t nlen = strlen(needle);
-    const char *p = text;
-    while (*p) {
-        const char *hit = strcasestr(p, needle);
+                               const char *visible,
+                               const richtext_run_t *runs, size_t run_count,
+                               const char *needle) {
+    size_t len = strlen(visible);
+    size_t nlen = needle ? strlen(needle) : 0;
+    size_t at = 0;
+
+    while (nlen > 0 && at < len) {
+        const char *hit = strcasestr(visible + at, needle);
         if (!hit) {
-            buffer_appendf(output, buf_size, pos, "%s", p);
-            return;
+            break;
         }
-        if (hit > p) {
-            buffer_append_bytes(output, buf_size, pos, p, (size_t)(hit - p));
-        }
+        size_t hit_at = (size_t)(hit - visible);
+        richtext_append_styled(output, buf_size, pos, visible, at, hit_at,
+                               runs, run_count, "");
         buffer_append_bytes(output, buf_size, pos, "\033[7;33m", 7);
         buffer_append_bytes(output, buf_size, pos, hit, nlen);
         buffer_append_bytes(output, buf_size, pos, "\033[0m", 4);
-        p = hit + nlen;
+        at = hit_at + nlen;
     }
+    richtext_append_styled(output, buf_size, pos, visible, at, len,
+                           runs, run_count, "");
+}
+
+static bool append_message_row(char *output, size_t buf_size, size_t *pos,
+                               const message_t *msg, const char *needle) {
+    size_t mark = *pos;
+    char visible[MAX_MESSAGE_LEN];
+    richtext_run_t runs[RICHTEXT_MAX_RUNS];
+    size_t run_count = richtext_parse(msg->content, visible, sizeof(visible),
+                                      NULL, runs, RICHTEXT_MAX_RUNS);
+    char ts[20];
+    struct tm tmi;
+
+    localtime_r(&msg->timestamp, &tmi);
+    strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
+    buffer_appendf(output, buf_size, pos, "[%s] ", ts);
+    append_highlighted(output, buf_size, pos, msg->username, NULL, 0, needle);
+    buffer_appendf(output, buf_size, pos, ": ");
+    append_highlighted(output, buf_size, pos, visible, runs, run_count,
+                       needle);
+    buffer_appendf(output, buf_size, pos, "\n");
+
+    /* Drop a row that did not fit whole, or the cut can split an escape. */
+    if (*pos >= buf_size - 1) {
+        *pos = mark;
+        output[mark] = '\0';
+        return false;
+    }
+    return true;
 }
 
 static void append_command_usage(char *output, size_t buf_size, size_t *pos,
@@ -500,13 +531,10 @@ void commands_dispatch(client_t *client) {
                            i18n_text(client->ui_lang, I18N_LAST_EMPTY));
         }
         for (int i = 0; i < last_count; i++) {
-            message_t *msg = &last_msgs[start + i];
-            char ts[20];
-            struct tm tmi;
-            localtime_r(&msg->timestamp, &tmi);
-            strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
-            buffer_appendf(output, sizeof(output), &pos,
-                           "[%s] %s: %s\n", ts, msg->username, msg->content);
+            if (!append_message_row(output, sizeof(output), &pos,
+                                    &last_msgs[start + i], NULL)) {
+                break;
+            }
         }
         free(last_msgs);
 
@@ -538,19 +566,10 @@ void commands_dispatch(client_t *client) {
                                          I18N_SEARCH_EMPTY));
             }
             for (int i = 0; i < display_count; i++) {
-                message_t *msg = &found[start + i];
-                char ts[20];
-                struct tm tmi;
-                localtime_r(&msg->timestamp, &tmi);
-                strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
-                buffer_appendf(output, sizeof(output), &pos,
-                               "[%s] ", ts);
-                append_highlighted(output, sizeof(output), &pos,
-                                   msg->username, query);
-                buffer_appendf(output, sizeof(output), &pos, ": ");
-                append_highlighted(output, sizeof(output), &pos,
-                                   msg->content, query);
-                buffer_appendf(output, sizeof(output), &pos, "\n");
+                if (!append_message_row(output, sizeof(output), &pos,
+                                        &found[start + i], query)) {
+                    break;
+                }
             }
             free(found);
         }

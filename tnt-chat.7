@@ -264,7 +264,11 @@ A message that is wider than the terminal wraps onto as many rows as it
 needs, and the continuation rows align under the first row's text.
 Wrapping never splits a character, an emoji, or a flag.
 .SS Formatting
-A small subset of markdown is rendered when the message is drawn.
+A small subset of markdown is rendered when the message is drawn,
+in the message view and in the output of
+.B :last
+and
+.BR :search .
 The markers are ordinary printable characters and are removed from the
 screen; the log keeps the text as it was typed.
 .TP
@@ -338,6 +342,8 @@ The range is 1 through 50; the default is 10.
 .BI ":search " keyword
 Search persisted usernames and content without regard to ASCII letter case.
 The last 15 matches are displayed.
+Each occurrence of the keyword in the displayed text is highlighted, and
+the highlight takes the place of any formatting under it.
 .TP
 .B :mute-joins, :mute
 Toggle display of join and leave notices for this session.

@@ -45,40 +45,6 @@ static char *client_render_buffer(client_t *client, size_t min_size) {
     return client->render_buffer;
 }
 
-/* Write visible bytes [from, to) with the styles covering them.  A run ends by
- * restoring `resume` rather than resetting, so a styled word inside a mention
- * highlight does not drop the highlight. */
-static void append_styled(char *out, size_t out_size, size_t *pos,
-                          const char *visible, size_t from, size_t to,
-                          const richtext_run_t *runs, size_t run_count,
-                          const char *resume) {
-    size_t at = from;
-
-    for (size_t i = 0; i < run_count && at < to; i++) {
-        size_t run_end = runs[i].offset + runs[i].len;
-        size_t end;
-
-        if (run_end <= at || runs[i].offset >= to) {
-            continue;
-        }
-        if (runs[i].offset > at) {
-            buffer_append_bytes(out, out_size, pos, visible + at,
-                                runs[i].offset - at);
-            at = runs[i].offset;
-        }
-        end = run_end < to ? run_end : to;
-        buffer_appendf(out, out_size, pos, "%s",
-                       richtext_style_on(runs[i].style));
-        buffer_append_bytes(out, out_size, pos, visible + at, end - at);
-        buffer_appendf(out, out_size, pos, "%s%s",
-                       richtext_style_off(runs[i].style), resume);
-        at = end;
-    }
-    if (at < to) {
-        buffer_append_bytes(out, out_size, pos, visible + at, to - at);
-    }
-}
-
 /* Renders display row `row` of msg into buffer.  Returns false when the
  * message has no such row, which is how the caller knows it is done. */
 static bool format_message_row(const message_t *msg, int row, char *buffer,
@@ -147,9 +113,10 @@ static bool format_message_row(const message_t *msg, int row, char *buffer,
     char row_text[MAX_MESSAGE_LEN + RICHTEXT_MAX_RUNS * 24 + 64];
     size_t row_pos = 0;
     row_text[0] = '\0';
-    append_styled(row_text, sizeof(row_text), &row_pos, visible,
-                  spans[row].offset, spans[row].offset + spans[row].len,
-                  runs, run_count, hl_start);
+    richtext_append_styled(row_text, sizeof(row_text), &row_pos, visible,
+                           spans[row].offset,
+                           spans[row].offset + spans[row].len,
+                           runs, run_count, hl_start);
 
     if (row > 0) {
         /* Continuation rows align under the first row's text. */
