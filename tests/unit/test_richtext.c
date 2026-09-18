@@ -271,6 +271,41 @@ TEST(parse_truncates_rather_than_overflowing) {
     assert(out[len] == '\0');
 }
 
+static const char *styled(const char *text, size_t from, size_t to,
+                          const char *resume) {
+    static char out[256];
+    char visible[128];
+    size_t len;
+    size_t pos = 0;
+    richtext_run_t runs[8];
+    size_t count = parse(text, visible, sizeof(visible), &len, runs, 8);
+
+    out[0] = '\0';
+    richtext_append_styled(out, sizeof(out), &pos, visible, from,
+                           to ? to : len, runs, count, resume);
+    return out;
+}
+
+TEST(append_wraps_a_run_in_its_sgr_pair) {
+    assert(strcmp(styled("a **b** c", 0, 0, ""),
+                  "a \033[1mb\033[22m c") == 0);
+}
+
+TEST(append_resumes_the_surrounding_style) {
+    assert(strcmp(styled("a **b** c", 0, 0, "\033[33m"),
+                  "a \033[1mb\033[22m\033[33m c") == 0);
+}
+
+TEST(append_reopens_a_run_cut_by_the_range) {
+    assert(strcmp(styled("x `abcd` y", 3, 8, ""),
+                  "\033[36mbcd\033[39m y") == 0);
+}
+
+TEST(append_closes_a_run_at_each_newline) {
+    assert(strcmp(styled("```\nab\n\ncd\n```", 0, 0, ""),
+                  "\033[36mab\033[39m\n\n\033[36mcd\033[39m") == 0);
+}
+
 int main(void) {
     printf("Running richtext unit tests...\n\n");
     RUN_TEST(wrap_short_text_is_one_line);
@@ -296,6 +331,10 @@ int main(void) {
     RUN_TEST(parse_full_run_table_keeps_markers_literal);
     RUN_TEST(parse_rejects_bad_arguments);
     RUN_TEST(parse_truncates_rather_than_overflowing);
+    RUN_TEST(append_wraps_a_run_in_its_sgr_pair);
+    RUN_TEST(append_resumes_the_surrounding_style);
+    RUN_TEST(append_reopens_a_run_cut_by_the_range);
+    RUN_TEST(append_closes_a_run_at_each_newline);
     printf("\nAll %d richtext tests passed!\n", tests_passed);
     return 0;
 }

@@ -56,10 +56,10 @@ all: $(TESTS)
 test_utf8: test_utf8.c $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
-test_richtext: test_richtext.c $(RICHTEXT_SRC) $(UTF8_SRC)
+test_richtext: test_richtext.c $(RICHTEXT_SRC) $(COMMON_SRC) $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
-test_editor: test_editor.c $(EDITOR_SRC) $(RICHTEXT_SRC) $(UTF8_SRC)
+test_editor: test_editor.c $(EDITOR_SRC) $(RICHTEXT_SRC) $(COMMON_SRC) $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_keymap: test_keymap.c $(KEYMAP_SRC)
@@ -86,7 +86,7 @@ test_message: test_message.c $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COM
 test_chat_room: test_chat_room.c $(CHAT_ROOM_SRC) $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
-test_history_view: test_history_view.c $(HISTORY_VIEW_SRC) $(RICHTEXT_SRC) $(UTF8_SRC) $(SYSTEM_MESSAGE_SRC) $(I18N_SRC) $(I18N_TEXT_SRC)
+test_history_view: test_history_view.c $(HISTORY_VIEW_SRC) $(RICHTEXT_SRC) $(COMMON_SRC) $(UTF8_SRC) $(SYSTEM_MESSAGE_SRC) $(I18N_SRC) $(I18N_TEXT_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_i18n: test_i18n.c $(I18N_SRC) $(I18N_TEXT_SRC)
