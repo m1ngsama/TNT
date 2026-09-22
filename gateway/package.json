@@ -1,0 +1,13 @@
+{
+  "name": "tnt-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build --compile --minify --outfile tnt-gateway src/main.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  }
+}

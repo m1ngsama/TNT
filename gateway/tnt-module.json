@@ -1,0 +1,10 @@
+{
+  "protocol": "tnt.module.v1",
+  "name": "tnt-gateway",
+  "version": "0.1.0",
+  "tnt_min_version": "1.4.0",
+  "description": "WebSocket gateway for the TNT public room.",
+  "entrypoint": "./tnt-gateway",
+  "permissions": ["message:read", "message:create", "message:post", "presence:read"],
+  "events": ["message.created"]
+}
