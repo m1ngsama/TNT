@@ -9,6 +9,7 @@ export function createVerifier(issuer: string, keys: JWTVerifyGetKey): Verify {
       const { payload } = await jwtVerify(token, keys, {
         issuer,
         audience: "tnt",
+        algorithms: ["EdDSA"],
         requiredClaims: ["exp", "sub"],
       });
       const handle = payload.handle;
