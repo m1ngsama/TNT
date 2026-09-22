@@ -81,6 +81,9 @@ int room_add_client(chat_room_t *room, struct client *client) {
     }
 
     room->clients[room->client_count++] = client;
+    if (room->presence_notifier && room->client_name) {
+        room->presence_notifier(room->client_name(client), true);
+    }
 
     pthread_rwlock_unlock(&room->lock);
     return 0;
@@ -97,6 +100,9 @@ void room_remove_client(chat_room_t *room, struct client *client) {
                 room->clients[j] = room->clients[j + 1];
             }
             room->client_count--;
+            if (room->presence_notifier && room->client_name) {
+                room->presence_notifier(room->client_name(client), false);
+            }
             break;
         }
     }
@@ -158,6 +164,14 @@ void room_set_client_name_accessor(chat_room_t *room,
 
     pthread_rwlock_wrlock(&room->lock);
     room->client_name = accessor;
+    pthread_rwlock_unlock(&room->lock);
+}
+
+void room_set_presence_notifier(chat_room_t *room, room_presence_fn notifier) {
+    if (!room) return;
+
+    pthread_rwlock_wrlock(&room->lock);
+    room->presence_notifier = notifier;
     pthread_rwlock_unlock(&room->lock);
 }
 
