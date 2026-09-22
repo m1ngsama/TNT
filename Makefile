@@ -79,7 +79,7 @@ PERF_OUTPUT ?=
 
 INTEGRATION_JOBS ?= 4
 
-.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release small release-smoke release-check release-check-strict package-publish-check debian-source-package asan ubsan ubsan-test valgrind check check-cppcheck check-clang-tidy test package-test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test login-timeout-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info
+.PHONY: all clean install install-systemd uninstall uninstall-systemd debug release small release-smoke release-check release-check-strict package-publish-check debian-source-package asan ubsan ubsan-test valgrind check check-cppcheck check-clang-tidy test package-test test-advisory ci-test unit-test script-test integration-test module-runtime-test graceful-shutdown-test login-timeout-test anonymous-access-test connection-limit-test security-test stress-test soak-test slow-client-test user-lifecycle-test perf perf-smoke perf-check perf-full perf-soak perf-soak-smoke info gateway-test gateway-e2e-test
 
 all: $(TARGETS)
 
@@ -274,6 +274,14 @@ integration-test: all
 module-runtime-test: all
 	@echo "Running module runtime tests..."
 	@cd tests && PORT=$${PORT:-2222} ./test_module_runtime.sh
+
+gateway-test:
+	@echo "Running gateway tests..."
+	@cd gateway && bun install --frozen-lockfile && bun run typecheck && bun test
+
+gateway-e2e-test: all
+	@echo "Running gateway end-to-end tests..."
+	@cd tests && PORT=$${PORT:-2222} ./test_gateway_e2e.sh
 
 graceful-shutdown-test: all
 	@echo "Running graceful shutdown tests..."
