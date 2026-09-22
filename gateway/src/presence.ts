@@ -1,6 +1,6 @@
 export class Presence {
   #ssh = new Set<string>();
-  #web = new Map<string, number>();
+  #web = new Map<string, Set<string>>();
 
   sshSnapshot(nicknames: string[]): void {
     for (const nickname of nicknames) this.#ssh.add(nickname);
@@ -14,14 +14,20 @@ export class Presence {
     this.#ssh.delete(nickname);
   }
 
-  webJoined(handle: string): void {
-    this.#web.set(handle, (this.#web.get(handle) ?? 0) + 1);
+  webJoined(nickname: string, connectionId: string): void {
+    let connections = this.#web.get(nickname);
+    if (!connections) {
+      connections = new Set();
+      this.#web.set(nickname, connections);
+    }
+    connections.add(connectionId);
   }
 
-  webLeft(handle: string): void {
-    const count = (this.#web.get(handle) ?? 0) - 1;
-    if (count > 0) this.#web.set(handle, count);
-    else this.#web.delete(handle);
+  webLeft(nickname: string, connectionId: string): void {
+    const connections = this.#web.get(nickname);
+    if (!connections) return;
+    connections.delete(connectionId);
+    if (connections.size === 0) this.#web.delete(nickname);
   }
 
   online(): string[] {
