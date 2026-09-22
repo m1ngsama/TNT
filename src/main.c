@@ -331,17 +331,21 @@ int main(int argc, char **argv) {
     }
 
     message_init();
-    if (tnt_module_runtime_init() < 0) {
-        fprintf(stderr, "Failed to initialize module runtime\n");
-        close_signal_pipe(shutdown_pipe);
-        return TNT_EXIT_ERROR;
-    }
 
     /* Create chat room */
     g_room = room_create();
     if (!g_room) {
         fprintf(stderr, "Failed to create chat room\n");
-        tnt_module_runtime_shutdown();
+        close_signal_pipe(shutdown_pipe);
+        return TNT_EXIT_ERROR;
+    }
+
+    /* A granted module may post as soon as it starts, so the room must exist
+     * first. */
+    if (tnt_module_runtime_init() < 0) {
+        fprintf(stderr, "Failed to initialize module runtime\n");
+        room_destroy(g_room);
+        g_room = NULL;
         close_signal_pipe(shutdown_pipe);
         return TNT_EXIT_ERROR;
     }

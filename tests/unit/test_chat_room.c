@@ -410,6 +410,38 @@ TEST(room_rejects_duplicate_names_case_insensitively) {
     room_destroy(room);
 }
 
+static char presence_log[256];
+
+static void record_presence(const char *nickname, bool joined) {
+    size_t len = strlen(presence_log);
+
+    snprintf(presence_log + len, sizeof(presence_log) - len, "%s%s;",
+             joined ? "+" : "-", nickname);
+}
+
+TEST(room_reports_presence_changes) {
+    chat_room_t *room = room_create();
+    client_t alice = {0};
+    client_t duplicate = {0};
+    client_t bob = {0};
+
+    snprintf(alice.username, sizeof(alice.username), "alice");
+    snprintf(duplicate.username, sizeof(duplicate.username), "ALICE");
+    snprintf(bob.username, sizeof(bob.username), "bob");
+    presence_log[0] = '\0';
+    room_set_client_name_accessor(room, test_client_name);
+    room_set_presence_notifier(room, record_presence);
+
+    assert(room_add_client(room, &alice) == 0);
+    assert(room_add_client(room, &duplicate) == -2);
+    assert(room_add_client(room, &bob) == 0);
+    room_remove_client(room, &alice);
+    room_remove_client(room, &alice);
+    assert(strcmp(presence_log, "+alice;+bob;-alice;") == 0);
+
+    room_destroy(room);
+}
+
 TEST(room_message_count_threadsafe) {
     chat_room_t *room = room_create();
 
@@ -447,6 +479,7 @@ int main(void) {
     RUN_TEST(room_add_client_full);
     RUN_TEST(room_capacity_follows_tnt_max_connections);
     RUN_TEST(room_rejects_duplicate_names_case_insensitively);
+    RUN_TEST(room_reports_presence_changes);
     RUN_TEST(room_message_count_threadsafe);
 
     printf("\nAll %d tests passed!\n", tests_passed);

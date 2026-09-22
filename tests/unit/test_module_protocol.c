@@ -115,6 +115,93 @@ TEST(parse_message_create_rejects_overlong_text) {
     assert(!tnt_module_parse_message_create(line, &response));
 }
 
+TEST(parse_message_post_accepts_valid_sender) {
+    tnt_module_message_post_t post;
+
+    assert(tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\\nthere\"}", &post));
+    assert(strcmp(post.sender, "alice") == 0);
+    assert(strcmp(post.plain_text, "hi\nthere") == 0);
+
+    assert(tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"abcdefghijklmnopqrst\","
+        "\"plain_text\":\"twenty\"}", &post));
+}
+
+TEST(parse_message_post_rejects_invalid_sender) {
+    static const char *const senders[] = {
+        "", "system", "module:echo", "*", "-dash", ".dot", "a|b", "a;b",
+        "abcdefghijklmnopqrstu", "bad\\u0001", "a:b", "module:", ":lead"
+    };
+    tnt_module_message_post_t post;
+
+    for (size_t i = 0; i < sizeof(senders) / sizeof(senders[0]); i++) {
+        char line[256];
+
+        snprintf(line, sizeof(line),
+                 "{\"type\":\"message.post\",\"sender\":\"%s\","
+                 "\"plain_text\":\"hi\"}", senders[i]);
+        assert(!tnt_module_parse_message_post(line, &post));
+    }
+    assert(!tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"plain_text\":\"hi\"}", &post));
+}
+
+TEST(parse_message_post_rejects_bad_text_or_type) {
+    tnt_module_message_post_t post;
+
+    assert(!tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"\"}", &post));
+    assert(!tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"\\u001b[2J\"}", &post));
+    assert(!tnt_module_parse_message_post(
+        "{\"type\":\"message.create\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\"}", &post));
+}
+
+TEST(appends_presence_jsonl) {
+    char out[256] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_presence(out, sizeof(out), &pos,
+                                      TNT_MODULE_EVENT_PRESENCE_JOINED,
+                                      "carol", 0) == 0);
+    assert(strcmp(out,
+                  "{\"type\":\"presence.joined\",\"nickname\":\"carol\","
+                  "\"timestamp\":\"1970-01-01T00:00:00Z\"}\n") == 0);
+}
+
+TEST(appends_presence_snapshot_jsonl) {
+    const char *names[] = {"alice", "bob"};
+    char out[256] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_presence_snapshot(out, sizeof(out), &pos,
+                                               names, 2) == 0);
+    assert(strcmp(out,
+                  "{\"type\":\"presence.snapshot\","
+                  "\"nicknames\":[\"alice\",\"bob\"]}\n") == 0);
+
+    out[0] = '\0';
+    pos = 0;
+    assert(tnt_module_append_presence_snapshot(out, sizeof(out), &pos,
+                                               NULL, 0) == 0);
+    assert(strcmp(out, "{\"type\":\"presence.snapshot\",\"nicknames\":[]}\n") ==
+           0);
+}
+
+TEST(presence_snapshot_reports_overflow) {
+    const char *names[] = {"alice", "bob"};
+    char out[24] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_presence_snapshot(out, sizeof(out), &pos,
+                                               names, 2) < 0);
+}
+
 int main(void) {
     printf("Running module protocol unit tests...\n\n");
 
@@ -127,6 +214,12 @@ int main(void) {
     RUN_TEST(parse_message_create_accepts_a_newline);
     RUN_TEST(parse_message_create_rejects_invalid_utf8_text);
     RUN_TEST(parse_message_create_rejects_overlong_text);
+    RUN_TEST(parse_message_post_accepts_valid_sender);
+    RUN_TEST(parse_message_post_rejects_invalid_sender);
+    RUN_TEST(parse_message_post_rejects_bad_text_or_type);
+    RUN_TEST(appends_presence_jsonl);
+    RUN_TEST(appends_presence_snapshot_jsonl);
+    RUN_TEST(presence_snapshot_reports_overflow);
 
     printf("\nAll %d module protocol tests passed.\n", tests_passed);
     return 0;

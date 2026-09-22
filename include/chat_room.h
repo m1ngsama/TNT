@@ -13,6 +13,9 @@ struct client;
 typedef void (*room_client_notifier_fn)(struct client *client);
 typedef const char *(*room_client_name_fn)(const struct client *client);
 
+/* Runs with the room lock held, so it must not call back into chat_room. */
+typedef void (*room_presence_fn)(const char *nickname, bool joined);
+
 /* Fixed-capacity message history.  Entries may wrap physically; callers must
  * use the room message accessors below to observe chronological order. */
 typedef struct {
@@ -31,6 +34,7 @@ typedef struct {
     uint64_t update_seq;
     room_client_notifier_fn client_notifier;
     room_client_name_fn client_name;
+    room_presence_fn presence_notifier;
 } chat_room_t;
 
 /* Global chat room instance */
@@ -60,6 +64,9 @@ void room_set_client_notifier(chat_room_t *room,
 /* Install the client display-name accessor used for atomic duplicate checks. */
 void room_set_client_name_accessor(chat_room_t *room,
                                    room_client_name_fn accessor);
+
+/* Install the presence hook called when a client joins or leaves. */
+void room_set_presence_notifier(chat_room_t *room, room_presence_fn notifier);
 
 /* Get message by index (thread-safe value copy) */
 bool room_get_message(chat_room_t *room, int index, message_t *out);

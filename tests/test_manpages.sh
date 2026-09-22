@@ -42,6 +42,7 @@ echo "=== TNT Manual Page Tests ==="
 # are the only Markdown the tree carries.
 markdown=$(find "$REPO_ROOT" -type f -name '*.md' \
     -not -path "$REPO_ROOT/.git/*" \
+    -not -path "*/node_modules/*" \
     -not -path "$REPO_ROOT/README.md" \
     -not -path "$REPO_ROOT/SECURITY.md" -print)
 if [ -z "$markdown" ]; then

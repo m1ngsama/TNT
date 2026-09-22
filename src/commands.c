@@ -468,6 +468,11 @@ void commands_dispatch(client_t *client) {
             }
             if (!taken) {
                 snprintf(client->username, MAX_USERNAME_LEN, "%s", validated_name);
+                if (g_room->presence_notifier &&
+                    strcmp(client->username, old_name) != 0) {
+                    g_room->presence_notifier(old_name, false);
+                    g_room->presence_notifier(client->username, true);
+                }
             }
             pthread_rwlock_unlock(&g_room->lock);
 

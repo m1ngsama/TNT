@@ -9,6 +9,8 @@ The supported protocol identifier is
 .P
 Modules receive selected public message events and may create public
 plain-text messages.
+Modules the operator grants may also post as a chat user and observe
+presence.
 The core chat path continues when an individual module is invalid, slow,
 stopped, or saturated.
 .SH ACTIVATION
@@ -24,6 +26,15 @@ For each directory, TNT reads
 and starts its declared entrypoint with the module directory as the working
 directory.
 No command-line arguments are supplied.
+.P
+A module whose manifest requests
+.B message:post
+or
+.B presence:read
+is enabled only when its name appears in
+.BR TNT_MODULE_GRANTS ,
+a colon-separated list of module names.
+Otherwise TNT reports the refusal on standard error and skips the module.
 .SH MANIFEST
 The manifest is a JSON object of at most 4094 bytes.
 The following fields are required:
@@ -52,6 +63,12 @@ Array containing both
 .B message:read
 and
 .BR message:create .
+It may also contain
+.B message:post
+and
+.BR presence:read ;
+see
+.BR "GRANTED PERMISSIONS" .
 .TP
 .B events
 Array containing
@@ -168,12 +185,15 @@ For example, the following is one JSON Lines record:
 "metadata":{}}}
 .EE
 .P
-Interactive public messages and exec
+Interactive public messages, exec
 .B post
-messages generate events.
+messages, and messages another module posts with
+.B message.post
+generate events.
 Private messages, room lifecycle notices, and module-created messages
 produce no events.
-Module-created messages are not fed back into the module set.
+Module-created messages are not fed back into the module set, and a posted
+message is never sent back to the module that posted it.
 .SH RESPONSES
 For each
 .B message.created
@@ -218,6 +238,95 @@ output after the response limit is a protocol failure.
 The protocol has no accepted
 .B error
 response type.
+.SH GRANTED PERMISSIONS
+.SS message:post
+A module holding
+.B message:post
+may write this record at any time, including while TNT waits for the
+responses to a
+.B message.created
+event:
+.P
+.EX
+{"type":"message.post","sender":"alice","plain_text":"hello"}
+.EE
+.P
+.B sender
+must be a valid interactive nickname: at most 20 characters, no leading
+space, dot, or hyphen, no control characters, no colon, and none of
+.BR "| ; & $ ` < > ( ) { } [ ] ' \(dq \e" .
+It must also not be
+.BR * ,
+.BR system ,
+or its Chinese equivalent; the colon restriction already excludes the
+.BI module: name
+form TNT reserves for its own messages.
+.B plain_text
+follows the
+.B message.create
+rules.
+TNT persists and broadcasts the text with that sender, then delivers it to
+every other module as a
+.B message.created
+event.
+An invalid record is a protocol failure and counts toward the
+invalid-response limit.
+.P
+A posted record gets no reply.
+It neither counts toward an event's response limit nor finishes the event,
+and the time TNT spends publishing it does not consume the event's response
+deadline.
+.SS presence:read
+A module holding
+.B presence:read
+receives presence records for interactive users; exec sessions produce none.
+When the runtime starts, the module first receives one or more
+.B presence.snapshot
+records whose
+.B nicknames
+arrays together list the users online at that moment:
+.P
+.EX
+{"type":"presence.snapshot","nicknames":["alice","bob"]}
+.EE
+.P
+A snapshot record carries at most 56 nicknames.
+At least one is sent, even when nobody is online.
+After that, TNT sends one record whenever a user joins or leaves.
+A nickname change is a
+.B presence.left
+for the old name followed by a
+.B presence.joined
+for the new one:
+.P
+.EX
+{"type":"presence.joined","nickname":"carol",\c
+"timestamp":"2026-06-04T12:00:00Z"}
+{"type":"presence.left","nickname":"carol",\c
+"timestamp":"2026-06-04T12:05:00Z"}
+.EE
+.P
+Presence records are notifications and must not be answered.
+They open no response window.
+For a module holding either permission, any record other than a valid
+.B message.post
+that arrives while no
+.B message.created
+event is waiting is a protocol failure.
+Around startup a joined record can name a user the snapshot already listed,
+and a left record can name one it did not, so treat presence as set
+membership.
+.P
+Presence records share the module's 128-event queue with
+.B message.created
+events.
+When that queue is full, TNT drops presence records instead of disabling
+the module, and once the queue has room again it reports how many were
+dropped on standard error:
+.P
+.EX
+module runtime: event queue full for NAME, dropped N presence events
+.EE
 .SH FAILURE HANDLING
 A handshake failure skips the affected module.
 After activation, a write failure, write timeout, read failure, response
@@ -259,6 +368,15 @@ Maximum responses per event, including
 .TP
 .B 128 events
 Pending queue capacity per module.
+.TP
+.B 56 nicknames
+Maximum nicknames in one
+.B presence.snapshot
+record.
+.TP
+.B 64 files
+Open file limit for a module process.
+A granted module may open 4096.
 .SH COMPATIBILITY
 The protocol identifier, required manifest capabilities, event and response
 types, and documented member meanings form the
@@ -281,6 +399,11 @@ It runs as the TNT service account.
 It can access every resource available to that account.
 Use a dedicated account and operating-system isolation for untrusted
 modules.
+.P
+A module holding
+.B message:post
+can post under any valid nickname, including one an SSH user is using.
+Grant it only to a module you trust as much as the server.
 .P
 The child inherits most of the server environment.
 TNT removes

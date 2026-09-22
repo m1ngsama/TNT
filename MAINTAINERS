@@ -83,6 +83,11 @@ F: tests/test_module_*.sh
 F: tests/test_install_wizard.sh
 F: tnt-module-protocol.7
 
+WEBSOCKET GATEWAY
+S: Maintained
+F: gateway/**
+F: tests/test_gateway_e2e.sh
+
 PACKAGING AND RELEASE
 S: Maintained
 F: packaging/**

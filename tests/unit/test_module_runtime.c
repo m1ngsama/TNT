@@ -182,6 +182,31 @@ TEST(loads_valid_manifest) {
     cleanup_module_dir();
 }
 
+TEST(loads_granted_permissions) {
+    tnt_module_manifest_t manifest;
+
+    setup_module_dir();
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"tnt-gateway\","
+        "\"entrypoint\":\"./tnt-gateway\","
+        "\"permissions\":[\"message:read\",\"message:create\","
+        "\"message:post\",\"presence:read\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) == 0);
+    assert(manifest.can_post_messages);
+    assert(manifest.can_read_presence);
+
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"echo\","
+        "\"entrypoint\":\"./echo.sh\","
+        "\"permissions\":[\"message:read\",\"message:create\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) == 0);
+    assert(!manifest.can_post_messages);
+    assert(!manifest.can_read_presence);
+    cleanup_module_dir();
+}
+
 TEST(rejects_wrong_protocol) {
     tnt_module_manifest_t manifest;
 
@@ -498,10 +523,90 @@ TEST(shutdown_cancels_waiting_module_read) {
     close(fds[1]);
 }
 
+static void read_file(const char *path, char *out, size_t out_size) {
+    FILE *fp = fopen(path, "rb");
+    size_t n;
+
+    assert(fp != NULL);
+    n = fread(out, 1, out_size - 1, fp);
+    out[n] = '\0';
+    fclose(fp);
+}
+
+TEST(presence_saturation_logs_outside_the_notifier) {
+    char script[PATH_MAX];
+    char log_path[PATH_MAX];
+    char log[4096] = "";
+    char nickname[16];
+    message_t msg = {.timestamp = 1, .username = "alice", .content = "hi"};
+    FILE *fp;
+    int saved_stderr;
+    int log_fd;
+
+    setup_module_dir();
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"stall\","
+        "\"entrypoint\":\"./stall.sh\","
+        "\"permissions\":[\"message:read\",\"message:create\","
+        "\"presence:read\"],\"events\":[\"message.created\"]}");
+    snprintf(script, sizeof(script), "%s/stall.sh", module_dir);
+    fp = fopen(script, "wb");
+    assert(fp != NULL);
+    fputs("#!/bin/sh\nread -r line\n"
+          "printf '{\"type\":\"handshake.ok\",\"protocol\":\"tnt.module.v1\"}\\n'\n"
+          "exec sleep 30\n", fp);
+    fclose(fp);
+    assert(chmod(script, 0755) == 0);
+    snprintf(log_path, sizeof(log_path), "%s/stderr.log", module_dir);
+
+    setenv("TNT_MODULE_PATHS", module_dir, 1);
+    setenv("TNT_MODULE_GRANTS", "stall", 1);
+    setenv("TNT_MODULE_RESPONSE_TIMEOUT_MS", "1000", 1);
+    fflush(stderr);
+    saved_stderr = dup(STDERR_FILENO);
+    log_fd = open(log_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    assert(saved_stderr >= 0 && log_fd >= 0);
+    assert(tnt_module_runtime_init() == 0);
+    assert(dup2(log_fd, STDERR_FILENO) >= 0);
+
+    tnt_module_runtime_publish_message_created(&msg);
+    sleep_millis(200);
+    for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
+        snprintf(nickname, sizeof(nickname), "user%d", i);
+        tnt_module_runtime_publish_presence(nickname, true);
+    }
+    read_file(log_path, log, sizeof(log));
+    assert(log[0] == '\0');
+
+    for (int i = 0; i < 100 && !strstr(log, "dropped 72 presence"); i++) {
+        sleep_millis(50);
+        read_file(log_path, log, sizeof(log));
+    }
+    tnt_module_runtime_shutdown();
+    fflush(stderr);
+    assert(dup2(saved_stderr, STDERR_FILENO) >= 0);
+    close(saved_stderr);
+    close(log_fd);
+    assert(strstr(log, "module runtime: event queue full for stall, "
+                       "dropped 72 presence events") != NULL);
+
+    for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
+        snprintf(nickname, sizeof(nickname), "user%d", i);
+        tnt_module_runtime_publish_presence(nickname, false);
+    }
+    unsetenv("TNT_MODULE_PATHS");
+    unsetenv("TNT_MODULE_GRANTS");
+    unsetenv("TNT_MODULE_RESPONSE_TIMEOUT_MS");
+    unlink(script);
+    unlink(log_path);
+    cleanup_module_dir();
+}
+
 int main(void) {
     printf("Running module runtime unit tests...\n\n");
 
     RUN_TEST(loads_valid_manifest);
+    RUN_TEST(loads_granted_permissions);
     RUN_TEST(rejects_wrong_protocol);
     RUN_TEST(rejects_missing_permissions_or_events);
     RUN_TEST(rejects_unsafe_entrypoint);
@@ -514,6 +619,7 @@ int main(void) {
     RUN_TEST(module_stdout_enforces_record_limit);
     RUN_TEST(module_stdout_rejects_control_and_partial_eof);
     RUN_TEST(shutdown_cancels_waiting_module_read);
+    RUN_TEST(presence_saturation_logs_outside_the_notifier);
 
     printf("\nAll %d module runtime tests passed.\n", tests_passed);
     return 0;
