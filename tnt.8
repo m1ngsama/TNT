@@ -260,6 +260,16 @@ An unset or empty value disables modules.
 See
 .BR tnt\-module\-protocol (7).
 .TP
+.B TNT_MODULE_GRANTS
+Colon-separated module names allowed to use the
+.B message:post
+and
+.B presence:read
+permissions.
+A granted module can post under any valid nickname.
+See
+.BR tnt\-module\-protocol (7).
+.TP
 .B TNT_MODULE_RESPONSE_TIMEOUT_MS
 Milliseconds a module has to answer one event before it is disabled.
 The range is 10 through 5000; the default is 100.
