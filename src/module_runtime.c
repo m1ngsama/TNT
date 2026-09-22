@@ -237,6 +237,10 @@ int tnt_module_manifest_load(const char *module_dir,
         manifest, "permissions", "message:read");
     out->can_create_messages = json_array_contains_string(
         manifest, "permissions", "message:create");
+    out->can_post_messages = json_array_contains_string(
+        manifest, "permissions", "message:post");
+    out->can_read_presence = json_array_contains_string(
+        manifest, "permissions", "presence:read");
 
     if (!out->wants_message_created || !out->can_read_messages ||
         !out->can_create_messages) {

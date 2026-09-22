@@ -15,6 +15,8 @@ typedef struct {
     bool wants_message_created;
     bool can_read_messages;
     bool can_create_messages;
+    bool can_post_messages;
+    bool can_read_presence;
 } tnt_module_manifest_t;
 
 int tnt_module_manifest_load(const char *module_dir,

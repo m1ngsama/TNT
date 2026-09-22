@@ -182,6 +182,31 @@ TEST(loads_valid_manifest) {
     cleanup_module_dir();
 }
 
+TEST(loads_granted_permissions) {
+    tnt_module_manifest_t manifest;
+
+    setup_module_dir();
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"tnt-gateway\","
+        "\"entrypoint\":\"./tnt-gateway\","
+        "\"permissions\":[\"message:read\",\"message:create\","
+        "\"message:post\",\"presence:read\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) == 0);
+    assert(manifest.can_post_messages);
+    assert(manifest.can_read_presence);
+
+    write_manifest(
+        "{\"protocol\":\"tnt.module.v1\",\"name\":\"echo\","
+        "\"entrypoint\":\"./echo.sh\","
+        "\"permissions\":[\"message:read\",\"message:create\"],"
+        "\"events\":[\"message.created\"]}");
+    assert(tnt_module_manifest_load(module_dir, &manifest) == 0);
+    assert(!manifest.can_post_messages);
+    assert(!manifest.can_read_presence);
+    cleanup_module_dir();
+}
+
 TEST(rejects_wrong_protocol) {
     tnt_module_manifest_t manifest;
 
@@ -502,6 +527,7 @@ int main(void) {
     printf("Running module runtime unit tests...\n\n");
 
     RUN_TEST(loads_valid_manifest);
+    RUN_TEST(loads_granted_permissions);
     RUN_TEST(rejects_wrong_protocol);
     RUN_TEST(rejects_missing_permissions_or_events);
     RUN_TEST(rejects_unsafe_entrypoint);
