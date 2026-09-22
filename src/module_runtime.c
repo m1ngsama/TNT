@@ -71,6 +71,7 @@ typedef struct module_process {
     size_t queued_event_count;
     bool queue_running;
     bool saturation_reported;
+    unsigned dropped_presence;
     bool queue_initialized;
     bool worker_started;
 } module_process_t;
@@ -790,7 +791,10 @@ static module_queue_push_result_t module_queue_push(module_process_t *module,
     active = atomic_load_explicit(&module->active, memory_order_acquire);
     if (!module->queue_running || queue_full || !active) {
         if (module->queue_running && queue_full && active &&
-            !module->saturation_reported) {
+            event->kind != MODULE_EVENT_MESSAGE_CREATED) {
+            module->dropped_presence++;
+        } else if (module->queue_running && queue_full && active &&
+                   !module->saturation_reported) {
             module->saturation_reported = true;
             pthread_mutex_unlock(&module->queue_lock);
             return MODULE_QUEUE_SATURATED;
@@ -817,6 +821,21 @@ static void take_queued_event_locked(module_process_t *module,
     module->queued_event_count--;
     if (module->queued_event_count <= TNT_MODULE_QUEUE_LIMIT / 2) {
         module->saturation_reported = false;
+    }
+}
+
+static void report_dropped_presence(module_process_t *module) {
+    unsigned dropped;
+
+    pthread_mutex_lock(&module->queue_lock);
+    dropped = module->dropped_presence;
+    module->dropped_presence = 0;
+    pthread_mutex_unlock(&module->queue_lock);
+    if (dropped > 0) {
+        fprintf(stderr,
+                "module runtime: event queue full for %s, dropped %u presence "
+                "events\n",
+                module->manifest.name, dropped);
     }
 }
 
@@ -892,9 +911,11 @@ static int queue_event_locked(module_event_kind_t kind, const message_t *msg,
     if (msg) {
         event.msg = *msg;
     }
-    event.event_id = ++g_next_event_id;
-    if (event.event_id == 0) {
+    if (kind == MODULE_EVENT_MESSAGE_CREATED) {
         event.event_id = ++g_next_event_id;
+        if (event.event_id == 0) {
+            event.event_id = ++g_next_event_id;
+        }
     }
 
     for (int i = 0; i < g_module_count; i++) {
@@ -906,7 +927,7 @@ static int queue_event_locked(module_event_kind_t kind, const message_t *msg,
             continue;
         }
         if (module_queue_push(module, &event) == MODULE_QUEUE_SATURATED &&
-            saturated_count < TNT_MAX_MODULES) {
+            saturated && saturated_count < TNT_MAX_MODULES) {
             size_t name_len =
                 strnlen(module->manifest.name, TNT_MODULE_NAME_MAX);
 
@@ -1263,6 +1284,7 @@ static void *module_worker_main(void *arg) {
         if (popped == MODULE_POP_STOPPED) {
             return NULL;
         }
+        report_dropped_presence(module);
         if (popped == MODULE_POP_EVENT) {
             deliver_event_to_module(module, &event);
         }
@@ -1419,7 +1441,6 @@ static void close_module_processes(int count) {
 
 int tnt_module_runtime_init(void) {
     int count;
-    char saturated[TNT_MAX_MODULES][TNT_MODULE_NAME_MAX + 1];
 
     pthread_mutex_lock(&g_lifecycle_lock);
     pthread_mutex_lock(&g_dispatch_lock);
@@ -1449,8 +1470,7 @@ int tnt_module_runtime_init(void) {
 
     pthread_mutex_lock(&g_dispatch_lock);
     g_accepting = true;
-    (void)queue_event_locked(MODULE_EVENT_PRESENCE_SNAPSHOT, NULL, NULL,
-                             saturated);
+    (void)queue_event_locked(MODULE_EVENT_PRESENCE_SNAPSHOT, NULL, NULL, NULL);
     pthread_mutex_unlock(&g_dispatch_lock);
     pthread_mutex_unlock(&g_lifecycle_lock);
     return 0;
@@ -1494,8 +1514,6 @@ void tnt_module_runtime_publish_message_created(const message_t *msg) {
 }
 
 void tnt_module_runtime_publish_presence(const char *nickname, bool joined) {
-    char saturated[TNT_MAX_MODULES][TNT_MODULE_NAME_MAX + 1];
-    int saturated_count = 0;
     message_t msg = {
         .timestamp = time(NULL),
     };
@@ -1508,12 +1526,11 @@ void tnt_module_runtime_publish_presence(const char *nickname, bool joined) {
     pthread_mutex_lock(&g_dispatch_lock);
     if (online_update_locked(msg.username, joined) && g_accepting &&
         !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
-        saturated_count = queue_event_locked(
+        (void)queue_event_locked(
             joined ? MODULE_EVENT_PRESENCE_JOINED : MODULE_EVENT_PRESENCE_LEFT,
-            &msg, NULL, saturated);
+            &msg, NULL, NULL);
     }
     pthread_mutex_unlock(&g_dispatch_lock);
-    report_saturated(saturated, saturated_count);
 }
 
 #ifdef TNT_TESTING

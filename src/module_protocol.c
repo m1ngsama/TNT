@@ -157,6 +157,7 @@ bool tnt_module_parse_message_post(const char *line,
                                      sizeof(out->sender)) &&
            utf8_is_valid_string(out->sender) &&
            is_valid_username(out->sender) &&
+           strchr(out->sender, ':') == NULL &&
            utf8_strlen(out->sender) <= TNT_MODULE_SENDER_MAX_CHARS &&
            tnt_json_get_string_field(line, "plain_text", out->plain_text,
                                      sizeof(out->plain_text)) &&

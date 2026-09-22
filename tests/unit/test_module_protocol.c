@@ -132,7 +132,7 @@ TEST(parse_message_post_accepts_valid_sender) {
 TEST(parse_message_post_rejects_invalid_sender) {
     static const char *const senders[] = {
         "", "system", "module:echo", "*", "-dash", ".dot", "a|b", "a;b",
-        "abcdefghijklmnopqrstu", "bad\\u0001"
+        "abcdefghijklmnopqrstu", "bad\\u0001", "a:b", "module:", ":lead"
     };
     tnt_module_message_post_t post;
 
