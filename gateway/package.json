@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "build": "bun build --compile --minify --outfile tnt-gateway src/main.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
     "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14"
   }
 }
