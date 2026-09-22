@@ -20,7 +20,8 @@ empty_view 5
 multiline_input 14
 cursor_editing 10
 vim_keymap 12
-wide_text_view 9"
+wide_text_view 9
+module_privileged 16"
 
 WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-suites.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT

@@ -62,6 +62,7 @@ void input_init(void) {
                                             g_default_keymap);
     room_set_client_notifier(g_room, client_wake);
     room_set_client_name_accessor(g_room, input_client_name);
+    room_set_presence_notifier(g_room, tnt_module_runtime_publish_presence);
 }
 
 static int read_username(client_t *client) {

@@ -29,6 +29,10 @@ void tnt_module_runtime_shutdown(void);
  * intentionally fire-and-forget so basic chat never depends on module health. */
 void tnt_module_runtime_publish_message_created(const message_t *msg);
 
+/* Track an interactive user joining or leaving and notify presence:read
+ * modules.  Safe to call with the room lock held. */
+void tnt_module_runtime_publish_presence(const char *nickname, bool joined);
+
 #ifdef TNT_TESTING
 /* Pipe-level test seams for deterministic backpressure/deadline coverage. */
 int tnt_module_runtime_test_write_fd(int fd, const char *data, size_t len,
