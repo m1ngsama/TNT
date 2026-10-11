@@ -147,13 +147,25 @@ are ignored.
 Any other response, timeout, or I/O failure prevents that module from being
 enabled.
 .SH EVENTS
-For each eligible public message, TNT sends an object with
+For each public message, TNT sends an object with
 .B type
 set to
 .B message.created
 and a
 .B message
-object containing:
+object.
+This covers chat messages, actions (sender
+.BR * ),
+system notices (sender
+.B system
+or
+.BR \(co\(fc\(cy ),
+and replies from other modules (sender
+.BR module:NAME ).
+A module never receives the messages it created or posted itself.
+The
+.B message
+object contains:
 .TP
 .B id
 An opaque string of the form

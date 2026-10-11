@@ -1013,7 +1013,9 @@ static void publish_module_message(const module_process_t *module,
     snprintf(msg.username, sizeof(msg.username), "module:%.*s",
              TNT_MODULE_NAME_MAX, module->manifest.name);
     snprintf(msg.content, sizeof(msg.content), "%s", plain_text);
-    (void)publish_message(&msg);
+    if (publish_message(&msg)) {
+        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
+    }
 }
 
 static void publish_posted_message(const module_process_t *module,
@@ -1022,8 +1024,14 @@ static void publish_posted_message(const module_process_t *module,
         .timestamp = time(NULL),
     };
 
-    snprintf(msg.username, sizeof(msg.username), "%s", post->sender);
-    snprintf(msg.content, sizeof(msg.content), "%s", post->plain_text);
+    if (strncmp(post->plain_text, "/me ", 4) == 0 && post->plain_text[4] != '\0') {
+        snprintf(msg.username, sizeof(msg.username), "*");
+        snprintf(msg.content, sizeof(msg.content), "%s %s", post->sender,
+                 post->plain_text + 4);
+    } else {
+        snprintf(msg.username, sizeof(msg.username), "%s", post->sender);
+        snprintf(msg.content, sizeof(msg.content), "%s", post->plain_text);
+    }
     if (publish_message(&msg)) {
         dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
     }
