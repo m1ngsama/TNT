@@ -39,7 +39,8 @@ while IFS= read -r line; do
       printf '{"type":"handshake.ok","protocol":"tnt.module.v1"}\n' ;;
     *'"type":"presence.snapshot"'*)
       printf '{"type":"message.post","sender":"system","plain_text":"forged notice"}\n'
-      printf '{"type":"message.post","sender":"webuser","plain_text":"hello from the web"}\n' ;;
+      printf '{"type":"message.post","sender":"webuser","plain_text":"hello from the web"}\n'
+      printf '{"type":"message.post","sender":"webuser","plain_text":"/me waves"}\n' ;;
     *'"type":"message.created"'*)
       printf '{"type":"event.ok"}\n' ;;
   esac
@@ -105,6 +106,21 @@ if ! grep -q "forged notice" "$LOG" &&
 else
     fail "a reserved sender was accepted"
     cat "$LOG" 2>/dev/null
+fi
+
+if tnt_wait_for_fixed "$LOG" "|*|webuser waves"; then
+    pass "a posted /me becomes an action"
+else
+    fail "the posted /me was not turned into an action"
+    cat "$LOG" 2>/dev/null
+fi
+
+if grep -q '"type":"message.created".*"sender":"module:echo"' "$TNT_POSTER_EVENTS" ||
+   tnt_wait_for_fixed "$TNT_POSTER_EVENTS" '"sender":"module:echo"'; then
+    pass "module replies reach other modules"
+else
+    fail "the echo module's reply never reached the poster"
+    cat "$TNT_POSTER_EVENTS" 2>/dev/null | head -20
 fi
 
 if tnt_wait_for_fixed "$LOG" "|module:echo|echo: hello from the web"; then

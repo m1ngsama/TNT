@@ -13,6 +13,7 @@
 #include "keymap.h"
 #include "manual.h"
 #include "message.h"
+#include "module_runtime.h"
 #include "richtext.h"
 #include "system_message.h"
 #include "theme.h"
@@ -491,6 +492,7 @@ void commands_dispatch(client_t *client) {
                                          client->username, client->ui_lang);
                 room_broadcast(g_room, &nick_msg);
                 message_save(&nick_msg);
+                tnt_module_runtime_publish_message_created(&nick_msg);
 
                 buffer_appendf(output, sizeof(output), &pos,
                                i18n_text(client->ui_lang,

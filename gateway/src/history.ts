@@ -3,7 +3,16 @@ import { byteLength } from "./text";
 export const ROOM = "lobby";
 
 export type Entry = { timestamp: string; sender: string; text: string };
-export type Message = { id: string; room: string; sender: string; text: string; timestamp: string };
+export type Kind = "text" | "action" | "system" | "module";
+export type Message = {
+  id: string;
+  room: string;
+  sender: string;
+  text: string;
+  timestamp: string;
+  kind: Kind;
+  mentions: string[];
+};
 
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
@@ -47,8 +56,22 @@ export function parseRecord(line: string, now: number): Entry | null {
   return { timestamp, sender, text };
 }
 
-export function isPublicSender(sender: string): boolean {
-  return sender !== "system" && sender !== "系统" && !sender.startsWith("module:");
+const MENTION = /@([A-Za-z0-9_]+)/g;
+
+export function mentions(text: string): string[] {
+  return [...new Set([...text.matchAll(MENTION)].map((m) => m[1]!.toLowerCase()))];
+}
+
+export function classify(entry: Entry): { kind: Kind; sender: string; text: string } {
+  if (entry.sender === "*") {
+    const space = entry.text.indexOf(" ");
+    return space > 0
+      ? { kind: "action", sender: entry.text.slice(0, space), text: entry.text.slice(space + 1) }
+      : { kind: "action", sender: entry.text, text: "" };
+  }
+  if (entry.sender === "system" || entry.sender === "系统") return { kind: "system", sender: entry.sender, text: entry.text };
+  if (entry.sender.startsWith("module:")) return { kind: "module", sender: entry.sender.slice(7), text: entry.text };
+  return { kind: "text", sender: entry.sender, text: entry.text };
 }
 
 function splitLines(bytes: Uint8Array): Uint8Array[] {
@@ -85,7 +108,7 @@ async function readLines(path: string): Promise<string[]> {
 async function readEntries(path: string, now: number): Promise<Entry[]> {
   return (await readLines(path))
     .map((line) => parseRecord(line, now))
-    .filter((entry): entry is Entry => entry !== null && isPublicSender(entry.sender));
+    .filter((entry): entry is Entry => entry !== null);
 }
 
 export async function readHistory(stateDir: string, limit: number, now: number = Date.now()): Promise<Entry[]> {
@@ -106,24 +129,32 @@ export function messageId(entry: Entry, occurrence: number): string {
 export class Ledger {
   readonly #limit: number;
   #messages: Message[] = [];
+  #entries: Entry[] = [];
 
   constructor(limit: number) {
     this.#limit = limit;
   }
 
   add(entry: Entry): Message {
-    const occurrence = this.#messages.filter(
+    const occurrence = this.#entries.filter(
       (m) => m.timestamp === entry.timestamp && m.sender === entry.sender && m.text === entry.text,
     ).length;
+    const shown = classify(entry);
     const message: Message = {
       id: messageId(entry, occurrence),
       room: ROOM,
-      sender: entry.sender,
-      text: entry.text,
+      sender: shown.sender,
+      text: shown.text,
       timestamp: entry.timestamp,
+      kind: shown.kind,
+      mentions: mentions(shown.text),
     };
     this.#messages.push(message);
-    if (this.#messages.length > this.#limit) this.#messages.shift();
+    this.#entries.push(entry);
+    if (this.#messages.length > this.#limit) {
+      this.#messages.shift();
+      this.#entries.shift();
+    }
     return message;
   }
 

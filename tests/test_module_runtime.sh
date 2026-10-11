@@ -123,6 +123,34 @@ done
 SH
 chmod +x "$MODULE_DIR/echo-module.sh"
 
+RELAY_MODULE_DIR="$MODULE_DIR-relay"
+mkdir -p "$RELAY_MODULE_DIR"
+cat >"$RELAY_MODULE_DIR/tnt-module.json" <<'JSON'
+{
+  "protocol": "tnt.module.v1",
+  "name": "relay-module",
+  "version": "0.1.0",
+  "entrypoint": "./relay-module.sh",
+  "permissions": ["message:read", "message:create"],
+  "events": ["message.created"]
+}
+JSON
+cat >"$RELAY_MODULE_DIR/relay-module.sh" <<'SH'
+#!/bin/sh
+while IFS= read -r line; do
+  case "$line" in
+    *'"type":"handshake"'*)
+      printf '{"type":"handshake.ok","protocol":"tnt.module.v1","module":{"name":"relay-module","version":"0.1.0"}}\n' ;;
+    *'"type":"message.created"'*)
+      printf '%s\n' "$line" >> seen-events.log
+      printf '{"type":"event.ok"}\n' ;;
+    *)
+      printf '{"type":"event.ok"}\n' ;;
+  esac
+done
+SH
+chmod +x "$RELAY_MODULE_DIR/relay-module.sh"
+
 mkdir -p "$FLOOD_MODULE_DIR"
 cat >"$FLOOD_MODULE_DIR/tnt-module.json" <<'JSON'
 {
@@ -342,7 +370,7 @@ fi
 
 stop_server
 
-start_server "$MODULE_DIR" "$STATE_DIR/server.log"
+start_server "$MODULE_DIR:$RELAY_MODULE_DIR" "$STATE_DIR/server.log"
 wait_for_health "$STATE_DIR/server.log" "server"
 
 if [ "$HEALTH_OUTPUT" = "ok" ]; then
@@ -377,6 +405,20 @@ else
     echo "x module response missing"
     printf '%s\n' "$TAIL_OUTPUT"
     sed -n '1,200p' "$STATE_DIR/server.log"
+    FAIL=$((FAIL + 1))
+fi
+
+relay_saw_module_reply() {
+    grep -q '"sender":"module:echo-module"' "$RELAY_MODULE_DIR/seen-events.log" 2>/dev/null
+}
+if tnt_poll_connection 5 relay_saw_module_reply; then
+    echo "✓ module replies are delivered to other modules"
+    PASS=$((PASS + 1))
+else
+    echo "x the relay module never saw the echo module's reply"
+    cat "$RELAY_MODULE_DIR/seen-events.log" 2>/dev/null | head -5
+    ls -la "$RELAY_MODULE_DIR"
+    grep -i "relay\|module runtime" "$STATE_DIR/server.log" | head -12
     FAIL=$((FAIL + 1))
 fi
 

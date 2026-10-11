@@ -1449,6 +1449,7 @@ void input_run_session(client_t *client) {
     system_message_make_join(&join_msg, client->username, client->ui_lang);
     room_broadcast(g_room, &join_msg);
     message_save(&join_msg);
+    tnt_module_runtime_publish_message_created(&join_msg);
 
     /* Show MOTD if motd.txt exists in state directory */
     {
@@ -1838,6 +1839,7 @@ cleanup:
         room_remove_client(g_room, client);
         room_broadcast(g_room, &leave_msg);
         message_save(&leave_msg);
+        tnt_module_runtime_publish_message_created(&leave_msg);
     }
 
     /* Interactive shells otherwise look like a transport reset to OpenSSH
