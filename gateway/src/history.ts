@@ -7,7 +7,7 @@ export type Message = { id: string; room: string; sender: string; text: string; 
 
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
-const TAIL_BYTES = 256 * 1024;
+export const RECENT = 100;
 const DAY_MS = 86_400_000;
 const WINDOW_PAST_MS = 3650 * DAY_MS;
 const WINDOW_FUTURE_MS = DAY_MS;
@@ -71,19 +71,16 @@ function decodeLine(bytes: Uint8Array): string | null {
   }
 }
 
-async function tailLines(path: string): Promise<string[]> {
+async function readLines(path: string): Promise<string[]> {
   const file = Bun.file(path);
   if (!(await file.exists())) return [];
-  const start = Math.max(0, file.size - TAIL_BYTES);
-  const bytes = new Uint8Array(await file.slice(start).arrayBuffer());
-  const lines = splitLines(bytes);
+  const lines = splitLines(new Uint8Array(await file.arrayBuffer()));
   lines.pop();
-  if (start > 0) lines.shift();
   return lines.map(decodeLine).filter((line): line is string => line !== null);
 }
 
 async function readEntries(path: string, now: number): Promise<Entry[]> {
-  return (await tailLines(path))
+  return (await readLines(path))
     .map((line) => parseRecord(line, now))
     .filter((entry): entry is Entry => entry !== null && isPublicSender(entry.sender));
 }
@@ -128,6 +125,13 @@ export class Ledger {
   }
 
   recent(): Message[] {
-    return [...this.#messages];
+    return this.#messages.slice(-RECENT);
+  }
+
+  before(id: string, limit: number): { messages: Message[]; more: boolean } | null {
+    const index = this.#messages.findIndex((m) => m.id === id);
+    if (index < 0) return null;
+    const start = Math.max(0, index - limit);
+    return { messages: this.#messages.slice(start, index), more: start > 0 };
   }
 }

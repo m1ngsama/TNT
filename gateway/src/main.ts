@@ -3,7 +3,7 @@ import { createGateway } from "./gateway";
 import { Ledger, readHistory } from "./history";
 import { encodePost, parseTntLine } from "./module";
 
-const HISTORY_LIMIT = 100;
+const HISTORY_LIMIT = 5000;
 const env = process.env;
 const issuer = env.TNT_GATEWAY_ISSUER || "https://auth.m1ng.space";
 const stdout = Bun.stdout.writer();

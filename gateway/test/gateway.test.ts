@@ -126,3 +126,27 @@ test("a second connection for the same user keeps them online when one closes", 
   await bob.next((f) => f.type === "pong");
   await expect(bob.next((f) => f.type === "presence" && !f.online.includes("alice"), 300)).rejects.toThrow();
 });
+
+describe("history and typing", () => {
+  test("answers history pages and rejects unknown ids", async () => {
+    const alice = connect(url, "alice");
+    const ready = await alice.next((f) => f.type === "ready");
+    const first = ready.history[0].id;
+    alice.send({ type: "history", before: first, limit: "50" });
+    expect(await alice.next((f) => f.type === "history")).toEqual({ type: "history", before: first, messages: [], more: false });
+    alice.send({ type: "history", before: "nope", limit: 50 });
+    expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "unknown_message" });
+  });
+
+  test("forwards typing to others at most every two seconds", async () => {
+    const alice = connect(url, "alice");
+    await alice.next((f) => f.type === "ready");
+    const bob = connect(url, "bob");
+    await bob.next((f) => f.type === "ready");
+    alice.send({ type: "typing" });
+    expect(await bob.next((f) => f.type === "typing")).toEqual({ type: "typing", handle: "alice" });
+    alice.send({ type: "typing" });
+    await expect(bob.next((f) => f.type === "typing", 300)).rejects.toThrow();
+    await expect(alice.next((f) => f.type === "typing", 300)).rejects.toThrow();
+  });
+});

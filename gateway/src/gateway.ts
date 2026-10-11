@@ -8,6 +8,9 @@ import { normalizeText, validateText } from "./text";
 
 export const CLOSE_UNAUTHORIZED = 4401;
 const AUTH_TIMEOUT_MS = 5_000;
+const TYPING_INTERVAL_MS = 2_000;
+const HISTORY_PAGE = 50;
+const HISTORY_PAGE_MAX = 100;
 const OPEN = 1;
 
 type Session = {
@@ -42,6 +45,7 @@ export function createGateway(options: GatewayOptions) {
   const limiter = new RateLimiter(3, 1);
   const clients = new Set<Socket>();
   const now = options.now ?? (() => new Date());
+  const typingAt = new Map<string, number>();
   let online = "[]";
 
   const broadcast = (frame: object) => {
@@ -76,8 +80,27 @@ export function createGateway(options: GatewayOptions) {
     clients.add(ws);
   }
 
+  function sendHistory(ws: Socket, frame: Record<string, unknown>) {
+    if (typeof frame.before !== "string") return fail(ws, "invalid_frame");
+    const limit = Math.min(HISTORY_PAGE_MAX, Math.max(1, Math.trunc(Number(frame.limit)) || HISTORY_PAGE));
+    const page = options.ledger.before(frame.before, limit);
+    if (page === null) return fail(ws, "unknown_message");
+    ws.send(JSON.stringify({ type: "history", before: frame.before, ...page }));
+  }
+
+  function forwardTyping(ws: Socket) {
+    const handle = ws.data.handle;
+    const at = Date.now();
+    if (at - (typingAt.get(handle) ?? 0) < TYPING_INTERVAL_MS) return;
+    typingAt.set(handle, at);
+    const data = JSON.stringify({ type: "typing", handle });
+    for (const client of clients) if (client.data.handle !== handle) client.send(data);
+  }
+
   function receive(ws: Socket, frame: Frame) {
     if (frame?.type === "ping") return ws.send('{"type":"pong"}');
+    if (frame?.type === "history") return sendHistory(ws, frame);
+    if (frame?.type === "typing") return forwardTyping(ws);
     if (frame?.type !== "send") return fail(ws, "invalid_frame");
     const text = validateText(frame.text);
     if (text === null) return fail(ws, "invalid_text");
@@ -113,6 +136,7 @@ export function createGateway(options: GatewayOptions) {
     },
     sweep(at?: number) {
       limiter.sweep(at);
+      for (const [handle, time] of typingAt) if ((at ?? Date.now()) - time > TYPING_INTERVAL_MS) typingAt.delete(handle);
     },
     handleEvent(event: TntEvent) {
       if (event.type === "message.created") {
