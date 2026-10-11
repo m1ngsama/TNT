@@ -123,3 +123,35 @@ describe("readHistory", () => {
     expect(await readHistory(dir, 10)).toEqual([{ timestamp, sender: "alice", text: "hi" }]);
   });
 });
+
+describe("Ledger paging", () => {
+  test("pages backwards from an id", () => {
+    const ledger = new Ledger(10);
+    const ids = ["a", "b", "c", "d", "e"].map((text) => ledger.add({ ...HELLO, text }).id);
+    expect(ledger.recent().map((m) => m.text)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(ledger.before(ids[4]!, 2)).toEqual({ messages: ledger.recent().slice(2, 4), more: true });
+    expect(ledger.before(ids[2]!, 5)).toEqual({ messages: ledger.recent().slice(0, 2), more: false });
+    expect(ledger.before("nope", 2)).toBeNull();
+  });
+
+  test("recent is capped at one hundred while the ledger keeps more", () => {
+    const ledger = new Ledger(500);
+    for (let i = 0; i < 300; i++) ledger.add({ ...HELLO, text: String(i) });
+    expect(ledger.recent().length).toBe(100);
+    expect(ledger.recent()[0]!.text).toBe("200");
+    expect(ledger.before(ledger.recent()[0]!.id, 100)!.messages.length).toBe(100);
+  });
+});
+
+describe("readHistory whole files", () => {
+  let dir = "";
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  test("returns every record of a long log", async () => {
+    dir = mkdtempSync(join(tmpdir(), "tnt-gateway-long-"));
+    const lines = ["#tnt-message-log v2"];
+    for (let i = 0; i < 3000; i++) lines.push(`2026-09-22T10:00:00Z|alice|message number ${i} with some padding to make the file large enough`);
+    writeFileSync(join(dir, "messages.log"), lines.join("\n") + "\n");
+    expect((await readHistory(dir, 5000, NOW)).length).toBe(3000);
+  });
+});
