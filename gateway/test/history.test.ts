@@ -64,8 +64,8 @@ describe("Ledger", () => {
     expect(ledger.add(HELLO).id).toBe("aa2df149c78d997a");
     ledger.add({ ...HELLO, text: "later" });
     expect(ledger.recent()).toEqual([
-      { id: "aa2df149c78d997a", room: "lobby", sender: "alice", text: "hello", timestamp: "2026-09-22T10:00:00Z" },
-      { id: messageId({ ...HELLO, text: "later" }, 0), room: "lobby", sender: "alice", text: "later", timestamp: "2026-09-22T10:00:00Z" },
+      { id: "aa2df149c78d997a", room: "lobby", sender: "alice", text: "hello", timestamp: "2026-09-22T10:00:00Z", kind: "text", mentions: [] },
+      { id: messageId({ ...HELLO, text: "later" }, 0), room: "lobby", sender: "alice", text: "later", timestamp: "2026-09-22T10:00:00Z", kind: "text", mentions: [] },
     ]);
   });
 });
@@ -74,7 +74,7 @@ describe("readHistory", () => {
   let dir = "";
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  test("merges the rotated log, drops notices and module output, keeps the newest", async () => {
+  test("merges the rotated log, keeps notices and module output, keeps the newest", async () => {
     dir = mkdtempSync(join(tmpdir(), "tnt-gateway-history-"));
     writeFileSync(join(dir, "messages.log.1"), "#tnt-message-log v2\n2026-09-22T09:00:00Z|alice|old\n");
     writeFileSync(
@@ -89,6 +89,8 @@ describe("readHistory", () => {
     );
     expect(await readHistory(dir, 10, NOW)).toEqual([
       { timestamp: "2026-09-22T09:00:00Z", sender: "alice", text: "old" },
+      { timestamp: "2026-09-22T10:00:00Z", sender: "system", text: "alice joined" },
+      { timestamp: "2026-09-22T10:00:01Z", sender: "module:echo", text: "echo: hi" },
       { timestamp: "2026-09-22T10:00:02Z", sender: "bob", text: "new" },
     ]);
     expect(await readHistory(dir, 1, NOW)).toEqual([{ timestamp: "2026-09-22T10:00:02Z", sender: "bob", text: "new" }]);
