@@ -43,6 +43,7 @@ function parseFrame(raw: string | Buffer): Frame {
 export function createGateway(options: GatewayOptions) {
   const presence = new Presence();
   const limiter = new RateLimiter(3, 1);
+  const historyLimiter = new RateLimiter(10, 2);
   const clients = new Set<Socket>();
   const now = options.now ?? (() => new Date());
   const typingAt = new Map<string, number>();
@@ -82,6 +83,7 @@ export function createGateway(options: GatewayOptions) {
 
   function sendHistory(ws: Socket, frame: Record<string, unknown>) {
     if (typeof frame.before !== "string") return fail(ws, "invalid_frame");
+    if (!historyLimiter.take(ws.data.handle)) return fail(ws, "rate_limited");
     const limit = Math.min(HISTORY_PAGE_MAX, Math.max(1, Math.trunc(Number(frame.limit)) || HISTORY_PAGE));
     const page = options.ledger.before(frame.before, limit);
     if (page === null) return fail(ws, "unknown_message");
@@ -136,6 +138,7 @@ export function createGateway(options: GatewayOptions) {
     },
     sweep(at?: number) {
       limiter.sweep(at);
+      historyLimiter.sweep(at);
       for (const [handle, time] of typingAt) if ((at ?? Date.now()) - time > TYPING_INTERVAL_MS) typingAt.delete(handle);
     },
     handleEvent(event: TntEvent) {

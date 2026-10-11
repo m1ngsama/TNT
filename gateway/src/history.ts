@@ -8,6 +8,7 @@ export type Message = { id: string; room: string; sender: string; text: string; 
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 export const RECENT = 100;
+const READ_BYTES = 8 * 1024 * 1024;
 const DAY_MS = 86_400_000;
 const WINDOW_PAST_MS = 3650 * DAY_MS;
 const WINDOW_FUTURE_MS = DAY_MS;
@@ -74,8 +75,10 @@ function decodeLine(bytes: Uint8Array): string | null {
 async function readLines(path: string): Promise<string[]> {
   const file = Bun.file(path);
   if (!(await file.exists())) return [];
-  const lines = splitLines(new Uint8Array(await file.arrayBuffer()));
+  const start = Math.max(0, file.size - READ_BYTES);
+  const lines = splitLines(new Uint8Array(await file.slice(start).arrayBuffer()));
   lines.pop();
+  if (start > 0) lines.shift();
   return lines.map(decodeLine).filter((line): line is string => line !== null);
 }
 

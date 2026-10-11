@@ -138,6 +138,13 @@ describe("history and typing", () => {
     expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "unknown_message" });
   });
 
+  test("limits history requests", async () => {
+    const alice = connect(url, "alice");
+    const ready = await alice.next((f) => f.type === "ready");
+    for (let i = 0; i < 11; i++) alice.send({ type: "history", before: ready.history[0].id, limit: 1 });
+    expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "rate_limited" });
+  });
+
   test("forwards typing to others at most every two seconds", async () => {
     const alice = connect(url, "alice");
     await alice.next((f) => f.type === "ready");
