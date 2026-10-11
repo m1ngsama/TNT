@@ -127,6 +127,35 @@ test("a second connection for the same user keeps them online when one closes", 
   await expect(bob.next((f) => f.type === "presence" && !f.online.includes("alice"), 300)).rejects.toThrow();
 });
 
+describe("idempotent sends", () => {
+  test("a resend with the same nonce echoes the first message and posts once", async () => {
+    const alice = connect(url, "alice");
+    await alice.next((f) => f.type === "ready");
+    alice.send({ type: "send", text: "hello", nonce: "n1" });
+    const first = await alice.next((f) => f.type === "message");
+    expect(first.nonce).toBe("n1");
+    alice.send({ type: "send", text: "hello", nonce: "n1" });
+    const again = await alice.next((f) => f.type === "message");
+    expect(again.id).toBe(first.id);
+    expect(posts).toEqual([["alice", "hello"]]);
+    alice.send({ type: "send", text: "hello" });
+    expect((await alice.next((f) => f.type === "message")).id).not.toBe(first.id);
+  });
+
+  test("nonces are private to their sender", async () => {
+    const alice = connect(url, "alice");
+    await alice.next((f) => f.type === "ready");
+    const bob = connect(url, "bob");
+    await bob.next((f) => f.type === "ready");
+    alice.send({ type: "send", text: "hi", nonce: "shared" });
+    const a = await alice.next((f) => f.type === "message");
+    bob.send({ type: "send", text: "hi", nonce: "shared" });
+    const b = await bob.next((f) => f.type === "message" && f.sender === "bob");
+    expect(b.id).not.toBe(a.id);
+    expect(posts.length).toBe(2);
+  });
+});
+
 describe("history and typing", () => {
   test("answers history pages and rejects unknown ids", async () => {
     const alice = connect(url, "alice");

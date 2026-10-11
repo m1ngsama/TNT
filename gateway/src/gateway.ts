@@ -11,6 +11,8 @@ const AUTH_TIMEOUT_MS = 5_000;
 const TYPING_INTERVAL_MS = 2_000;
 const HISTORY_PAGE = 50;
 const HISTORY_PAGE_MAX = 100;
+const NONCE_TTL_MS = 10 * 60_000;
+const NONCE_MAX_LENGTH = 64;
 const OPEN = 1;
 
 type Session = {
@@ -47,13 +49,14 @@ export function createGateway(options: GatewayOptions) {
   const clients = new Set<Socket>();
   const now = options.now ?? (() => new Date());
   const typingAt = new Map<string, number>();
+  const sent = new Map<string, { message: Message; at: number }>();
   let online = "[]";
 
   const broadcast = (frame: object) => {
     const data = JSON.stringify(frame);
     for (const ws of clients) ws.send(data);
   };
-  const deliver = (message: Message) => broadcast({ type: "message", ...message });
+  const deliver = (message: Message, nonce?: string) => broadcast(nonce ? { type: "message", ...message, nonce } : { type: "message", ...message });
   const syncPresence = () => {
     const list = presence.online();
     const key = JSON.stringify(list);
@@ -107,10 +110,16 @@ export function createGateway(options: GatewayOptions) {
     const text = validateText(frame.text);
     if (text === null) return fail(ws, "invalid_text");
     const sender = ws.data.handle;
+    const nonce = typeof frame.nonce === "string" && frame.nonce.length <= NONCE_MAX_LENGTH ? frame.nonce : undefined;
+    const key = nonce === undefined ? undefined : `${sender}\n${nonce}`;
+    const earlier = key === undefined ? undefined : sent.get(key);
+    if (earlier) return ws.send(JSON.stringify({ type: "message", ...earlier.message, nonce }));
     if (!limiter.take(sender)) return fail(ws, "rate_limited");
     options.post(sender, text);
     const timestamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");
-    deliver(options.ledger.add({ timestamp, sender, text }));
+    const message = options.ledger.add({ timestamp, sender, text });
+    if (key !== undefined) sent.set(key, { message, at: Date.now() });
+    deliver(message, nonce);
   }
 
   return {
@@ -139,6 +148,7 @@ export function createGateway(options: GatewayOptions) {
     sweep(at?: number) {
       limiter.sweep(at);
       historyLimiter.sweep(at);
+      for (const [key, entry] of sent) if ((at ?? Date.now()) - entry.at > NONCE_TTL_MS) sent.delete(key);
       for (const [handle, time] of typingAt) if ((at ?? Date.now()) - time > TYPING_INTERVAL_MS) typingAt.delete(handle);
     },
     handleEvent(event: TntEvent) {
