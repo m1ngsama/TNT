@@ -342,7 +342,7 @@ static void show_session_notice(client_t *client, const char *text) {
     snprintf(client->command_output, sizeof(client->command_output), "%s",
              text);
     client->command_output_scroll = 0;
-    client->command_output_kind = TNT_COMMAND_OUTPUT_GENERIC;
+    client->command_output_kind = TNT_COMMAND_OUTPUT_NOTICE;
     client->show_motd = false;
     client->redraw_pending = true;
 }
@@ -845,6 +845,20 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
 
     /* Handle command output / MOTD display.  MOTD remains a simple notice;
      * command output behaves like a small pager so long results can be read. */
+    /* A notice can arrive at any moment, from a module or on entry, so it
+     * must not swallow what someone is already typing: any key but q or
+     * Esc closes it and then does its usual job. */
+    if (client->command_output[0] != '\0' &&
+        client->command_output_kind == TNT_COMMAND_OUTPUT_NOTICE &&
+        !client->show_motd) {
+        client_mode_t mode = client->mode;
+        dismiss_command_output(client);
+        client->mode = mode;
+        if (key == 'q' || key == 27) {
+            return true;
+        }
+    }
+
     if (client->command_output[0] != '\0') {
         pager_action_t action;
 

@@ -26,6 +26,7 @@ typedef struct {
 typedef enum {
     TNT_COMMAND_OUTPUT_NONE,
     TNT_COMMAND_OUTPUT_GENERIC,
+    TNT_COMMAND_OUTPUT_NOTICE,
     TNT_COMMAND_OUTPUT_INBOX
 } tnt_command_output_kind_t;
 
