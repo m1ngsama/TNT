@@ -124,7 +124,7 @@ close
     expect(exitCode).toBe(0);
     await alice.next((f) => f.type === "presence" && !f.online.includes("carol"), 10_000);
 
-    expect(readFileSync(join(stateDir, "messages.log"), "utf8")).toContain("|alice|hello from the web\n");
+    expect(readFileSync(join(stateDir, "messages.log"), "utf8")).toContain("|alice|hello from the web|v\n");
 
     const bob = connect(url, await token("bob"));
     const ready = await bob.next((f) => f.type === "ready", 10_000);
