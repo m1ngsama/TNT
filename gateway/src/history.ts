@@ -47,14 +47,15 @@ export function decodeContent(stored: string): string | null {
 
 export function parseRecord(line: string, now: number): Entry | null {
   const fields = line.split("|");
-  if (fields.length !== 3) return null;
-  const [timestamp, sender, stored] = fields as [string, string, string];
+  // Version 3 adds a flags field; "v" marks a sender who was signed in.
+  if (fields.length !== 3 && fields.length !== 4) return null;
+  const [timestamp, sender, stored, flags = ""] = fields as [string, string, string, string?];
   if (!TIMESTAMP.test(timestamp) || sender === "" || stored === "") return null;
   if (byteLength(sender) > 63 || byteLength(stored) > 1023) return null;
   if (CONTROL.test(sender) || CONTROL.test(stored)) return null;
   const text = decodeContent(stored);
   if (text === null || !inWindow(timestamp, now)) return null;
-  return { timestamp, sender, text };
+  return flags.includes("v") ? { timestamp, sender, text, verified: true } : { timestamp, sender, text };
 }
 
 const MENTION = /@([A-Za-z0-9_]+)/g;
@@ -183,19 +184,3 @@ export class Ledger {
     return { messages: this.#messages.slice(start, index), more: start > 0 };
   }
 }
-
-const HANDLE = /^[a-z0-9_]{1,20}$/;
-
-/** Handles TNT reserves for signed-in members, from the first word of each line of its identities file. */
-export async function readReserved(stateDir: string): Promise<Set<string>> {
-  const file = Bun.file(`${stateDir}/identities`);
-  if (!(await file.exists())) return new Set();
-  const handles = (await file.text()).split("\n").map((line) => line.split(" ")[0]!);
-  return new Set(handles.filter((handle) => HANDLE.test(handle)));
-}
-
-/** History predates the live metadata, so a past message counts as verified when its sender is reserved now. */
-export function markReserved(entry: Entry, reserved: Set<string>): Entry {
-  return { ...entry, verified: reserved.has(classify(entry).sender.toLowerCase()) };
-}
-
