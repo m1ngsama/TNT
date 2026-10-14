@@ -4,8 +4,9 @@ tnt-chat (1.5.0-1) unstable; urgency=medium
     their handles, and sign in again by SSH key.
   * Add the identity:write module permission and mark verified senders in
     message.created metadata.
-  * Refuse the SSH "none" method so clients offer their public key;
-    keyless clients sign in through keyboard-interactive with no prompts.
+  * Recognise a member by SSH key when the login name is their handle.
+  * Join a blank or fallback nickname as the first free anonymousN instead
+    of disconnecting when anonymous is taken.
 
  -- M1ng <contact@m1ng.space>  Wed, 14 Oct 2026 00:00:00 +0800
 

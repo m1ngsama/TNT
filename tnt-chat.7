@@ -25,7 +25,11 @@ It does not select the interactive
 nickname.
 TNT prompts for a nickname after login.
 An empty or invalid nickname becomes
-.BR anonymous .
+.BR anonymous ,
+or the first free
+.BR anonymous2 ,
+.BR anonymous3 ,
+and so on when that is taken.
 Nicknames are limited to 20 Unicode characters.
 They must be unique among active
 sessions without regard to ASCII letter case.
@@ -57,10 +61,22 @@ A session that was using that name without signing in is renamed to
 .BR anonymous .
 Several sessions may be signed in to the same handle at once.
 .P
-When the session authenticated with an SSH public key, signing in also
-binds that key to the handle.
-A later connection with the same key is signed in at once, without the
-nickname prompt.
+TNT recognises a member by SSH key only when the SSH login name is their
+handle:
+.P
+.EX
+ssh \-p 2222 alice@chat.example.com
+.EE
+.P
+Signing in from such a connection binds the key it authenticated with to
+the handle.
+From then on, connecting the same way with the same key signs the session
+in at once, without the nickname prompt.
+After signing in from a connection without a key, TNT says how to connect
+next time; run
+.B :login
+once more from that connection to bind the key.
+Under any other login name, nothing about the key is used.
 .B :logout
 unbinds the key, and the session becomes
 .B anonymous
@@ -71,7 +87,10 @@ Nobody else can take a reserved handle, at the nickname prompt or with
 without regard to ASCII letter case.
 The prompt falls back to
 .BR anonymous ,
-and both say:
+or to the first free
+.BR anonymous2 ,
+.BR anonymous3 ,
+and so on, and both say:
 .P
 .EX
 @alice belongs to a signed-in member.

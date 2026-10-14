@@ -372,6 +372,13 @@ static void apply_identity_mailbox(client_t *client) {
         buffer_appendf(output, sizeof(output), &pos,
                        i18n_text(client->ui_lang, I18N_SIGNED_IN_FORMAT),
                        handle);
+        if (client->key_fingerprint[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->ui_lang,
+                                     I18N_SIGNED_IN_KEY_HINT_FORMAT),
+                           handle, ssh_server_public_host(),
+                           ssh_server_port());
+        }
     } else if (evict && !client->verified &&
                identity_is_reserved(client->username)) {
         buffer_appendf(output, sizeof(output), &pos,
@@ -1584,8 +1591,15 @@ void input_run_session(client_t *client) {
     snprintf(client->session_id, sizeof(client->session_id), "s-%llu",
              atomic_fetch_add(&g_next_session_id, 1) + 1);
 
-    /* Add to room */
+    /* Add to room.  Nobody asked for a particular anonymous name, so a
+     * taken one moves on to the next free anonymousN. */
+    bool anonymous_name = strcmp(client->username, "anonymous") == 0;
     int join_rc = room_add_client(g_room, client);
+    for (int n = 2; join_rc == -2 && anonymous_name && n < 1000; n++) {
+        snprintf(client->username, sizeof(client->username), "anonymous%d",
+                 n);
+        join_rc = room_add_client(g_room, client);
+    }
     if (join_rc < 0) {
         if (join_rc == -2) {
             client_printf(client,

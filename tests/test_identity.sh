@@ -30,14 +30,14 @@ SSH_KEY="$(tnt_ssh_opts "$PORT") -o IdentitiesOnly=yes -i $KEY"
 SSH_EXEC="ssh -n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 -o BatchMode=yes -o LogLevel=ERROR -o IdentitiesOnly=yes -p $PORT"
 
-# Run expect body $2 as session $1.  $3 holds the ssh options; the body
-# starts right after the connection opens.
+# Run expect body $2 as session $1.  $3 holds the ssh options and $4 the
+# login name; the body starts right after the connection opens.
 run_session() {
     _script="$STATE_DIR/$1.expect"
     cat >"$_script" <<EOF
 set timeout 15
 source "$PWD/lib.exp"
-spawn ssh $3 anonymous@127.0.0.1
+spawn ssh $3 ${4:-anonymous}@127.0.0.1
 $2
 close
 EOF
@@ -62,6 +62,38 @@ expect {
 else
     fail ":login without a module"
     tnt_dump_session nomodule
+fi
+
+if [ "$(ssh -n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        -o BatchMode=yes -o PubkeyAuthentication=no -o LogLevel=ERROR \
+        -p "$PORT" bob@127.0.0.1 health 2>&1)" = "ok" ]; then
+    pass "a keyless BatchMode client still connects"
+else
+    fail "a keyless BatchMode client was refused"
+fi
+
+cat >"$STATE_DIR/anon.expect" <<EOF
+set timeout 15
+spawn ssh $SSH_KEYLESS anonymous@127.0.0.1
+set a \$spawn_id
+expect -i \$a "): "
+send -i \$a -- "\r"
+expect -i \$a "/help"
+spawn ssh $SSH_KEYLESS anonymous@127.0.0.1
+set b \$spawn_id
+expect -i \$b "): "
+send -i \$b -- "\r"
+expect {
+    -i \$b "/help" {}
+    -i \$b timeout { exit 1 }
+}
+EOF
+if expect -f "$STATE_DIR/anon.expect" >"$STATE_DIR/anon.session.log" 2>&1 &&
+   tnt_wait_for_fixed "$LOG" "|system|anonymous2 joined the room"; then
+    pass "a second blank nickname joins as anonymous2"
+else
+    fail "a second blank nickname did not join"
+    tnt_dump_session anon
 fi
 
 kill "$SERVER_PID" 2>/dev/null
@@ -173,6 +205,7 @@ want \$b "/help"
 send -i \$b -- "/login\r"
 want \$b "TEST-CODE"
 want \$b "Signed in as @alice."
+want \$b "ssh alice@localhost -p $PORT"
 
 want \$a "belongs to a signed-in member"
 
@@ -266,13 +299,26 @@ expect {
     "Signed in as @alice." {}
     timeout { exit 1 }
 }
-' "$SSH_KEY" &&
+' "$SSH_KEY" alice &&
    tnt_wait_for_fixed "$IDENTITIES" "alice $FINGERPRINT"; then
     pass "signing in over a public key binds the key to the handle"
 else
     fail "the key was not bound"
     tnt_dump_session bindkey
     cat "$IDENTITIES"
+fi
+
+if run_session otherlogin '
+expect {
+    "): " {}
+    "Signed in as" { exit 1 }
+    timeout { exit 1 }
+}
+' "$SSH_KEY"; then
+    pass "a bound key is recognised only under the handle as login name"
+else
+    fail "a bound key was recognised under another login name"
+    tnt_dump_session otherlogin
 fi
 
 POST_OUTPUT=$($SSH_EXEC -i "$KEY" alice@127.0.0.1 post "from my key" 2>&1)
@@ -308,7 +354,7 @@ expect {
     "Signed out. Your name is now" {}
     timeout { exit 1 }
 }
-' "$SSH_KEY"; then
+' "$SSH_KEY" alice; then
     pass "a bound key signs in on reconnect without the prompt"
 else
     fail "automatic sign-in by key"

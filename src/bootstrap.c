@@ -240,11 +240,19 @@ static int auth_none(ssh_session session, const char *user, void *userdata) {
         ctx->requested_user[sizeof(ctx->requested_user) - 1] = '\0';
     }
 
-    /* Accepting "none" would end authentication before the client offers
-     * its public key, and a signed key is what an identity is bound to.
-     * Clients without a key fall through to keyboard-interactive, which
-     * asks nothing. */
-    return SSH_AUTH_DENIED;
+    if (g_access_token[0] != '\0') {
+        return SSH_AUTH_DENIED;
+    }
+    /* Accepting "none" ends authentication before the client offers its
+     * public key, so a login name that is a reserved handle has to refuse
+     * it for the key to be seen.  A keyless client still gets in through
+     * keyboard-interactive, which asks nothing. */
+    if (identity_is_reserved(ctx->requested_user)) {
+        return SSH_AUTH_DENIED;
+    }
+    ctx->auth_success = true;
+    ratelimit_record_auth_success(ctx->client_ip);
+    return SSH_AUTH_SUCCESS;
 }
 
 /* Keyboard-interactive with zero prompts keeps keyless access passwordless. */

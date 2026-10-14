@@ -208,18 +208,18 @@ The default is
 .TP
 .B TNT_ACCESS_TOKEN
 Require this shared token as the SSH password.
-When it is unset or empty, any signed public key, any password, and
+When it is unset or empty, passwordless, password, signed public-key, and
 keyboard-interactive authentication that asks no questions are accepted.
-The
-.B none
-method is refused so that a client offers its public key, which can sign a
-member in; see
+When the SSH login name is a signed-in member's handle, without regard to
+ASCII letter case, passwordless authentication is refused so that the client
+offers its public key; see
 .BR tnt\-chat (7).
-A client without a key still gets in without typing anything, unless
+A client without a key then gets in through keyboard-interactive or
+password authentication, unless
 .BR ssh (1)
 runs with
 .BR BatchMode ,
-which disables keyboard-interactive and password authentication.
+which disables both.
 When the token is nonempty,
 passwordless and public-key authentication are rejected.
 Only the first 255 bytes are effective.

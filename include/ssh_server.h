@@ -121,4 +121,8 @@ int ssh_server_start(int shutdown_fd,
 /* Read-only accessor for the server start time (used by exec stats). */
 time_t ssh_server_start_time(void);
 
+/* The listening port and the host name shown to users in connection hints. */
+int ssh_server_port(void);
+const char *ssh_server_public_host(void);
+
 #endif /* SSH_SERVER_H */

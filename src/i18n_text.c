@@ -209,6 +209,14 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "Signed in as @%s.\n",
         "已登录为 @%s。\n"
     ),
+    [I18N_SIGNED_IN_KEY_HINT_FORMAT] = I18N_STRING(
+        "To be recognised by your SSH key next time, connect with\n"
+        "  ssh %s@%s -p %d\n"
+        "and run :login once more.\n",
+        "想下次凭 SSH 密钥自动识别，请用你的密钥这样连接：\n"
+        "  ssh %s@%s -p %d\n"
+        "然后再运行一次 :login。\n"
+    ),
     [I18N_LOGOUT_NOT_SIGNED_IN] = I18N_STRING(
         "You are not signed in.\n",
         "你还没有登录。\n"
