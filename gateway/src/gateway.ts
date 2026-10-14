@@ -1,7 +1,7 @@
 import type { Server, ServerWebSocket } from "bun";
 import type { Verify } from "./auth";
 import { type Ledger, type Message, ROOM } from "./history";
-import type { RoomEvent } from "./module";
+import type { PrivateEvent, RoomEvent } from "./module";
 import { Presence } from "./presence";
 import { RateLimiter } from "./ratelimit";
 import { normalizeText, validateText } from "./text";
@@ -13,6 +13,8 @@ const HISTORY_PAGE = 50;
 const HISTORY_PAGE_MAX = 100;
 const NONCE_TTL_MS = 10 * 60_000;
 const NONCE_MAX_LENGTH = 64;
+const SEARCH_LIMIT = 50;
+const QUERY_MAX_LENGTH = 64;
 const OPEN = 1;
 
 type Session = {
@@ -29,6 +31,10 @@ export type GatewayOptions = {
   verify: Verify;
   post: (sender: string, text: string) => void;
   signedIn?: (handle: string) => void;
+  /** Hands a private message to TNT for an SSH user; false when TNT cannot take one. */
+  privatePost?: (from: string, to: string, text: string) => boolean;
+  /** Tells TNT which app users are online, whenever that set changes. */
+  remotePresence?: (handles: string[]) => void;
   now?: () => Date;
   authTimeoutMs?: number;
 };
@@ -52,13 +58,27 @@ export function createGateway(options: GatewayOptions) {
   const typingAt = new Map<string, number>();
   const sent = new Map<string, { message: Message; at: number }>();
   let online = "[]";
+  let remote = "[]";
 
   const broadcast = (frame: object) => {
     const data = JSON.stringify(frame);
     for (const ws of clients) ws.send(data);
   };
   const deliver = (message: Message, nonce?: string) => broadcast(nonce ? { type: "message", ...message, nonce } : { type: "message", ...message });
+  const syncRemote = () => {
+    const list = presence.web();
+    const key = JSON.stringify(list);
+    if (key === remote) return;
+    remote = key;
+    options.remotePresence?.(list);
+  };
+  const toHandle = (handle: string, frame: object) => {
+    const data = JSON.stringify(frame);
+    for (const ws of clients) if (ws.data.handle === handle) ws.send(data);
+  };
+  const stamp = () => now().toISOString().replace(/\.\d{3}Z$/, "Z");
   const syncPresence = () => {
+    syncRemote();
     const list = presence.online();
     const key = JSON.stringify(list);
     if (key === online) return;
@@ -104,10 +124,35 @@ export function createGateway(options: GatewayOptions) {
     for (const client of clients) if (client.data.handle !== handle) client.send(data);
   }
 
+  function sendPrivate(ws: Socket, frame: Record<string, unknown>) {
+    const text = validateText(frame.text);
+    if (typeof frame.to !== "string" || frame.to === "") return fail(ws, "invalid_frame");
+    if (text === null) return fail(ws, "invalid_text");
+    const from = ws.data.handle;
+    const to = frame.to;
+    const toApp = presence.isWeb(to);
+    if (!toApp && !presence.isSsh(to)) return fail(ws, "not_online");
+    if (!limiter.take(from)) return fail(ws, "rate_limited");
+    if (!toApp && !options.privatePost?.(from, to, text)) return fail(ws, "not_online");
+    const message = { type: "private", id: crypto.randomUUID(), from, to, text, timestamp: stamp(), verified: true };
+    if (toApp && to !== from) toHandle(to, message);
+    const nonce = typeof frame.nonce === "string" && frame.nonce.length <= NONCE_MAX_LENGTH ? frame.nonce : undefined;
+    toHandle(from, nonce ? { ...message, nonce } : message);
+  }
+
+  function search(ws: Socket, frame: Record<string, unknown>) {
+    const query = typeof frame.query === "string" ? frame.query.trim() : "";
+    if (query === "" || query.length > QUERY_MAX_LENGTH) return fail(ws, "invalid_frame");
+    if (!historyLimiter.take(ws.data.handle)) return fail(ws, "rate_limited");
+    ws.send(JSON.stringify({ type: "search", query, messages: options.ledger.search(query, SEARCH_LIMIT) }));
+  }
+
   function receive(ws: Socket, frame: Frame) {
     if (frame?.type === "ping") return ws.send('{"type":"pong"}');
     if (frame?.type === "history") return sendHistory(ws, frame);
     if (frame?.type === "typing") return forwardTyping(ws);
+    if (frame?.type === "private") return sendPrivate(ws, frame);
+    if (frame?.type === "search") return search(ws, frame);
     if (frame?.type !== "send") return fail(ws, "invalid_frame");
     const text = validateText(frame.text);
     if (text === null) return fail(ws, "invalid_text");
@@ -118,8 +163,7 @@ export function createGateway(options: GatewayOptions) {
     if (earlier) return ws.send(JSON.stringify({ type: "message", ...earlier.message, nonce }));
     if (!limiter.take(sender)) return fail(ws, "rate_limited");
     options.post(sender, text);
-    const timestamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");
-    const message = options.ledger.add({ timestamp, sender, text, verified: true });
+    const message = options.ledger.add({ timestamp: stamp(), sender, text, verified: true });
     if (key !== undefined) sent.set(key, { message, at: Date.now() });
     deliver(message, nonce);
   }
@@ -152,6 +196,19 @@ export function createGateway(options: GatewayOptions) {
       historyLimiter.sweep(at);
       for (const [key, entry] of sent) if ((at ?? Date.now()) - entry.at > NONCE_TTL_MS) sent.delete(key);
       for (const [handle, time] of typingAt) if ((at ?? Date.now()) - time > TYPING_INTERVAL_MS) typingAt.delete(handle);
+    },
+    handlePrivate(event: PrivateEvent) {
+      const to = [...clients].find((ws) => ws.data.handle.toLowerCase() === event.to.toLowerCase())?.data.handle;
+      if (!to) return;
+      toHandle(to, {
+        type: "private",
+        id: crypto.randomUUID(),
+        from: event.from,
+        to,
+        text: normalizeText(event.plain_text),
+        timestamp: event.timestamp,
+        verified: event.verified,
+      });
     },
     handleEvent(event: RoomEvent) {
       if (event.type === "message.created") {
