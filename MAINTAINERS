@@ -90,6 +90,8 @@ F: tests/test_gateway_e2e.sh
 
 PACKAGING AND RELEASE
 S: Maintained
+F: flake.lock
+F: flake.nix
 F: packaging/**
 F: scripts/healthcheck.sh
 F: scripts/package_*.sh
