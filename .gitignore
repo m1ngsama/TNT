@@ -38,6 +38,7 @@ tests/unit/test_richtext
 tests/unit/test_editor
 tests/unit/test_keymap
 tests/unit/test_message_log
+tests/unit/test_identity
 perf-results/
 __pycache__/
 *.pyc

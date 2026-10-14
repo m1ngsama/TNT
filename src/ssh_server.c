@@ -52,6 +52,16 @@ time_t ssh_server_start_time(void) {
     return g_server_start_time;
 }
 
+int ssh_server_port(void) {
+    return g_listen_port;
+}
+
+const char *ssh_server_public_host(void) {
+    const char *public_host = getenv("TNT_PUBLIC_HOST");
+
+    return public_host && public_host[0] != '\0' ? public_host : "localhost";
+}
+
 static void session_worker_register(session_worker_t *worker) {
     pthread_mutex_lock(&g_session_lock);
     worker->next = g_session_workers;
@@ -316,7 +326,7 @@ int ssh_server_init(int port) {
 /* Start SSH server (blocking) */
 int ssh_server_start(int shutdown_fd,
                      const volatile sig_atomic_t *shutdown_requested) {
-    const char *public_host = getenv("TNT_PUBLIC_HOST");
+    const char *public_host = ssh_server_public_host();
     pthread_attr_t attr;
     int result = 0;
     int listen_fd;
@@ -329,10 +339,6 @@ int ssh_server_start(int shutdown_fd,
         ssh_bind_free(g_sshbind);
         g_sshbind = NULL;
         return -1;
-    }
-
-    if (!public_host || public_host[0] == '\0') {
-        public_host = "localhost";
     }
 
     printf("TNT chat server listening on port %d (SSH)\n", g_listen_port);

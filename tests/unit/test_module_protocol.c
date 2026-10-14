@@ -36,14 +36,84 @@ TEST(appends_message_created_jsonl_with_escaping) {
     snprintf(msg.content, sizeof(msg.content), "%s", "hello \"core\"");
 
     assert(tnt_module_append_message_created(out, sizeof(out), &pos,
-                                             "local-1", &msg) == 0);
+                                             "local-1", &msg, false) == 0);
     assert(strstr(out, "\"type\":\"message.created\"") != NULL);
     assert(strstr(out, "\"id\":\"local-1\"") != NULL);
     assert(strstr(out, "\"timestamp\":\"1970-01-01T00:00:00Z\"") != NULL);
     assert(strstr(out, "\"sender\":\"alice\"") != NULL);
     assert(strstr(out, "\"kind\":\"text\"") != NULL);
     assert(strstr(out, "\"plain_text\":\"hello \\\"core\\\"\"") != NULL);
+    assert(strstr(out, "\"metadata\":{}}}\n") != NULL);
     assert(out[strlen(out) - 1] == '\n');
+}
+
+TEST(appends_verified_metadata) {
+    char out[512] = "";
+    size_t pos = 0;
+    message_t msg = {
+        .timestamp = 0,
+    };
+
+    snprintf(msg.username, sizeof(msg.username), "%s", "alice");
+    snprintf(msg.content, sizeof(msg.content), "%s", "hi");
+    assert(tnt_module_append_message_created(out, sizeof(out), &pos,
+                                             "local-2", &msg, true) == 0);
+    assert(strstr(out, "\"metadata\":{\"verified\":true}}}\n") != NULL);
+}
+
+TEST(appends_identity_requested_jsonl) {
+    char out[256] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_identity_requested(out, sizeof(out), &pos,
+                                                "s-7", "al\"ice") == 0);
+    assert(strcmp(out, "{\"type\":\"identity.requested\",\"session\":\"s-7\","
+                       "\"nickname\":\"al\\\"ice\"}\n") == 0);
+}
+
+TEST(parse_identity_records) {
+    tnt_module_identity_record_t record;
+
+    assert(tnt_module_parse_identity_record(
+        "{\"type\":\"identity.notice\",\"session\":\"s-1\","
+        "\"plain_text\":\"Visit https://auth.m1ng.space\\nCode: ABCD\"}",
+        &record));
+    assert(record.kind == TNT_MODULE_IDENTITY_NOTICE);
+    assert(strcmp(record.session, "s-1") == 0);
+    assert(strcmp(record.plain_text,
+                  "Visit https://auth.m1ng.space\nCode: ABCD") == 0);
+
+    assert(tnt_module_parse_identity_record(
+        "{\"type\":\"identity.verified\",\"session\":\"s-1\","
+        "\"handle\":\"alice_2\"}", &record));
+    assert(record.kind == TNT_MODULE_IDENTITY_VERIFIED);
+    assert(strcmp(record.handle, "alice_2") == 0);
+
+    assert(tnt_module_parse_identity_record(
+        "{\"type\":\"identity.reserve\",\"handle\":\"bob\"}", &record));
+    assert(record.kind == TNT_MODULE_IDENTITY_RESERVE);
+    assert(strcmp(record.handle, "bob") == 0);
+}
+
+TEST(parse_identity_records_rejects_invalid) {
+    tnt_module_identity_record_t record;
+
+    assert(!tnt_module_parse_identity_record(
+        "{\"type\":\"identity.verified\",\"session\":\"s-1\","
+        "\"handle\":\"Alice\"}", &record));
+    assert(!tnt_module_parse_identity_record(
+        "{\"type\":\"identity.verified\",\"handle\":\"alice\"}", &record));
+    assert(!tnt_module_parse_identity_record(
+        "{\"type\":\"identity.reserve\","
+        "\"handle\":\"abcdefghijklmnopqrstu\"}", &record));
+    assert(!tnt_module_parse_identity_record(
+        "{\"type\":\"identity.notice\",\"session\":\"s-1\","
+        "\"plain_text\":\"\"}", &record));
+    assert(!tnt_module_parse_identity_record(
+        "{\"type\":\"identity.notice\",\"session\":\"s-1\","
+        "\"plain_text\":\"\\u001b[2J\"}", &record));
+    assert(!tnt_module_parse_identity_record(
+        "{\"type\":\"identity.forget\",\"handle\":\"alice\"}", &record));
 }
 
 TEST(parse_message_create_accepts_valid_plain_text) {
@@ -207,6 +277,10 @@ int main(void) {
 
     RUN_TEST(appends_handshake_jsonl);
     RUN_TEST(appends_message_created_jsonl_with_escaping);
+    RUN_TEST(appends_verified_metadata);
+    RUN_TEST(appends_identity_requested_jsonl);
+    RUN_TEST(parse_identity_records);
+    RUN_TEST(parse_identity_records_rejects_invalid);
     RUN_TEST(parse_message_create_accepts_valid_plain_text);
     RUN_TEST(parse_message_create_accepts_utf8_plain_text);
     RUN_TEST(parse_message_create_rejects_wrong_type);

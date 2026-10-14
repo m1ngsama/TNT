@@ -13,6 +13,7 @@
 #include "exec.h"
 #include "history_view.h"
 #include "i18n.h"
+#include "identity.h"
 #include "keymap.h"
 #include "input_buffer.h"
 #include "message.h"
@@ -49,10 +50,16 @@ static tnt_keymap_t g_default_keymap = TNT_KEYMAP_DEFAULT;
 #define ROOM_REDRAW_MIN_INTERVAL_MS 8
 #define USERNAME_TIMEOUT_MS 60000
 
+static atomic_ullong g_next_session_id = 0;
+
 static int64_t input_monotonic_millis(void);
 
 static const char *input_client_name(const struct client *client) {
     return client ? ((const client_t *)client)->username : NULL;
+}
+
+static bool input_client_owns_name(const struct client *client) {
+    return client && ((const client_t *)client)->verified;
 }
 
 void input_init(void) {
@@ -62,6 +69,7 @@ void input_init(void) {
                                             g_default_keymap);
     room_set_client_notifier(g_room, client_wake);
     room_set_client_name_accessor(g_room, input_client_name);
+    room_set_client_name_owner(g_room, input_client_owns_name);
     room_set_presence_notifier(g_room, tnt_module_runtime_publish_presence);
 }
 
@@ -240,6 +248,147 @@ void notify_mentions(const char *content, const client_t *sender) {
         client_release(targets[i]);
     }
     free(targets);
+}
+
+static void input_post_identity(client_t *client, const char *notice,
+                                const char *handle, bool evict) {
+    pthread_mutex_lock(&client->whisper_lock);
+    if (notice) {
+        size_t len = strlen(client->identity_notice);
+        snprintf(client->identity_notice + len,
+                 sizeof(client->identity_notice) - len, "%s%s",
+                 len > 0 ? "\n" : "", notice);
+    }
+    if (handle) {
+        snprintf(client->identity_handle, sizeof(client->identity_handle),
+                 "%s", handle);
+    }
+    if (evict) {
+        client->identity_evict = true;
+    }
+    pthread_mutex_unlock(&client->whisper_lock);
+    atomic_store(&client->identity_pending, true);
+    client_wake(client);
+}
+
+static client_t *input_find_session(const char *session) {
+    client_t *found = NULL;
+
+    pthread_rwlock_rdlock(&g_room->lock);
+    for (int i = 0; i < g_room->client_count; i++) {
+        if (strcmp(g_room->clients[i]->session_id, session) == 0) {
+            found = g_room->clients[i];
+            client_addref(found);
+            break;
+        }
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+    return found;
+}
+
+bool input_identity_notice(const char *session, const char *plain_text) {
+    client_t *client = input_find_session(session);
+
+    if (!client) {
+        return false;
+    }
+    input_post_identity(client, plain_text, NULL, false);
+    client_release(client);
+    return true;
+}
+
+bool input_identity_verified(const char *session, const char *handle) {
+    client_t *client = input_find_session(session);
+
+    if (!client) {
+        return false;
+    }
+    (void)identity_reserve(handle, client->key_fingerprint[0] != '\0'
+                                       ? client->key_fingerprint
+                                       : NULL);
+    input_post_identity(client, NULL, handle, false);
+    client_release(client);
+    return true;
+}
+
+/* Sessions rename only themselves, so an unverified holder of a handle that
+ * just signed in is asked to step aside rather than renamed from here. */
+static void evict_unverified_holders(const client_t *self, const char *handle) {
+    client_t **targets = NULL;
+    int target_count = 0;
+
+    pthread_rwlock_rdlock(&g_room->lock);
+    if (g_room->client_count > 0) {
+        targets = calloc((size_t)g_room->client_count, sizeof(*targets));
+    }
+    for (int i = 0; targets && i < g_room->client_count; i++) {
+        client_t *c = g_room->clients[i];
+        if (c != self && !c->verified &&
+            strcasecmp(c->username, handle) == 0) {
+            client_addref(c);
+            targets[target_count++] = c;
+        }
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+
+    for (int i = 0; i < target_count; i++) {
+        input_post_identity(targets[i], NULL, NULL, true);
+        client_release(targets[i]);
+    }
+    free(targets);
+}
+
+static void show_session_notice(client_t *client, const char *text) {
+    snprintf(client->command_output, sizeof(client->command_output), "%s",
+             text);
+    client->command_output_scroll = 0;
+    client->command_output_kind = TNT_COMMAND_OUTPUT_NOTICE;
+    client->show_motd = false;
+    client->redraw_pending = true;
+}
+
+static void apply_identity_mailbox(client_t *client) {
+    char notice[sizeof(client->identity_notice)];
+    char handle[sizeof(client->identity_handle)];
+    char output[MAX_COMMAND_OUTPUT_LEN] = "";
+    size_t pos = 0;
+    bool evict;
+
+    pthread_mutex_lock(&client->whisper_lock);
+    memcpy(notice, client->identity_notice, sizeof(notice));
+    memcpy(handle, client->identity_handle, sizeof(handle));
+    evict = client->identity_evict;
+    client->identity_notice[0] = '\0';
+    client->identity_handle[0] = '\0';
+    client->identity_evict = false;
+    pthread_mutex_unlock(&client->whisper_lock);
+
+    if (notice[0] != '\0') {
+        buffer_appendf(output, sizeof(output), &pos, "%s\n", notice);
+    }
+    if (handle[0] != '\0') {
+        (void)commands_rename(client, handle, true);
+        evict_unverified_holders(client, handle);
+        buffer_appendf(output, sizeof(output), &pos,
+                       i18n_text(client->ui_lang, I18N_SIGNED_IN_FORMAT),
+                       handle);
+        if (client->key_fingerprint[0] == '\0') {
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->ui_lang,
+                                     I18N_SIGNED_IN_KEY_HINT_FORMAT),
+                           handle, ssh_server_public_host(),
+                           ssh_server_port());
+        }
+    } else if (evict && !client->verified &&
+               identity_is_reserved(client->username)) {
+        buffer_appendf(output, sizeof(output), &pos,
+                       i18n_text(client->ui_lang, I18N_NICK_RESERVED_FORMAT),
+                       client->username);
+        commands_become_anonymous(client);
+    }
+    if (output[0] != '\0') {
+        show_session_notice(client, output);
+    }
 }
 
 static int read_channel_exact(client_t *client, char *buf, size_t len,
@@ -696,6 +845,20 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
 
     /* Handle command output / MOTD display.  MOTD remains a simple notice;
      * command output behaves like a small pager so long results can be read. */
+    /* A notice can arrive at any moment, from a module or on entry, so it
+     * must not swallow what someone is already typing: any key but q or
+     * Esc closes it and then does its usual job. */
+    if (client->command_output[0] != '\0' &&
+        client->command_output_kind == TNT_COMMAND_OUTPUT_NOTICE &&
+        !client->show_motd) {
+        client_mode_t mode = client->mode;
+        dismiss_command_output(client);
+        client->mode = mode;
+        if (key == 'q' || key == 27) {
+            return true;
+        }
+    }
+
     if (client->command_output[0] != '\0') {
         pager_action_t action;
 
@@ -1015,7 +1178,8 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                     if (message_save(&msg) == 0) {
                         room_broadcast(g_room, &msg);
                         notify_mentions(msg.content, client);
-                        tnt_module_runtime_publish_message_created(&msg);
+                        tnt_module_runtime_publish_message_created(
+                            &msg, client->verified);
                     } else {
                         fprintf(stderr, "interactive: failed to persist message\n");
                     }
@@ -1393,6 +1557,8 @@ void input_run_session(client_t *client) {
     int64_t last_keepalive_ms = input_monotonic_millis();
     int64_t last_activity_ms = last_keepalive_ms;
     int64_t last_room_render_ms = 0;
+    char entry_notice[512] = "";
+    char handle[TNT_IDENTITY_HANDLE_MAX + 1];
 
     /* Terminal size already set from PTY request */
     client->mode = MODE_INSERT;
@@ -1417,13 +1583,37 @@ void input_run_session(client_t *client) {
         goto cleanup;
     }
 
-    /* Read username */
-    if (read_username(client) < 0) {
-        goto cleanup;
+    if (client->key_fingerprint[0] != '\0' &&
+        identity_handle_for_key(client->key_fingerprint, handle,
+                                sizeof(handle))) {
+        snprintf(client->username, sizeof(client->username), "%s", handle);
+        client->verified = true;
+        snprintf(entry_notice, sizeof(entry_notice),
+                 i18n_text(client->ui_lang, I18N_SIGNED_IN_FORMAT), handle);
+    } else {
+        if (read_username(client) < 0) {
+            goto cleanup;
+        }
+        if (identity_is_reserved(client->username)) {
+            snprintf(entry_notice, sizeof(entry_notice),
+                     i18n_text(client->ui_lang, I18N_NICK_RESERVED_FORMAT),
+                     client->username);
+            snprintf(client->username, sizeof(client->username),
+                     "anonymous");
+        }
     }
+    snprintf(client->session_id, sizeof(client->session_id), "s-%llu",
+             atomic_fetch_add(&g_next_session_id, 1) + 1);
 
-    /* Add to room */
+    /* Add to room.  Nobody asked for a particular anonymous name, so a
+     * taken one moves on to the next free anonymousN. */
+    bool anonymous_name = strcmp(client->username, "anonymous") == 0;
     int join_rc = room_add_client(g_room, client);
+    for (int n = 2; join_rc == -2 && anonymous_name && n < 1000; n++) {
+        snprintf(client->username, sizeof(client->username), "anonymous%d",
+                 n);
+        join_rc = room_add_client(g_room, client);
+    }
     if (join_rc < 0) {
         if (join_rc == -2) {
             client_printf(client,
@@ -1437,6 +1627,9 @@ void input_run_session(client_t *client) {
         goto cleanup;
     }
     joined_room = true;
+    if (client->verified) {
+        evict_unverified_holders(client, client->username);
+    }
 
     /* Enable xterm bracketed-paste mode only for interactive chat, so
      * multi-line pastes arrive framed by ESC[200~...ESC[201~ instead of
@@ -1449,7 +1642,7 @@ void input_run_session(client_t *client) {
     system_message_make_join(&join_msg, client->username, client->ui_lang);
     room_broadcast(g_room, &join_msg);
     message_save(&join_msg);
-    tnt_module_runtime_publish_message_created(&join_msg);
+    tnt_module_runtime_publish_message_created(&join_msg, false);
 
     /* Show MOTD if motd.txt exists in state directory */
     {
@@ -1464,7 +1657,9 @@ void input_run_session(client_t *client) {
                     motd_buf[motd_len] = '\0';
                     snprintf(client->command_output,
                              sizeof(client->command_output),
-                             "%s", motd_buf);
+                             "%s%s%s", entry_notice,
+                             entry_notice[0] != '\0' ? "\n" : "",
+                             motd_buf);
                     client->command_output_scroll = 0;
                     client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
                     client->show_motd = true;
@@ -1480,6 +1675,9 @@ void input_run_session(client_t *client) {
     seen_update_seq = room_get_update_seq(g_room);
     tui_render_screen(client);
     last_room_render_ms = input_monotonic_millis();
+    if (entry_notice[0] != '\0') {
+        show_session_notice(client, entry_notice);
+    }
 
 main_loop:
 
@@ -1501,6 +1699,10 @@ main_loop:
 
         if (client_flush_pending_bells(client) != 0) {
             break;
+        }
+
+        if (atomic_exchange(&client->identity_pending, false)) {
+            apply_identity_mailbox(client);
         }
 
         if (current_update_seq != seen_update_seq) {
@@ -1839,7 +2041,7 @@ cleanup:
         room_remove_client(g_room, client);
         room_broadcast(g_room, &leave_msg);
         message_save(&leave_msg);
-        tnt_module_runtime_publish_message_created(&leave_msg);
+        tnt_module_runtime_publish_message_created(&leave_msg, false);
     }
 
     /* Interactive shells otherwise look like a transport reset to OpenSSH

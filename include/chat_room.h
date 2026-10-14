@@ -12,6 +12,9 @@ struct client;
  * lifetime, so it must never block or call back into chat_room APIs. */
 typedef void (*room_client_notifier_fn)(struct client *client);
 typedef const char *(*room_client_name_fn)(const struct client *client);
+/* True when the client holds its name as a signed-in handle, which several
+ * sessions may share. */
+typedef bool (*room_client_owns_name_fn)(const struct client *client);
 
 /* Runs with the room lock held, so it must not call back into chat_room. */
 typedef void (*room_presence_fn)(const char *nickname, bool joined);
@@ -34,6 +37,7 @@ typedef struct {
     uint64_t update_seq;
     room_client_notifier_fn client_notifier;
     room_client_name_fn client_name;
+    room_client_owns_name_fn client_owns_name;
     room_presence_fn presence_notifier;
 } chat_room_t;
 
@@ -47,7 +51,8 @@ chat_room_t* room_create(void);
 void room_destroy(chat_room_t *room);
 
 /* Add client to room atomically. Returns 0 on success, -1 when full, and -2
- * when another connected client already owns the same display name. */
+ * when another connected client already owns the same display name, unless
+ * the client owns its name. */
 int room_add_client(chat_room_t *room, struct client *client);
 
 /* Remove client from room */
@@ -64,6 +69,10 @@ void room_set_client_notifier(chat_room_t *room,
 /* Install the client display-name accessor used for atomic duplicate checks. */
 void room_set_client_name_accessor(chat_room_t *room,
                                    room_client_name_fn accessor);
+
+/* Install the accessor that exempts a client from the duplicate-name check. */
+void room_set_client_name_owner(chat_room_t *room,
+                                room_client_owns_name_fn accessor);
 
 /* Install the presence hook called when a client joins or leaves. */
 void room_set_presence_notifier(chat_room_t *room, room_presence_fn notifier);

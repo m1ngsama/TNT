@@ -67,6 +67,22 @@ static const command_catalog_entry_t entries[] = {
         2, false, true
     },
     {
+        {TNT_COMMAND_LOGIN, "login", {"login", NULL}},
+        I18N_STRING(":login", ":login"),
+        I18N_STRING("Sign in with m1ngsama ID", "用 m1ngsama ID 登录"),
+        I18N_STRING(":login", ":login"),
+        I18N_STRING("Usage: login\n", "用法: login\n"),
+        2, true, false
+    },
+    {
+        {TNT_COMMAND_LOGOUT, "logout", {"logout", NULL}},
+        I18N_STRING(":logout", ":logout"),
+        I18N_STRING("Sign out and become anonymous", "退出登录，改回匿名"),
+        I18N_STRING(":logout", ":logout"),
+        I18N_STRING("Usage: logout\n", "用法: logout\n"),
+        2, true, false
+    },
+    {
         {TNT_COMMAND_LAST, "last", {"last", NULL}},
         I18N_STRING(":last [N]", ":last [N]"),
         I18N_STRING("Show last N messages (max 50)",

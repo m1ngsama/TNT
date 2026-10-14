@@ -1,4 +1,4 @@
-.TH TNT-CHAT 7 "2026-09-22" "TNT 1.4.0"
+.TH TNT-CHAT 7 "2026-10-14" "TNT 1.5.0"
 .SH NAME
 tnt-chat \- use the TNT interactive terminal interface
 .SH DESCRIPTION
@@ -25,7 +25,11 @@ It does not select the interactive
 nickname.
 TNT prompts for a nickname after login.
 An empty or invalid nickname becomes
-.BR anonymous .
+.BR anonymous ,
+or the first free
+.BR anonymous2 ,
+.BR anonymous3 ,
+and so on when that is taken.
 Nicknames are limited to 20 Unicode characters.
 They must be unique among active
 sessions without regard to ASCII letter case.
@@ -36,10 +40,62 @@ The names
 and the
 .B module:
 prefix are reserved for internal messages.
+A handle of a signed-in member is reserved too; see
+.BR "SIGNING IN" .
 .P
 If the administrator configured an access token,
 enter it as the SSH password.
 The token is shared and does not authenticate the nickname.
+.SH SIGNING IN
+The room stays anonymous: anyone can connect and pick any free name.
+A member of m1ngsama ID can also prove who they are, and their handle then
+belongs to them.
+.P
+.B :login
+starts the sign-in when the server runs an identity module.
+The module shows what to do next, usually a link and a code.
+Once it confirms the member, the session is renamed to the handle and
+shows
+.BI "Signed in as @" handle .
+A session that was using that name without signing in is renamed to
+.BR anonymous .
+Several sessions may be signed in to the same handle at once.
+.P
+TNT recognises a member by SSH key only when the SSH login name is their
+handle:
+.P
+.EX
+ssh \-p 2222 alice@chat.example.com
+.EE
+.P
+Signing in from such a connection binds the key it authenticated with to
+the handle.
+From then on, connecting the same way with the same key signs the session
+in at once, without the nickname prompt.
+After signing in from a connection without a key, TNT says how to connect
+next time; run
+.B :login
+once more from that connection to bind the key.
+Under any other login name, nothing about the key is used.
+.B :logout
+unbinds the key, and the session becomes
+.B anonymous
+again.
+.P
+Nobody else can take a reserved handle, at the nickname prompt or with
+.BR :nick ,
+without regard to ASCII letter case.
+The prompt falls back to
+.BR anonymous ,
+or to the first free
+.BR anonymous2 ,
+.BR anonymous3 ,
+and so on, and both say:
+.P
+.EX
+@alice belongs to a signed-in member.
+Use :login if it is you, or pick another name.
+.EE
 .SH KEYS
 Typing inserts at the caret.
 Nothing a user types moves the session into a different keyboard state.
@@ -332,6 +388,18 @@ Clear the inbox and the current reply target.
 .TQ
 .BI ":name " name
 Change the current nickname.
+A signed-in session must
+.B :logout
+first, and a handle another member signed in with is refused.
+.TP
+.B :login
+Sign in with m1ngsama ID.
+When the server has no identity module, it says that sign-in is not
+available.
+.TP
+.B :logout
+Sign out, unbind this session's SSH key, and become
+.BR anonymous .
 .TP
 .BI ":last " [count]
 Display up to
@@ -417,8 +485,9 @@ Private messages are not written to
 .IR messages.log ,
 do not appear in public history or exec output, and are lost at disconnect.
 .P
-Public nicknames are labels, not authenticated identities.
-Another session may reuse a nickname after its owner disconnects.
+A nickname that is not a signed-in handle is a label, not an identity.
+Another session may reuse it after its owner disconnects.
+A signed-in handle stays reserved after its owner disconnects or signs out.
 .P
 The terminal must support the ANSI control sequences used by the interface.
 .SH EXAMPLES

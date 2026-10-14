@@ -1,6 +1,7 @@
 #include "bootstrap.h"
 #include "client.h"
 #include "common.h"
+#include "identity.h"
 #include "input.h"
 #include "ratelimit.h"
 #include "theme.h"
@@ -25,6 +26,7 @@
 typedef struct {
     char client_ip[INET6_ADDRSTRLEN];
     char requested_user[MAX_USERNAME_LEN];
+    char key_fingerprint[TNT_IDENTITY_FINGERPRINT_SIZE];
     int pty_width;
     int pty_height;
     char exec_command[MAX_EXEC_COMMAND_LEN];
@@ -238,15 +240,44 @@ static int auth_none(ssh_session session, const char *user, void *userdata) {
         ctx->requested_user[sizeof(ctx->requested_user) - 1] = '\0';
     }
 
-    /* If access token is configured, reject passwordless */
     if (g_access_token[0] != '\0') {
         return SSH_AUTH_DENIED;
-    } else {
-        /* No token configured, allow passwordless */
-        ctx->auth_success = true;
-        ratelimit_record_auth_success(ctx->client_ip);
-        return SSH_AUTH_SUCCESS;
     }
+    /* Accepting "none" ends authentication before the client offers its
+     * public key, so a login name that is a reserved handle has to refuse
+     * it for the key to be seen.  A keyless client still gets in through
+     * keyboard-interactive, which asks nothing. */
+    if (identity_is_reserved(ctx->requested_user)) {
+        return SSH_AUTH_DENIED;
+    }
+    ctx->auth_success = true;
+    ratelimit_record_auth_success(ctx->client_ip);
+    return SSH_AUTH_SUCCESS;
+}
+
+/* Keyboard-interactive with zero prompts keeps keyless access passwordless. */
+static int auth_message(ssh_session session, ssh_message msg, void *userdata) {
+    session_context_t *ctx = (session_context_t *)userdata;
+    (void)session;
+
+    if (g_access_token[0] != '\0' ||
+        ssh_message_type(msg) != SSH_REQUEST_AUTH ||
+        ssh_message_subtype(msg) != SSH_AUTH_METHOD_INTERACTIVE) {
+        return 1;
+    }
+
+    if (ssh_message_auth_user(msg) && ssh_message_auth_user(msg)[0] != '\0') {
+        snprintf(ctx->requested_user, sizeof(ctx->requested_user), "%s",
+                 ssh_message_auth_user(msg));
+    }
+    if (!ssh_message_auth_kbdint_is_response(msg)) {
+        return ssh_message_auth_interactive_request(msg, "", "", 0, NULL,
+                                                    NULL) == SSH_OK ? 0 : 1;
+    }
+
+    ctx->auth_success = true;
+    ratelimit_record_auth_success(ctx->client_ip);
+    return ssh_message_auth_reply_success(msg, 0) == SSH_OK ? 0 : 1;
 }
 
 /* Public key authentication callback */
@@ -254,7 +285,6 @@ static int auth_pubkey(ssh_session session, const char *user,
                        struct ssh_key_struct *pubkey, char signature_state,
                        void *userdata) {
     (void)session;
-    (void)pubkey;
     session_context_t *ctx = (session_context_t *)userdata;
 
     if (user && user[0] != '\0') {
@@ -274,6 +304,10 @@ static int auth_pubkey(ssh_session session, const char *user,
         return SSH_AUTH_SUCCESS;
     }
 
+    if (identity_fingerprint_from_key(pubkey, ctx->key_fingerprint,
+                                      sizeof(ctx->key_fingerprint)) < 0) {
+        ctx->key_fingerprint[0] = '\0';
+    }
     ctx->auth_success = true;
     ratelimit_record_auth_success(ctx->client_ip);
     return SSH_AUTH_SUCCESS;
@@ -521,6 +555,12 @@ void *bootstrap_run(void *arg) {
     server_cb.auth_pubkey_function = auth_pubkey;
     server_cb.channel_open_request_session_function = channel_open_request_session;
     ssh_set_server_callbacks(session, &server_cb);
+    ssh_set_message_callback(session, auth_message, ctx);
+    if (g_access_token[0] == '\0') {
+        ssh_set_auth_methods(session, SSH_AUTH_METHOD_PUBLICKEY |
+                                          SSH_AUTH_METHOD_INTERACTIVE |
+                                          SSH_AUTH_METHOD_PASSWORD);
+    }
 
     setup_deadline_ms = bootstrap_monotonic_millis() +
                         BOOTSTRAP_SETUP_TIMEOUT_MS;
@@ -604,6 +644,7 @@ void *bootstrap_run(void *arg) {
     atomic_init(&client->wake_ready, false);
     atomic_init(&client->wake_pending, false);
     atomic_init(&client->channel_closed, false);
+    atomic_init(&client->identity_pending, false);
 
     client->session = session;
     client->channel = channel;
@@ -638,6 +679,8 @@ void *bootstrap_run(void *arg) {
         snprintf(client->client_ip, sizeof(client->client_ip), "%s",
                  ctx->client_ip);
     }
+    snprintf(client->key_fingerprint, sizeof(client->key_fingerprint), "%s",
+             ctx->key_fingerprint);
     if (ctx->exec_command[0] != '\0') {
         strncpy(client->exec_command, ctx->exec_command,
                 sizeof(client->exec_command) - 1);

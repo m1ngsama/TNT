@@ -28,4 +28,9 @@ void input_run_session(client_t *client);
  * inside input_run_session and by exec_command_post. */
 void notify_mentions(const char *content, const client_t *sender);
 
+/* Module-facing identity hooks, called from the identity module's worker.
+ * Each returns false when no interactive session has that id. */
+bool input_identity_notice(const char *session, const char *plain_text);
+bool input_identity_verified(const char *session, const char *handle);
+
 #endif /* INPUT_H */

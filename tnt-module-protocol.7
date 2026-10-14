@@ -1,4 +1,4 @@
-.TH TNT-MODULE-PROTOCOL 7 "2026-09-22" "TNT 1.4.0"
+.TH TNT-MODULE-PROTOCOL 7 "2026-10-14" "TNT 1.5.0"
 .SH NAME
 tnt-module-protocol \- implement an external TNT message module
 .SH DESCRIPTION
@@ -9,8 +9,8 @@ The supported protocol identifier is
 .P
 Modules receive selected public message events and may create public
 plain-text messages.
-Modules the operator grants may also post as a chat user and observe
-presence.
+Modules the operator grants may also post as a chat user, observe
+presence, and sign sessions in.
 The core chat path continues when an individual module is invalid, slow,
 stopped, or saturated.
 .SH ACTIVATION
@@ -28,13 +28,18 @@ directory.
 No command-line arguments are supplied.
 .P
 A module whose manifest requests
-.B message:post
+.BR message:post ,
+.BR presence:read ,
 or
-.B presence:read
+.B identity:write
 is enabled only when its name appears in
 .BR TNT_MODULE_GRANTS ,
 a colon-separated list of module names.
 Otherwise TNT reports the refusal on standard error and skips the module.
+At most one enabled module holds
+.BR identity:write ;
+TNT skips every later module that requests it and says so on standard
+error.
 .SH MANIFEST
 The manifest is a JSON object of at most 4094 bytes.
 The following fields are required:
@@ -64,9 +69,10 @@ Array containing both
 and
 .BR message:create .
 It may also contain
-.B message:post
+.BR message:post ,
+.BR presence:read ,
 and
-.BR presence:read ;
+.BR identity:write ;
 see
 .BR "GRANTED PERMISSIONS" .
 .TP
@@ -159,7 +165,7 @@ This covers chat messages, actions (sender
 system notices (sender
 .B system
 or
-.BR \(co\(fc\(cy ),
+.BR 系统 ),
 and replies from other modules (sender
 .BR module:NAME ).
 A module never receives the messages it created or posted itself.
@@ -186,7 +192,19 @@ String
 The public plain-text content.
 .TP
 .B metadata
-An object, currently empty.
+An object.
+It holds
+.B verified
+set to
+.B true
+when the sender proved its identity: a signed-in interactive session, an
+exec
+.B post
+under its handle, or a
+.B message.post
+from the module holding
+.BR identity:write .
+Otherwise it is empty.
 .P
 For example, the following is one JSON Lines record:
 .P
@@ -273,6 +291,10 @@ It must also not be
 or its Chinese equivalent; the colon restriction already excludes the
 .BI module: name
 form TNT reserves for its own messages.
+Unless the module also holds
+.BR identity:write ,
+it must not be a reserved handle either; see
+.BR identity:write .
 .B plain_text
 follows the
 .B message.create
@@ -320,9 +342,9 @@ for the new one:
 .P
 Presence records are notifications and must not be answered.
 They open no response window.
-For a module holding either permission, any record other than a valid
+For a module holding any granted permission, any record other than a valid
 .B message.post
-that arrives while no
+or identity record that arrives while no
 .B message.created
 event is waiting is a protocol failure.
 Around startup a joined record can name a user the snapshot already listed,
@@ -339,6 +361,77 @@ dropped on standard error:
 .EX
 module runtime: event queue full for NAME, dropped N presence events
 .EE
+.SS identity:write
+The module holding
+.B identity:write
+signs interactive sessions in to m1ngsama ID on TNT's behalf; TNT itself
+makes no network requests.
+A signed-in session's nickname is its handle, and handles are reserved
+in the
+.I identities
+file described in
+.BR tnt (8).
+A handle is 1 through 20 ASCII lowercase letters, digits, and underscores.
+.P
+When a user runs
+.BR :login ,
+TNT sends the module one notification:
+.P
+.EX
+{"type":"identity.requested","session":"s-1","nickname":"bob"}
+.EE
+.P
+.B session
+is an opaque string, unique for the life of the server process, that
+names the interactive session.
+Like presence records, this notification opens no response window and must
+not be answered with
+.BR event.ok .
+.P
+The module may write these records at any time, as with
+.BR message.post :
+.TP
+.B identity.notice
+.EX
+{"type":"identity.notice","session":"s-1",\c
+"plain_text":"Open https://auth.m1ng.space/device"}
+.EE
+.IP
+Show
+.B plain_text
+to that session alone.
+It is not logged or broadcast.
+.B plain_text
+follows the
+.B message.create
+rules.
+TNT ignores a session that is unknown or has closed.
+.TP
+.B identity.verified
+.EX
+{"type":"identity.verified","session":"s-1","handle":"alice"}
+.EE
+.IP
+Sign the session in as
+.BR handle .
+TNT reserves the handle, binds the SSH key the session authenticated with,
+if any, to it and to no other handle, renames the session, and announces
+the rename to the room.
+Another session using the name without signing in is renamed to
+.BR anonymous .
+TNT ignores a session that is unknown or has closed.
+.TP
+.B identity.reserve
+.EX
+{"type":"identity.reserve","handle":"alice"}
+.EE
+.IP
+Reserve
+.B handle
+without binding a key, for a member who signed in elsewhere.
+.P
+An identity record with a missing or invalid member, or an invalid handle,
+is a protocol failure like any other invalid response.
 .SH FAILURE HANDLING
 A handshake failure skips the affected module.
 After activation, a write failure, write timeout, read failure, response
@@ -414,8 +507,12 @@ modules.
 .P
 A module holding
 .B message:post
-can post under any valid nickname, including one an SSH user is using.
-Grant it only to a module you trust as much as the server.
+can post under any valid nickname, including one an SSH user is using,
+except a reserved handle.
+A module holding
+.B identity:write
+can post under, and sign any session in as, any handle.
+Grant either only to a module you trust as much as the server.
 .P
 The child inherits most of the server environment.
 TNT removes

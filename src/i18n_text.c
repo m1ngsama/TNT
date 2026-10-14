@@ -181,6 +181,50 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "Nickname changed: %s -> %s\n",
         "昵称已修改: %s -> %s\n"
     ),
+    [I18N_NICK_RESERVED_FORMAT] = I18N_STRING(
+        "@%s belongs to a signed-in member.\n"
+        "Use :login if it is you, or pick another name.\n",
+        "@%s 属于一位已登录的成员。\n"
+        "如果是你本人，请用 :login 登录，否则请换一个名字。\n"
+    ),
+    [I18N_NICK_SIGNED_IN_FORMAT] = I18N_STRING(
+        "You are signed in as @%s.\n"
+        "Use :logout before changing your name.\n",
+        "你已登录为 @%s。\n"
+        "要改名，请先用 :logout 退出登录。\n"
+    ),
+    [I18N_LOGIN_UNAVAILABLE] = I18N_STRING(
+        "Sign-in is not available on this server.\n",
+        "这台服务器没有开放登录。\n"
+    ),
+    [I18N_LOGIN_OPENING] = I18N_STRING(
+        "Opening sign-in…\n",
+        "正在打开登录…\n"
+    ),
+    [I18N_LOGIN_ALREADY_FORMAT] = I18N_STRING(
+        "You are already signed in as @%s.\n",
+        "你已经登录为 @%s。\n"
+    ),
+    [I18N_SIGNED_IN_FORMAT] = I18N_STRING(
+        "Signed in as @%s.\n",
+        "已登录为 @%s。\n"
+    ),
+    [I18N_SIGNED_IN_KEY_HINT_FORMAT] = I18N_STRING(
+        "To be recognised by your SSH key next time, connect with\n"
+        "  ssh %s@%s -p %d\n"
+        "and run :login once more.\n",
+        "想下次凭 SSH 密钥自动识别，请用你的密钥这样连接：\n"
+        "  ssh %s@%s -p %d\n"
+        "然后再运行一次 :login。\n"
+    ),
+    [I18N_LOGOUT_NOT_SIGNED_IN] = I18N_STRING(
+        "You are not signed in.\n",
+        "你还没有登录。\n"
+    ),
+    [I18N_LOGOUT_DONE_FORMAT] = I18N_STRING(
+        "Signed out. Your name is now %s.\n",
+        "已退出登录，你现在的名字是 %s。\n"
+    ),
     [I18N_LAST_HEADER_FORMAT] = I18N_STRING(
         "--- Last %d message(s) ---\n",
         "--- 最近 %d 条消息 ---\n"
@@ -278,6 +322,12 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
     [I18N_EXEC_POST_PERSIST_FAILED] = I18N_STRING(
         "post: failed to persist message\n",
         "post: 消息持久化失败\n"
+    ),
+    [I18N_EXEC_POST_RESERVED_FORMAT] = I18N_STRING(
+        "post: %s belongs to a signed-in member; "
+        "connect with that member's SSH key to post as it\n",
+        "post: %s 属于一位已登录的成员，"
+        "只有用这位成员的 SSH 密钥连接才能以这个名字发帖\n"
     ),
     [I18N_EXEC_COMMAND_TOO_LONG] = I18N_STRING(
         "exec: command too long\n",

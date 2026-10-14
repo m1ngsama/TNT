@@ -10,6 +10,7 @@
 #include "command_catalog.h"
 #include "common.h"
 #include "i18n.h"
+#include "identity.h"
 #include "keymap.h"
 #include "manual.h"
 #include "message.h"
@@ -231,6 +232,57 @@ static void clear_inbox(client_t *client) {
     pthread_mutex_unlock(&client->whisper_lock);
 }
 
+int commands_rename(client_t *client, const char *new_name, bool verified) {
+    char old_name[MAX_USERNAME_LEN];
+    bool taken = false;
+    bool renamed;
+
+    pthread_rwlock_wrlock(&g_room->lock);
+    snprintf(old_name, sizeof(old_name), "%s", client->username);
+    renamed = strcmp(new_name, old_name) != 0;
+    if (renamed && !verified) {
+        for (int i = 0; i < g_room->client_count; i++) {
+            if (g_room->clients[i] != client &&
+                strcasecmp(g_room->clients[i]->username, new_name) == 0) {
+                taken = true;
+                break;
+            }
+        }
+    }
+    if (!taken) {
+        client->verified = verified;
+        snprintf(client->username, MAX_USERNAME_LEN, "%s", new_name);
+        if (g_room->presence_notifier && renamed) {
+            g_room->presence_notifier(old_name, false);
+            g_room->presence_notifier(client->username, true);
+        }
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+
+    if (taken) {
+        return -1;
+    }
+    if (!renamed) {
+        return 1;
+    }
+
+    message_t nick_msg;
+    system_message_make_nick(&nick_msg, old_name, client->username,
+                             client->ui_lang);
+    room_broadcast(g_room, &nick_msg);
+    message_save(&nick_msg);
+    tnt_module_runtime_publish_message_created(&nick_msg, false);
+    return 0;
+}
+
+void commands_become_anonymous(client_t *client) {
+    char name[MAX_USERNAME_LEN] = "anonymous";
+
+    for (int n = 2; commands_rename(client, name, false) < 0 && n < 1000; n++) {
+        snprintf(name, sizeof(name), "anonymous%d", n);
+    }
+}
+
 bool commands_refresh_active_output(client_t *client) {
     char output[MAX_COMMAND_OUTPUT_LEN] = {0};
     size_t pos = 0;
@@ -440,6 +492,11 @@ void commands_dispatch(client_t *client) {
         if (new_name[0] == '\0') {
             append_command_usage(output, sizeof(output), &pos,
                                  TNT_COMMAND_NICK, client->ui_lang);
+        } else if (client->verified) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->ui_lang,
+                                     I18N_NICK_SIGNED_IN_FORMAT),
+                           client->username);
         } else if (!is_valid_username(new_name)) {
             buffer_appendf(output, sizeof(output), &pos, "%s",
                            i18n_text(client->ui_lang, I18N_NICK_INVALID));
@@ -450,55 +507,65 @@ void commands_dispatch(client_t *client) {
                 utf8_truncate(validated_name, 20);
             }
 
-            /* Reject collisions with active room members.  Held under
-             * wrlock so the username swap below races neither read nor
-             * concurrent :nick from another client. */
             char old_name[MAX_USERNAME_LEN];
-            bool taken = false;
-            pthread_rwlock_wrlock(&g_room->lock);
             snprintf(old_name, sizeof(old_name), "%s", client->username);
-            if (strcmp(validated_name, old_name) != 0) {
-                for (int i = 0; i < g_room->client_count; i++) {
-                    if (g_room->clients[i] == client) continue;
-                    if (strcasecmp(g_room->clients[i]->username,
-                                   validated_name) == 0) {
-                        taken = true;
-                        break;
-                    }
-                }
-            }
-            if (!taken) {
-                snprintf(client->username, MAX_USERNAME_LEN, "%s", validated_name);
-                if (g_room->presence_notifier &&
-                    strcmp(client->username, old_name) != 0) {
-                    g_room->presence_notifier(old_name, false);
-                    g_room->presence_notifier(client->username, true);
-                }
-            }
-            pthread_rwlock_unlock(&g_room->lock);
 
-            if (taken) {
+            if (identity_is_reserved(validated_name)) {
                 buffer_appendf(output, sizeof(output), &pos,
                                i18n_text(client->ui_lang,
-                                         I18N_NICK_TAKEN_FORMAT),
+                                         I18N_NICK_RESERVED_FORMAT),
                                validated_name);
-            } else if (strcmp(validated_name, old_name) == 0) {
-                buffer_appendf(output, sizeof(output), &pos, "%s",
-                               i18n_text(client->ui_lang,
-                                         I18N_NICK_UNCHANGED));
             } else {
-                message_t nick_msg;
-                system_message_make_nick(&nick_msg, old_name,
-                                         client->username, client->ui_lang);
-                room_broadcast(g_room, &nick_msg);
-                message_save(&nick_msg);
-                tnt_module_runtime_publish_message_created(&nick_msg);
+                int rc = commands_rename(client, validated_name, false);
 
-                buffer_appendf(output, sizeof(output), &pos,
-                               i18n_text(client->ui_lang,
-                                         I18N_NICK_CHANGED_FORMAT),
-                               old_name, client->username);
+                if (rc < 0) {
+                    buffer_appendf(output, sizeof(output), &pos,
+                                   i18n_text(client->ui_lang,
+                                             I18N_NICK_TAKEN_FORMAT),
+                                   validated_name);
+                } else if (rc > 0) {
+                    buffer_appendf(output, sizeof(output), &pos, "%s",
+                                   i18n_text(client->ui_lang,
+                                             I18N_NICK_UNCHANGED));
+                } else {
+                    buffer_appendf(output, sizeof(output), &pos,
+                                   i18n_text(client->ui_lang,
+                                             I18N_NICK_CHANGED_FORMAT),
+                                   old_name, client->username);
+                }
             }
+        }
+
+    } else if (command_id == TNT_COMMAND_LOGIN) {
+        if (client->verified) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->ui_lang,
+                                     I18N_LOGIN_ALREADY_FORMAT),
+                           client->username);
+        } else if (tnt_module_runtime_request_identity(client->session_id,
+                                                       client->username)) {
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->ui_lang, I18N_LOGIN_OPENING));
+        } else {
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->ui_lang,
+                                     I18N_LOGIN_UNAVAILABLE));
+        }
+
+    } else if (command_id == TNT_COMMAND_LOGOUT) {
+        if (!client->verified) {
+            buffer_appendf(output, sizeof(output), &pos, "%s",
+                           i18n_text(client->ui_lang,
+                                     I18N_LOGOUT_NOT_SIGNED_IN));
+        } else {
+            if (client->key_fingerprint[0] != '\0') {
+                (void)identity_forget_key(client->key_fingerprint);
+            }
+            commands_become_anonymous(client);
+            buffer_appendf(output, sizeof(output), &pos,
+                           i18n_text(client->ui_lang,
+                                     I18N_LOGOUT_DONE_FORMAT),
+                           client->username);
         }
 
     } else if (command_id == TNT_COMMAND_LAST) {
