@@ -14,7 +14,7 @@
 #include "config_defaults.h"
 
 /* Project Metadata */
-#define TNT_VERSION "1.6.0"
+#define TNT_VERSION "1.7.0"
 
 /* Public process/exec exit statuses.  TNT follows the common sysexits(3)
  * convention for usage errors while keeping runtime failures portable. */
