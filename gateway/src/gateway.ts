@@ -1,7 +1,7 @@
 import type { Server, ServerWebSocket } from "bun";
 import type { Verify } from "./auth";
 import { type Ledger, type Message, ROOM } from "./history";
-import type { TntEvent } from "./module";
+import type { RoomEvent } from "./module";
 import { Presence } from "./presence";
 import { RateLimiter } from "./ratelimit";
 import { normalizeText, validateText } from "./text";
@@ -28,6 +28,7 @@ export type GatewayOptions = {
   ledger: Ledger;
   verify: Verify;
   post: (sender: string, text: string) => void;
+  signedIn?: (handle: string) => void;
   now?: () => Date;
   authTimeoutMs?: number;
 };
@@ -76,6 +77,7 @@ export function createGateway(options: GatewayOptions) {
     clearTimeout(ws.data.timer);
     ws.data.state = "ready";
     ws.data.handle = handle;
+    options.signedIn?.(handle);
     presence.webJoined(handle, ws.data.id);
     syncPresence();
     ws.send(
@@ -117,7 +119,7 @@ export function createGateway(options: GatewayOptions) {
     if (!limiter.take(sender)) return fail(ws, "rate_limited");
     options.post(sender, text);
     const timestamp = now().toISOString().replace(/\.\d{3}Z$/, "Z");
-    const message = options.ledger.add({ timestamp, sender, text });
+    const message = options.ledger.add({ timestamp, sender, text, verified: true });
     if (key !== undefined) sent.set(key, { message, at: Date.now() });
     deliver(message, nonce);
   }
@@ -151,10 +153,10 @@ export function createGateway(options: GatewayOptions) {
       for (const [key, entry] of sent) if ((at ?? Date.now()) - entry.at > NONCE_TTL_MS) sent.delete(key);
       for (const [handle, time] of typingAt) if ((at ?? Date.now()) - time > TYPING_INTERVAL_MS) typingAt.delete(handle);
     },
-    handleEvent(event: TntEvent) {
+    handleEvent(event: RoomEvent) {
       if (event.type === "message.created") {
-        const { timestamp, sender, plain_text } = event.message;
-        deliver(options.ledger.add({ timestamp, sender, text: normalizeText(plain_text) }));
+        const { timestamp, sender, plain_text, verified } = event.message;
+        deliver(options.ledger.add({ timestamp, sender, text: normalizeText(plain_text), verified }));
         return;
       }
       if (event.type === "presence.snapshot") presence.sshSnapshot(event.nicknames);

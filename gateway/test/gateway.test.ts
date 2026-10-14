@@ -67,6 +67,7 @@ describe("session", () => {
       timestamp: "2026-09-22T10:00:00Z",
       kind: "text",
       mentions: [],
+      verified: true,
     });
     expect(posts).toEqual([["alice", "hello"]]);
   });
@@ -102,7 +103,7 @@ describe("session", () => {
 
     gateway.handleEvent({
       type: "message.created",
-      message: { timestamp: "2026-09-22T10:00:05Z", sender: "carol", plain_text: "a|b" },
+      message: { timestamp: "2026-09-22T10:00:05Z", sender: "carol", plain_text: "a|b", verified: false },
     });
     expect(await alice.next((f) => f.type === "message")).toMatchObject({
       sender: "carol",
@@ -162,18 +163,18 @@ describe("message kinds", () => {
   test("classifies actions, notices and module replies and lists mentions", async () => {
     const alice = connect(url, "alice");
     await alice.next((f) => f.type === "ready");
-    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:01Z", sender: "*", plain_text: "carol waves at @alice" } });
+    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:01Z", sender: "*", plain_text: "carol waves at @alice", verified: false } });
     expect(await alice.next((f) => f.type === "message")).toMatchObject({ kind: "action", sender: "carol", text: "waves at @alice", mentions: ["alice"] });
-    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:02Z", sender: "系统", plain_text: "carol 加入了聊天室" } });
+    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:02Z", sender: "系统", plain_text: "carol 加入了聊天室", verified: false } });
     expect(await alice.next((f) => f.type === "message")).toMatchObject({ kind: "system", sender: "系统", text: "carol 加入了聊天室" });
-    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:03Z", sender: "module:roll-module", plain_text: "🎲 carol rolled d6 → 4" } });
+    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:03Z", sender: "module:roll-module", plain_text: "🎲 carol rolled d6 → 4", verified: false } });
     expect(await alice.next((f) => f.type === "message")).toMatchObject({ kind: "module", sender: "roll-module", text: "🎲 carol rolled d6 → 4" });
     alice.send({ type: "send", text: "hi @Bob, @nobody" });
     expect(await alice.next((f) => f.type === "message")).toMatchObject({ kind: "text", sender: "alice", mentions: ["bob", "nobody"] });
   });
 
   test("history keeps notices and module replies", async () => {
-    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:04Z", sender: "module:flip-module", plain_text: "🪙 carol flipped → heads" } });
+    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:04Z", sender: "module:flip-module", plain_text: "🪙 carol flipped → heads", verified: false } });
     const alice = connect(url, "alice");
     const ready = await alice.next((f) => f.type === "ready");
     expect(ready.history.at(-1)).toMatchObject({ kind: "module", sender: "flip-module" });
