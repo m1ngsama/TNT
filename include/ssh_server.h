@@ -2,6 +2,7 @@
 #define SSH_SERVER_H
 
 #include "common.h"
+#include "identity.h"
 #include "keymap.h"
 #include "chat_room.h"
 #include <arpa/inet.h>
@@ -59,7 +60,10 @@ typedef struct client {
     bool show_motd;                  /* command_output holds MOTD text */
     char exec_command[MAX_EXEC_COMMAND_LEN];
     bool exec_command_too_long;
+    bool verified;                   /* Name is a signed-in handle; room lock */
     char ssh_login[MAX_USERNAME_LEN];
+    char session_id[32];             /* Opaque id an identity module sees */
+    char key_fingerprint[TNT_IDENTITY_FINGERPRINT_SIZE];  /* Signed SSH key */
     time_t connect_time;
     time_t last_active;
     atomic_bool redraw_pending;
@@ -80,13 +84,19 @@ typedef struct client {
     whisper_t whisper_inbox[WHISPER_INBOX_SIZE];
     int whisper_inbox_count;
     bool mute_joins;
+    /* Identity mailbox filled by the module worker under whisper_lock and
+     * applied by the session's own thread, which alone renames it. */
+    char identity_notice[MAX_COMMAND_OUTPUT_LEN / 2];
+    char identity_handle[TNT_IDENTITY_HANDLE_MAX + 1];
+    bool identity_evict;
+    atomic_bool identity_pending;
     pthread_t thread;
     atomic_bool connected;
     atomic_bool channel_closed;      /* Peer CHANNEL_CLOSE callback observed */
     int ref_count;                   /* Reference count for safe cleanup */
     pthread_mutex_t ref_lock;        /* Lock for ref_count */
     pthread_mutex_t io_lock;         /* Serialize SSH channel writes */
-    pthread_mutex_t whisper_lock;    /* Serialize whisper inbox access */
+    pthread_mutex_t whisper_lock;    /* Serialize whisper inbox and identity mailbox */
     atomic_bool wake_ready;          /* Session thread accepts directed wake signals */
     atomic_bool wake_pending;        /* State check closes unblock/poll wake races */
     /* Server-worker lifetime hook.  Called after channel teardown and

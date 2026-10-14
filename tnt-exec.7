@@ -166,6 +166,15 @@ otherwise it is
 .BR anonymous .
 The displayed name is limited to 20 Unicode characters.
 .P
+A login name that is the handle of a signed-in member, without regard to
+ASCII letter case, may post only when the SSH key the connection
+authenticated with is bound to that handle; see
+.BR tnt\-chat (7).
+The message is then posted under the handle.
+Otherwise
+.B post
+fails with status 1 and posts nothing.
+.P
 A message beginning with
 .B "/me "
 creates an action.
@@ -183,7 +192,8 @@ The command succeeded.
 .B 1
 A runtime, allocation, I/O, or persistence operation failed.
 .B post
-also returns 1 for invalid UTF-8 or a prohibited control character.
+also returns 1 for invalid UTF-8, a prohibited control character, or a
+reserved login name without its key.
 .TP
 .B 64
 The command name, argument shape, count, or message length was invalid.
@@ -205,7 +215,7 @@ and error wording, is not stable.
 .SH CAVEATS
 In anonymous-access mode, the SSH login name used by
 .B post
-is not authenticated.
+is not authenticated unless it is a signed-in member's handle.
 A shared access token authenticates possession of the token.
 It does not establish ownership of
 the login name.

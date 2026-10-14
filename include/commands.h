@@ -19,6 +19,15 @@
  * path; callers must not hold client->io_lock before dispatching. */
 void commands_dispatch(client_t *client);
 
+/* Rename the session and announce it to the room.  A verified rename takes a
+ * signed-in handle and skips the duplicate-name check; an unverified one
+ * clears the session's verified state.  Returns 0 when renamed, 1 when the
+ * name is unchanged, and -1 when another session holds the name. */
+int commands_rename(client_t *client, const char *new_name, bool verified);
+
+/* Rename to "anonymous", or "anonymousN" when that is taken. */
+void commands_become_anonymous(client_t *client);
+
 /* Rebuild the currently visible command output when it is backed by live
  * client state, such as :inbox.  Returns true if output changed and the caller
  * should render it again. */

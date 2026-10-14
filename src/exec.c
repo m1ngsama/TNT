@@ -4,6 +4,7 @@
 #include "common.h"
 #include "exec_catalog.h"
 #include "i18n.h"
+#include "identity.h"
 #include "input.h"
 #include "json_text.h"
 #include "message.h"
@@ -14,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 
 #define TNT_DUMP_DEFAULT_RECORDS 100
@@ -369,6 +371,8 @@ static int exec_command_dump(client_t *client, const char *args) {
 static int exec_command_post(client_t *client, const char *args) {
     char content[MAX_MESSAGE_LEN];
     char username[MAX_USERNAME_LEN];
+    char handle[TNT_IDENTITY_HANDLE_MAX + 1];
+    bool verified = false;
     message_t msg = {
         .timestamp = time(NULL),
     };
@@ -408,6 +412,19 @@ static int exec_command_post(client_t *client, const char *args) {
     }
 
     resolve_exec_username(client, username, sizeof(username));
+    if (identity_is_reserved(username)) {
+        if (!identity_handle_for_key(client->key_fingerprint, handle,
+                                     sizeof(handle)) ||
+            strcasecmp(handle, username) != 0) {
+            client_printf(client,
+                          i18n_text(client->ui_lang,
+                                    I18N_EXEC_POST_RESERVED_FORMAT),
+                          username);
+            return TNT_EXIT_ERROR;
+        }
+        snprintf(username, sizeof(username), "%s", handle);
+        verified = true;
+    }
 
     if (strncmp(content, "/me ", 4) == 0 && content[4] != '\0') {
         size_t username_len = strlen(username);
@@ -442,7 +459,7 @@ static int exec_command_post(client_t *client, const char *args) {
 
     room_broadcast(g_room, &msg);
     notify_mentions(msg.content, client);
-    tnt_module_runtime_publish_message_created(&msg);
+    tnt_module_runtime_publish_message_created(&msg, verified);
 
     if (client_send(client, "posted\n", 7) != 0) {
         return TNT_EXIT_ERROR;

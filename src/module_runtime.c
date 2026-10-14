@@ -3,6 +3,7 @@
 #include "chat_room.h"
 #include "common.h"
 #include "config_defaults.h"
+#include "identity.h"
 #include "json_text.h"
 #include "module_protocol.h"
 #include "utf8.h"
@@ -33,18 +34,24 @@
 
 struct client;
 void notify_mentions(const char *content, const struct client *sender);
+bool input_identity_notice(const char *session, const char *plain_text);
+bool input_identity_verified(const char *session, const char *handle);
 
 typedef enum module_event_kind {
     MODULE_EVENT_MESSAGE_CREATED,
     MODULE_EVENT_PRESENCE_JOINED,
     MODULE_EVENT_PRESENCE_LEFT,
-    MODULE_EVENT_PRESENCE_SNAPSHOT
+    MODULE_EVENT_PRESENCE_SNAPSHOT,
+    MODULE_EVENT_IDENTITY_REQUESTED
 } module_event_kind_t;
 
+/* An identity request carries the nickname in msg.username and the session
+ * id in msg.content. */
 typedef struct module_event {
     module_event_kind_t kind;
     message_t msg;
     uint64_t event_id;
+    bool verified;
 } module_event_t;
 
 typedef struct module_read_buffer {
@@ -113,6 +120,7 @@ static uint64_t g_next_event_id = 0;
 static atomic_bool g_stop_requested = ATOMIC_VAR_INIT(true);
 static pthread_mutex_t g_dispatch_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_module_publish_lock = PTHREAD_MUTEX_INITIALIZER;
+static module_process_t *g_identity_module = NULL;
 static char g_online[TNT_MAX_CONFIGURED_CLIENTS][MAX_USERNAME_LEN];
 static int g_online_count = 0;
 
@@ -261,6 +269,8 @@ int tnt_module_manifest_load(const char *module_dir,
         manifest, "permissions", "message:post");
     out->can_read_presence = json_array_contains_string(
         manifest, "permissions", "presence:read");
+    out->can_write_identity = json_array_contains_string(
+        manifest, "permissions", "identity:write");
 
     if (!out->wants_message_created || !out->can_read_messages ||
         !out->can_create_messages) {
@@ -791,7 +801,8 @@ static module_queue_push_result_t module_queue_push(module_process_t *module,
     active = atomic_load_explicit(&module->active, memory_order_acquire);
     if (!module->queue_running || queue_full || !active) {
         if (module->queue_running && queue_full && active &&
-            event->kind != MODULE_EVENT_MESSAGE_CREATED) {
+            event->kind != MODULE_EVENT_MESSAGE_CREATED &&
+            event->kind != MODULE_EVENT_IDENTITY_REQUESTED) {
             module->dropped_presence++;
         } else if (module->queue_running && queue_full && active &&
                    !module->saturation_reported) {
@@ -901,10 +912,11 @@ static bool online_update_locked(const char *nickname, bool joined) {
 }
 
 static int queue_event_locked(module_event_kind_t kind, const message_t *msg,
-                              const module_process_t *origin,
+                              bool verified, const module_process_t *origin,
                               char saturated[][TNT_MODULE_NAME_MAX + 1]) {
     module_event_t event = {
         .kind = kind,
+        .verified = verified,
     };
     int saturated_count = 0;
 
@@ -949,7 +961,7 @@ static void report_saturated(char saturated[][TNT_MODULE_NAME_MAX + 1],
 }
 
 static void dispatch_event(module_event_kind_t kind, const message_t *msg,
-                           const module_process_t *origin) {
+                           bool verified, const module_process_t *origin) {
     char saturated[TNT_MAX_MODULES][TNT_MODULE_NAME_MAX + 1];
     int saturated_count = 0;
 
@@ -960,7 +972,8 @@ static void dispatch_event(module_event_kind_t kind, const message_t *msg,
     pthread_mutex_lock(&g_dispatch_lock);
     if (g_accepting &&
         !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
-        saturated_count = queue_event_locked(kind, msg, origin, saturated);
+        saturated_count = queue_event_locked(kind, msg, verified, origin,
+                                             saturated);
     }
     pthread_mutex_unlock(&g_dispatch_lock);
     report_saturated(saturated, saturated_count);
@@ -1014,7 +1027,7 @@ static void publish_module_message(const module_process_t *module,
              TNT_MODULE_NAME_MAX, module->manifest.name);
     snprintf(msg.content, sizeof(msg.content), "%s", plain_text);
     if (publish_message(&msg)) {
-        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
+        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, false, module);
     }
 }
 
@@ -1033,21 +1046,59 @@ static void publish_posted_message(const module_process_t *module,
         snprintf(msg.content, sizeof(msg.content), "%s", post->plain_text);
     }
     if (publish_message(&msg)) {
-        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
+        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg,
+                       module->manifest.can_write_identity, module);
     }
 }
 
-static module_response_action_t handle_module_post(module_process_t *module,
-                                                   const char *line) {
-    tnt_module_message_post_t post;
+static void apply_identity_record(const tnt_module_identity_record_t *record) {
+    switch (record->kind) {
+        case TNT_MODULE_IDENTITY_NOTICE:
+            (void)input_identity_notice(record->session, record->plain_text);
+            break;
+        case TNT_MODULE_IDENTITY_VERIFIED:
+            (void)input_identity_verified(record->session, record->handle);
+            break;
+        case TNT_MODULE_IDENTITY_RESERVE:
+            (void)identity_reserve(record->handle, NULL);
+            break;
+    }
+}
 
-    if (!module->manifest.can_post_messages ||
-        !tnt_module_parse_message_post(line, &post)) {
+/* Records a granted module may write at any time, outside the response
+ * window of an event. */
+static bool is_unsolicited_record(const module_process_t *module,
+                                  const char *line) {
+    char type[64];
+
+    if (!tnt_json_get_string_field(line, "type", type, sizeof(type))) {
+        return false;
+    }
+    return (module->manifest.can_post_messages &&
+            strcmp(type, TNT_MODULE_RECORD_MESSAGE_POST) == 0) ||
+           (module->manifest.can_write_identity &&
+            strncmp(type, TNT_MODULE_RECORD_IDENTITY_PREFIX,
+                    strlen(TNT_MODULE_RECORD_IDENTITY_PREFIX)) == 0);
+}
+
+static module_response_action_t handle_module_record(module_process_t *module,
+                                                     const char *line) {
+    tnt_module_message_post_t post;
+    tnt_module_identity_record_t identity;
+
+    if (module->manifest.can_post_messages &&
+        tnt_module_parse_message_post(line, &post) &&
+        (module->manifest.can_write_identity ||
+         !identity_is_reserved(post.sender))) {
+        publish_posted_message(module, &post);
+    } else if (module->manifest.can_write_identity &&
+               tnt_module_parse_identity_record(line, &identity)) {
+        apply_identity_record(&identity);
+    } else {
         fprintf(stderr, "module runtime: ignored invalid response from %s\n",
                 module->manifest.name);
         return MODULE_RESPONSE_INVALID;
     }
-    publish_posted_message(module, &post);
     module->invalid_responses = 0;
     return MODULE_RESPONSE_CONTINUE;
 }
@@ -1091,7 +1142,7 @@ static bool write_module_record(module_process_t *module, const char *record) {
 
 static void deliver_message_to_module(module_process_t *module,
                                       const message_t *msg,
-                                      uint64_t event_id) {
+                                      uint64_t event_id, bool verified) {
     char event[TNT_MODULE_LINE_MAX] = "";
     char line[TNT_MODULE_LINE_MAX];
     char message_id[64];
@@ -1102,7 +1153,7 @@ static void deliver_message_to_module(module_process_t *module,
     snprintf(message_id, sizeof(message_id), "local-%llu",
              (unsigned long long)event_id);
     if (tnt_module_append_message_created(event, sizeof(event), &pos,
-                                          message_id, msg) < 0) {
+                                          message_id, msg, verified) < 0) {
         disable_module(module, "event encoding failure");
         return;
     }
@@ -1135,11 +1186,11 @@ static void deliver_message_to_module(module_process_t *module,
             disable_module(module, "read failure");
             return;
         }
-        if (module->manifest.can_post_messages &&
-            record_has_type(line, TNT_MODULE_RECORD_MESSAGE_POST)) {
+        if (is_unsolicited_record(module, line)) {
             int64_t started = monotonic_millis();
 
-            if (handle_module_post(module, line) == MODULE_RESPONSE_INVALID &&
+            if (handle_module_record(module, line) ==
+                    MODULE_RESPONSE_INVALID &&
                 !note_invalid_response(module)) {
                 return;
             }
@@ -1175,6 +1226,20 @@ static void deliver_presence_to_module(module_process_t *module,
                 ? TNT_MODULE_EVENT_PRESENCE_JOINED
                 : TNT_MODULE_EVENT_PRESENCE_LEFT,
             event->msg.username, event->msg.timestamp) < 0) {
+        disable_module(module, "event encoding failure");
+        return;
+    }
+    (void)write_module_record(module, record);
+}
+
+static void deliver_identity_request_to_module(module_process_t *module,
+                                              const module_event_t *event) {
+    char record[TNT_MODULE_LINE_MAX] = "";
+    size_t pos = 0;
+
+    if (tnt_module_append_identity_requested(record, sizeof(record), &pos,
+                                             event->msg.content,
+                                             event->msg.username) < 0) {
         disable_module(module, "event encoding failure");
         return;
     }
@@ -1231,7 +1296,11 @@ static void deliver_event_to_module(module_process_t *module,
 
     switch (event->kind) {
         case MODULE_EVENT_MESSAGE_CREATED:
-            deliver_message_to_module(module, &event->msg, event->event_id);
+            deliver_message_to_module(module, &event->msg, event->event_id,
+                                      event->verified);
+            break;
+        case MODULE_EVENT_IDENTITY_REQUESTED:
+            deliver_identity_request_to_module(module, event);
             break;
         case MODULE_EVENT_PRESENCE_SNAPSHOT:
             deliver_snapshot_to_module(module);
@@ -1270,7 +1339,7 @@ static void read_unsolicited_record(module_process_t *module, int wait_ms) {
         disable_module(module, "read failure");
         return;
     }
-    if (handle_module_post(module, line) == MODULE_RESPONSE_INVALID) {
+    if (handle_module_record(module, line) == MODULE_RESPONSE_INVALID) {
         (void)note_invalid_response(module);
     }
 }
@@ -1325,16 +1394,24 @@ static bool module_is_granted(const char *name) {
 static bool module_permissions_allowed(module_process_t *module) {
     const tnt_module_manifest_t *manifest = &module->manifest;
 
-    module->privileged =
-        manifest->can_post_messages || manifest->can_read_presence;
-    if (!module->privileged || module_is_granted(manifest->name)) {
-        return true;
+    module->privileged = manifest->can_post_messages ||
+                         manifest->can_read_presence ||
+                         manifest->can_write_identity;
+    if (module->privileged && !module_is_granted(manifest->name)) {
+        fprintf(stderr,
+                "module runtime: %s requests message:post, presence:read or "
+                "identity:write but is not listed in TNT_MODULE_GRANTS\n",
+                manifest->name);
+        return false;
     }
-    fprintf(stderr,
-            "module runtime: %s requests message:post or presence:read but "
-            "is not listed in TNT_MODULE_GRANTS\n",
-            manifest->name);
-    return false;
+    if (manifest->can_write_identity && g_identity_module) {
+        fprintf(stderr,
+                "module runtime: %s requests identity:write, which %s "
+                "already holds\n",
+                manifest->name, g_identity_module->manifest.name);
+        return false;
+    }
+    return true;
 }
 
 static int load_modules_from_env(void) {
@@ -1367,6 +1444,9 @@ static int load_modules_from_env(void) {
             start_module_process(token, module) == 0) {
             fprintf(stderr, "module runtime: enabled %s\n",
                     module->manifest.name);
+            if (module->manifest.can_write_identity) {
+                g_identity_module = module;
+            }
             g_module_count++;
         } else {
             fprintf(stderr, "module runtime: failed to enable module at %s\n",
@@ -1478,7 +1558,8 @@ int tnt_module_runtime_init(void) {
 
     pthread_mutex_lock(&g_dispatch_lock);
     g_accepting = true;
-    (void)queue_event_locked(MODULE_EVENT_PRESENCE_SNAPSHOT, NULL, NULL, NULL);
+    (void)queue_event_locked(MODULE_EVENT_PRESENCE_SNAPSHOT, NULL, false, NULL,
+                             NULL);
     pthread_mutex_unlock(&g_dispatch_lock);
     pthread_mutex_unlock(&g_lifecycle_lock);
     return 0;
@@ -1490,6 +1571,7 @@ fail:
     close_module_processes(count);
     pthread_mutex_lock(&g_dispatch_lock);
     g_module_count = 0;
+    g_identity_module = NULL;
     pthread_mutex_unlock(&g_dispatch_lock);
     pthread_mutex_unlock(&g_lifecycle_lock);
     return -1;
@@ -1510,14 +1592,16 @@ void tnt_module_runtime_shutdown(void) {
 
     pthread_mutex_lock(&g_dispatch_lock);
     g_module_count = 0;
+    g_identity_module = NULL;
     g_next_event_id = 0;
     pthread_mutex_unlock(&g_dispatch_lock);
     pthread_mutex_unlock(&g_lifecycle_lock);
 }
 
-void tnt_module_runtime_publish_message_created(const message_t *msg) {
+void tnt_module_runtime_publish_message_created(const message_t *msg,
+                                                bool verified) {
     if (msg) {
-        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, msg, NULL);
+        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, msg, verified, NULL);
     }
 }
 
@@ -1536,9 +1620,31 @@ void tnt_module_runtime_publish_presence(const char *nickname, bool joined) {
         !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
         (void)queue_event_locked(
             joined ? MODULE_EVENT_PRESENCE_JOINED : MODULE_EVENT_PRESENCE_LEFT,
-            &msg, NULL, NULL);
+            &msg, false, NULL, NULL);
     }
     pthread_mutex_unlock(&g_dispatch_lock);
+}
+
+bool tnt_module_runtime_request_identity(const char *session,
+                                         const char *nickname) {
+    module_event_t event = {
+        .kind = MODULE_EVENT_IDENTITY_REQUESTED,
+    };
+    module_queue_push_result_t pushed = MODULE_QUEUE_DROPPED;
+
+    if (!session || session[0] == '\0' || !nickname) {
+        return false;
+    }
+    snprintf(event.msg.username, sizeof(event.msg.username), "%s", nickname);
+    snprintf(event.msg.content, sizeof(event.msg.content), "%s", session);
+
+    pthread_mutex_lock(&g_dispatch_lock);
+    if (g_accepting && g_identity_module &&
+        !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+        pushed = module_queue_push(g_identity_module, &event);
+    }
+    pthread_mutex_unlock(&g_dispatch_lock);
+    return pushed == MODULE_QUEUE_PUSHED;
 }
 
 #ifdef TNT_TESTING

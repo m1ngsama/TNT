@@ -208,9 +208,19 @@ The default is
 .TP
 .B TNT_ACCESS_TOKEN
 Require this shared token as the SSH password.
-When it is unset or empty, passwordless, password, and signed public-key
-authentication are accepted.
-When it is nonempty,
+When it is unset or empty, any signed public key, any password, and
+keyboard-interactive authentication that asks no questions are accepted.
+The
+.B none
+method is refused so that a client offers its public key, which can sign a
+member in; see
+.BR tnt\-chat (7).
+A client without a key still gets in without typing anything, unless
+.BR ssh (1)
+runs with
+.BR BatchMode ,
+which disables keyboard-interactive and password authentication.
+When the token is nonempty,
 passwordless and public-key authentication are rejected.
 Only the first 255 bytes are effective.
 .TP
@@ -262,9 +272,10 @@ See
 .TP
 .B TNT_MODULE_GRANTS
 Colon-separated module names allowed to use the
-.B message:post
+.BR message:post ,
+.BR presence:read ,
 and
-.B presence:read
+.B identity:write
 permissions.
 A granted module can post under any valid nickname.
 See
@@ -302,6 +313,22 @@ See
 .TP
 .I messages.log.1
 The previous log produced by automatic rotation.
+.TP
+.I identities
+Handles reserved by signed-in members, created with mode 0600 and replaced
+atomically.
+Each line holds one handle followed by zero or more space-separated SSH key
+fingerprints in the form
+.B ssh\-keygen \-l
+prints:
+.IP
+.EX
+alice SHA256:UMSdY3XS0sbuWW4MC+rV6SEa0OanWxNxnFV35VM5Sng
+.EE
+.IP
+A handle is 1 through 20 ASCII lowercase letters, digits, and underscores;
+invalid lines are skipped.
+TNT rereads the file when it changes.
 .TP
 .I motd.txt
 Optional text displayed before the chat screen for each new interactive

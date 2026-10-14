@@ -68,7 +68,8 @@ int room_add_client(chat_room_t *room, struct client *client) {
         return -1;
     }
 
-    if (room->client_name) {
+    if (room->client_name &&
+        !(room->client_owns_name && room->client_owns_name(client))) {
         const char *candidate_name = room->client_name(client);
         for (int i = 0; i < room->client_count; i++) {
             const char *existing_name = room->client_name(room->clients[i]);
@@ -164,6 +165,15 @@ void room_set_client_name_accessor(chat_room_t *room,
 
     pthread_rwlock_wrlock(&room->lock);
     room->client_name = accessor;
+    pthread_rwlock_unlock(&room->lock);
+}
+
+void room_set_client_name_owner(chat_room_t *room,
+                                room_client_owns_name_fn accessor) {
+    if (!room) return;
+
+    pthread_rwlock_wrlock(&room->lock);
+    room->client_owns_name = accessor;
     pthread_rwlock_unlock(&room->lock);
 }
 

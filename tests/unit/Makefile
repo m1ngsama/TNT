@@ -46,8 +46,9 @@ THEME_SRC = ../../src/theme.c
 RICHTEXT_SRC = ../../src/richtext.c
 EDITOR_SRC = ../../src/editor.c
 KEYMAP_SRC = ../../src/keymap.c
+IDENTITY_SRC = ../../src/identity.c
 
-TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_common test_client_outbox test_config_defaults test_theme test_richtext test_editor test_keymap test_message_log
+TESTS = test_utf8 test_input_buffer test_json_text test_module_protocol test_module_runtime test_message test_chat_room test_history_view test_i18n test_system_message test_command_catalog test_exec_catalog test_help_text test_manual_text test_cli_text test_tntctl_text test_ratelimit test_common test_client_outbox test_config_defaults test_theme test_richtext test_editor test_keymap test_message_log test_identity
 
 .PHONY: all clean run
 
@@ -74,11 +75,14 @@ test_input_buffer: test_input_buffer.c $(INPUT_BUFFER_SRC) $(UTF8_SRC)
 test_json_text: test_json_text.c $(JSON_TEXT_SRC) $(COMMON_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
-test_module_protocol: test_module_protocol.c $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
-	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
+test_module_protocol: test_module_protocol.c $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC) $(IDENTITY_SRC)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) $(PROJECT_LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) -lssh $(LDLIBS)
 
-test_module_runtime: test_module_runtime.c $(MODULE_RUNTIME_SRC) $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC)
-	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) -DTNT_TESTING $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
+test_identity: test_identity.c $(IDENTITY_SRC) $(COMMON_SRC)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) $(PROJECT_LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) -lssh $(LDLIBS)
+
+test_module_runtime: test_module_runtime.c $(MODULE_RUNTIME_SRC) $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC) $(IDENTITY_SRC)
+	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) -DTNT_TESTING $(LDFLAGS) $(PROJECT_LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) -lssh $(LDLIBS)
 
 test_message: test_message.c $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
@@ -153,6 +157,9 @@ run: all
 	@echo ""
 	@echo "=== Running Module Protocol Tests ==="
 	./test_module_protocol
+	@echo ""
+	@echo "=== Running Identity Tests ==="
+	./test_identity
 	@echo ""
 	@echo "=== Running Module Runtime Tests ==="
 	./test_module_runtime

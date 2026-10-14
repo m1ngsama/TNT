@@ -40,7 +40,7 @@ int tnt_module_append_handshake(char *buffer, size_t buf_size, size_t *pos,
 
 int tnt_module_append_message_created(char *buffer, size_t buf_size,
                                       size_t *pos, const char *message_id,
-                                      const message_t *msg) {
+                                      const message_t *msg, bool verified) {
     char timestamp[64];
     size_t before;
 
@@ -64,7 +64,8 @@ int tnt_module_append_message_created(char *buffer, size_t buf_size,
     buffer_appendf(buffer, buf_size, pos, ",\"kind\":\"text\","
                    "\"plain_text\":");
     tnt_json_append_string(buffer, buf_size, pos, msg->content);
-    buffer_appendf(buffer, buf_size, pos, ",\"metadata\":{}}}\n");
+    buffer_appendf(buffer, buf_size, pos, ",\"metadata\":{%s}}}\n",
+                   verified ? "\"verified\":true" : "");
 
     return append_result(before, *pos, buf_size);
 }
@@ -117,6 +118,27 @@ int tnt_module_append_presence_snapshot(char *buffer, size_t buf_size,
     return append_result(before, *pos, buf_size);
 }
 
+int tnt_module_append_identity_requested(char *buffer, size_t buf_size,
+                                         size_t *pos, const char *session,
+                                         const char *nickname) {
+    size_t before;
+
+    if (!buffer || !pos || buf_size == 0 || !session || session[0] == '\0' ||
+        !nickname || !utf8_is_valid_string(nickname)) {
+        return -1;
+    }
+
+    before = *pos;
+    buffer_appendf(buffer, buf_size, pos, "{\"type\":\"%s\",\"session\":",
+                   TNT_MODULE_EVENT_IDENTITY_REQUESTED);
+    tnt_json_append_string(buffer, buf_size, pos, session);
+    buffer_appendf(buffer, buf_size, pos, ",\"nickname\":");
+    tnt_json_append_string(buffer, buf_size, pos, nickname);
+    buffer_appendf(buffer, buf_size, pos, "}\n");
+
+    return append_result(before, *pos, buf_size);
+}
+
 bool tnt_module_parse_message_create(const char *line,
                                      tnt_module_message_create_t *out) {
     char type[64];
@@ -162,4 +184,42 @@ bool tnt_module_parse_message_post(const char *line,
            tnt_json_get_string_field(line, "plain_text", out->plain_text,
                                      sizeof(out->plain_text)) &&
            is_valid_plain_text(out->plain_text);
+}
+
+bool tnt_module_parse_identity_record(const char *line,
+                                      tnt_module_identity_record_t *out) {
+    char type[64];
+
+    if (!line || !out) {
+        return false;
+    }
+
+    memset(out, 0, sizeof(*out));
+    if (!tnt_json_get_string_field(line, "type", type, sizeof(type))) {
+        return false;
+    }
+    if (strcmp(type, "identity.notice") == 0) {
+        out->kind = TNT_MODULE_IDENTITY_NOTICE;
+        return tnt_json_get_string_field(line, "session", out->session,
+                                         sizeof(out->session)) &&
+               out->session[0] != '\0' &&
+               tnt_json_get_string_field(line, "plain_text", out->plain_text,
+                                         sizeof(out->plain_text)) &&
+               is_valid_plain_text(out->plain_text);
+    }
+    if (strcmp(type, "identity.verified") == 0) {
+        out->kind = TNT_MODULE_IDENTITY_VERIFIED;
+        if (!tnt_json_get_string_field(line, "session", out->session,
+                                       sizeof(out->session)) ||
+            out->session[0] == '\0') {
+            return false;
+        }
+    } else if (strcmp(type, "identity.reserve") == 0) {
+        out->kind = TNT_MODULE_IDENTITY_RESERVE;
+    } else {
+        return false;
+    }
+    return tnt_json_get_string_field(line, "handle", out->handle,
+                                     sizeof(out->handle)) &&
+           identity_handle_valid(out->handle);
 }

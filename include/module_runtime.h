@@ -17,6 +17,7 @@ typedef struct {
     bool can_create_messages;
     bool can_post_messages;
     bool can_read_presence;
+    bool can_write_identity;
 } tnt_module_manifest_t;
 
 int tnt_module_manifest_load(const char *module_dir,
@@ -27,11 +28,17 @@ void tnt_module_runtime_shutdown(void);
 
 /* Queue a user/core-created public message for enabled modules. This is
  * intentionally fire-and-forget so basic chat never depends on module health. */
-void tnt_module_runtime_publish_message_created(const message_t *msg);
+void tnt_module_runtime_publish_message_created(const message_t *msg,
+                                                bool verified);
 
 /* Track an interactive user joining or leaving and notify presence:read
  * modules.  Safe to call with the room lock held. */
 void tnt_module_runtime_publish_presence(const char *nickname, bool joined);
+
+/* Ask the identity:write module to sign in an interactive session.  Returns
+ * false when no such module can take the request. */
+bool tnt_module_runtime_request_identity(const char *session,
+                                         const char *nickname);
 
 #ifdef TNT_TESTING
 /* Pipe-level test seams for deterministic backpressure/deadline coverage. */

@@ -47,6 +47,18 @@ void notify_mentions(const char *content, const void *sender) {
     (void)sender;
 }
 
+bool input_identity_notice(const char *session, const char *plain_text) {
+    (void)session;
+    (void)plain_text;
+    return false;
+}
+
+bool input_identity_verified(const char *session, const char *handle) {
+    (void)session;
+    (void)handle;
+    return false;
+}
+
 static void cleanup_module_dir(void) {
     if (module_dir[0] == '\0') return;
 
@@ -569,7 +581,7 @@ TEST(presence_saturation_logs_outside_the_notifier) {
     assert(tnt_module_runtime_init() == 0);
     assert(dup2(log_fd, STDERR_FILENO) >= 0);
 
-    tnt_module_runtime_publish_message_created(&msg);
+    tnt_module_runtime_publish_message_created(&msg, false);
     sleep_millis(200);
     for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
         snprintf(nickname, sizeof(nickname), "user%d", i);
