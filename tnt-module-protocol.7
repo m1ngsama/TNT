@@ -1,4 +1,4 @@
-.TH TNT-MODULE-PROTOCOL 7 "2026-10-14" "TNT 1.6.0"
+.TH TNT-MODULE-PROTOCOL 7 "2026-10-14" "TNT 1.7.0"
 .SH NAME
 tnt-module-protocol \- implement an external TNT message module
 .SH DESCRIPTION
@@ -296,8 +296,10 @@ event:
 .P
 .B sender
 must be a valid interactive nickname: at most 20 characters, no leading
-space, dot, or hyphen, no control characters, no colon, and none of
-.BR "| ; & $ ` < > ( ) { } [ ] ' \(dq \e" .
+space, dot, or hyphen, no control characters, no colon, none of
+.BR "| ; & $ ` < > ( ) { } [ ] ' \(dq \e" ,
+and none of the check marks
+.BR "✓ ✔ ☑ ✅" .
 It must also not be
 .BR * ,
 .BR system ,
@@ -306,7 +308,8 @@ or its Chinese equivalent; the colon restriction already excludes the
 form TNT reserves for its own messages.
 Unless the module also holds
 .BR identity:write ,
-it must not be a reserved handle either; see
+it must not be a reserved handle, or a name that looks like one, either;
+see
 .BR identity:write .
 .B plain_text
 follows the
@@ -434,8 +437,11 @@ Sign the session in as
 TNT reserves the handle, binds the SSH key the session authenticated with,
 if any, to it and to no other handle, renames the session, and announces
 the rename to the room.
-Another session using the name without signing in is renamed to
-.BR anonymous .
+Another session using the name, or a name that looks like it, without
+signing in is renamed to
+.BR anonymous ,
+or the first free
+.BR anonymous \fIN\fR.
 TNT ignores a session that is unknown or has closed.
 .TP
 .B identity.reserve
@@ -446,6 +452,16 @@ TNT ignores a session that is unknown or has closed.
 Reserve
 .B handle
 without binding a key, for a member who signed in elsewhere.
+Every session using the name, or a name that looks like it, without signing
+in is renamed to
+.BR anonymous ,
+or the first free
+.BR anonymous \fIN\fR,
+and the room sees the rename.
+Write this record when someone joins under a registered handle, or a name
+that looks like one, to move them off it at once.
+.BR tnt\-chat (7)
+says when two names look alike.
 .P
 An identity record with a missing or invalid member, or an invalid handle,
 is a protocol failure like any other invalid response.
@@ -514,7 +530,7 @@ rules.
 Unless the module also holds
 .BR identity:write ,
 .B from
-must not be a reserved handle.
+must not be a reserved handle or a name that looks like one.
 TNT ignores a
 .B to
 that no session uses.
@@ -634,14 +650,15 @@ modules.
 A module holding
 .B message:post
 can post under any valid nickname, including one an SSH user is using,
-except a reserved handle.
+except a reserved handle or a name that looks like one.
 A module holding
 .B identity:write
 can post under, and sign any session in as, any handle.
 A module holding
 .B message:private
 reads every private message SSH users send to remote users and can send
-private messages under any nickname that is not a reserved handle.
+private messages under any nickname that neither is nor looks like a
+reserved handle.
 Grant any of them only to a module you trust as much as the server.
 .P
 The child inherits most of the server environment.

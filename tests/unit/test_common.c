@@ -17,6 +17,11 @@ static void test_username_validation(void) {
     assert(!is_valid_username("system"));
     assert(!is_valid_username("系统"));
     assert(!is_valid_username("module:roll-module"));
+    assert(!is_valid_username("alice ✓"));
+    assert(!is_valid_username("✔alice"));
+    assert(!is_valid_username("al☑ice"));
+    assert(!is_valid_username("alice✅"));
+    assert(is_valid_username("alice ✗"));
 }
 
 int main(void) {

@@ -312,20 +312,27 @@ bool input_identity_verified(const char *session, const char *handle) {
     return true;
 }
 
-/* Sessions rename only themselves, so an unverified holder of a handle that
- * just signed in is asked to step aside rather than renamed from here. */
+/* Sessions rename only themselves, so an unverified holder of a name that
+ * looks like a just-reserved handle is asked to step aside rather than
+ * renamed from here. */
 static void evict_unverified_holders(const client_t *self, const char *handle) {
+    char handle_skeleton[MAX_USERNAME_LEN];
+    char skeleton[MAX_USERNAME_LEN];
     client_t **targets = NULL;
     int target_count = 0;
 
+    identity_skeleton(handle, handle_skeleton, sizeof(handle_skeleton));
     pthread_rwlock_rdlock(&g_room->lock);
     if (g_room->client_count > 0) {
         targets = calloc((size_t)g_room->client_count, sizeof(*targets));
     }
     for (int i = 0; targets && i < g_room->client_count; i++) {
         client_t *c = g_room->clients[i];
-        if (c != self && !c->verified &&
-            strcasecmp(c->username, handle) == 0) {
+        if (c == self || c->verified) {
+            continue;
+        }
+        identity_skeleton(c->username, skeleton, sizeof(skeleton));
+        if (strcmp(skeleton, handle_skeleton) == 0) {
             client_addref(c);
             targets[target_count++] = c;
         }
@@ -337,6 +344,15 @@ static void evict_unverified_holders(const client_t *self, const char *handle) {
         client_release(targets[i]);
     }
     free(targets);
+}
+
+int input_identity_reserve(const char *handle) {
+    int rc = identity_reserve(handle, NULL);
+
+    if (rc == 0) {
+        evict_unverified_holders(NULL, handle);
+    }
+    return rc;
 }
 
 static void show_session_notice(client_t *client, const char *text) {
@@ -1198,6 +1214,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
 
                     message_t msg = {
                         .timestamp = time(NULL),
+                        .verified = client->verified,
                     };
                     if (is_action) {
                         msg.username[0] = '*';
@@ -1214,8 +1231,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                     if (message_save(&msg) == 0) {
                         room_broadcast(g_room, &msg);
                         notify_mentions(msg.content, client);
-                        tnt_module_runtime_publish_message_created(
-                            &msg, client->verified);
+                        tnt_module_runtime_publish_message_created(&msg);
                     } else {
                         fprintf(stderr, "interactive: failed to persist message\n");
                     }
@@ -1695,7 +1711,7 @@ void input_run_session(client_t *client) {
     system_message_make_join(&join_msg, client->username, client->ui_lang);
     room_broadcast(g_room, &join_msg);
     message_save(&join_msg);
-    tnt_module_runtime_publish_message_created(&join_msg, false);
+    tnt_module_runtime_publish_message_created(&join_msg);
 
     /* Show MOTD if motd.txt exists in state directory */
     {
@@ -2094,7 +2110,7 @@ cleanup:
         room_remove_client(g_room, client);
         room_broadcast(g_room, &leave_msg);
         message_save(&leave_msg);
-        tnt_module_runtime_publish_message_created(&leave_msg, false);
+        tnt_module_runtime_publish_message_created(&leave_msg);
     }
 
     /* Interactive shells otherwise look like a transport reset to OpenSSH

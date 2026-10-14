@@ -1,6 +1,7 @@
 #!/bin/sh
 # Verified identities: :login through an identity:write module, reserved
-# names, :logout, SSH key sign-in, verified metadata, and exec post.
+# and look-alike names, :logout, SSH key sign-in, the verified mark, verified
+# metadata and log flags, and exec post.
 
 . ./lib.sh
 
@@ -126,6 +127,9 @@ while IFS= read -r line; do
       printf '{"type":"identity.verified","session":"%s","handle":"alice"}\n' "$session" ;;
     *'"type":"message.created"'*'"plain_text":"web hello"'*)
       printf '{"type":"event.ok"}\n' ;;
+    *'"type":"message.created"'*'"plain_text":"reserve dora"'*)
+      printf '{"type":"identity.reserve","handle":"dora"}\n'
+      printf '{"type":"event.ok"}\n' ;;
     *'"type":"message.created"'*)
       printf '{"type":"event.ok"}\n' ;;
   esac
@@ -207,12 +211,18 @@ want \$b "TEST-CODE"
 want \$b "Signed in as @alice."
 want \$b "ssh alice@localhost -p $PORT"
 
-want \$a "belongs to a signed-in member"
+want \$a "is taken by a signed-in member"
 
 send -i \$b -- "q"
 want \$b \$TNT_INPUT_PROMPT
 send -i \$b -- "hello verified\r"
-want \$b "m: hello verified"
+want \$b "alice\033\[0m \033\[1;32m\u2713\033\[0m: hello verified"
+send -i \$b -- "/me waves\r"
+want \$b "* alice\033\[0m \033\[1;32m\u2713\033\[0m \033\[3;36mwaves"
+send -i \$b -- "/users\r"
+want \$b "alice\033\[0m \033\[1;32m\u2713\033\[0m  "
+send -i \$b -- "q"
+want \$b \$TNT_INPUT_PROMPT
 send -i \$b -- "/nick zed\r"
 want \$b "Use :logout before changing your name."
 send -i \$b -- "q"
@@ -262,6 +272,17 @@ else
     cat "$TNT_IDENT_EVENTS"
 fi
 
+if [ "$(head -n 1 "$LOG")" = "#tnt-message-log v3" ] &&
+   grep -q '|alice|hello verified|v$' "$LOG" &&
+   grep -q '|\*|alice waves|v$' "$LOG" &&
+   grep -q '|after logout|$' "$LOG" &&
+   grep -q '|system|bob renamed to alice|$' "$LOG"; then
+    pass "the log records verified senders with the v flag"
+else
+    fail "log flags unexpected"
+    cat "$LOG"
+fi
+
 if grep -q "^alice$" "$IDENTITIES"; then
     pass "a keyless sign-in reserves the handle without a key"
 else
@@ -273,14 +294,14 @@ if run_session reserved "
 expect \"): \"
 send -- \"Alice\r\"
 expect {
-    \"@Alice belongs to a signed-in member.\" {}
+    \"@Alice is taken by a signed-in member, or looks like their name.\" {}
     timeout { exit 1 }
 }
 send -- \"q\"
 sleep 0.3
 send -- \"/nick webby\r\"
 expect {
-    \"@webby belongs to a signed-in member.\" {}
+    \"@webby is taken by a signed-in member, or looks like their name.\" {}
     timeout { exit 1 }
 }
 " "$SSH_KEYLESS"; then
@@ -288,6 +309,47 @@ expect {
 else
     fail "a reserved name was accepted"
     tnt_dump_session reserved
+fi
+
+if run_session lookalike "
+expect \"): \"
+send -- \"AL1CE\r\"
+expect {
+    \"@AL1CE is taken by a signed-in member, or looks like their name.\" {}
+    timeout { exit 1 }
+}
+send -- \"q\"
+sleep 0.3
+send -- \"/nick vveb_by\r\"
+expect {
+    \"@vveb_by is taken by a signed-in member, or looks like their name.\" {}
+    timeout { exit 1 }
+}
+" "$SSH_KEYLESS" && ! grep -q '|system|AL1CE joined' "$LOG" &&
+   ! grep -q 'vveb_by' "$LOG"; then
+    pass "look-alike names are refused at the prompt and by :nick"
+else
+    fail "a look-alike name was accepted"
+    tnt_dump_session lookalike
+fi
+
+if run_session evict "
+expect \"): \"
+send -- \"D0RA\r\"
+expect \"/help\"
+send -- \"reserve dora\r\"
+expect {
+    \"@D0RA is taken by a signed-in member, or looks like their name.\" {}
+    timeout { exit 1 }
+}
+" "$SSH_KEYLESS" &&
+   tnt_wait_for "$LOG" '|system|D0RA renamed to anonymous[0-9]*|$' &&
+   tnt_wait_for "$IDENTITIES" "^dora$"; then
+    pass "identity.reserve renames an unverified look-alike holder"
+else
+    fail "identity.reserve left a look-alike holder in place"
+    tnt_dump_session evict
+    cat "$LOG"
 fi
 
 if run_session bindkey '
@@ -325,7 +387,8 @@ POST_OUTPUT=$($SSH_EXEC -i "$KEY" alice@127.0.0.1 post "from my key" 2>&1)
 POST_STATUS=$?
 if [ "$POST_STATUS" -eq 0 ] && [ "$POST_OUTPUT" = "posted" ] &&
    tnt_wait_for_fixed "$TNT_IDENT_EVENTS" \
-        '"plain_text":"from my key","metadata":{"verified":true}'; then
+        '"plain_text":"from my key","metadata":{"verified":true}' &&
+   grep -q '|alice|from my key|v$' "$LOG"; then
     pass "exec post under a reserved name works with its key and is verified"
 else
     fail "exec post with the bound key: $POST_STATUS $POST_OUTPUT"
@@ -334,7 +397,7 @@ fi
 POST_OUTPUT=$($SSH_EXEC -i "$OTHER_KEY" Alice@127.0.0.1 post "forged" 2>&1)
 POST_STATUS=$?
 if [ "$POST_STATUS" -eq 1 ] &&
-   printf '%s' "$POST_OUTPUT" | grep -q "belongs to a signed-in member" &&
+   printf '%s' "$POST_OUTPUT" | grep -q "is taken by a signed-in member" &&
    ! grep -q "forged" "$LOG"; then
     pass "exec post under a reserved name is refused without its key"
 else
@@ -348,7 +411,10 @@ expect {
     timeout { exit 1 }
 }
 send -- "q"
-sleep 0.3
+expect {
+    -exact "alice\033\[0m \033\[1;32m\u2713\033\[0m: hello verified" {}
+    timeout { exit 1 }
+}
 send -- "/logout\r"
 expect {
     "Signed out. Your name is now" {}

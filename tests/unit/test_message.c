@@ -201,10 +201,42 @@ TEST(message_save_stamps_the_format_on_a_fresh_log) {
     fp = fopen(log_path, "r");
     assert(fp != NULL);
     assert(fgets(line, sizeof(line), fp) != NULL);
-    assert(message_log_is_header(line));
+    assert(message_log_header_version(line) == MESSAGE_LOG_VERSION);
     assert(fgets(line, sizeof(line), fp) != NULL);
-    assert(strstr(line, "|alice|hello\n") != NULL);
+    assert(strstr(line, "|alice|hello|\n") != NULL);
     fclose(fp);
+    cleanup_state_dir();
+}
+
+TEST(message_save_records_a_verified_sender) {
+    message_t msg = { .timestamp = time(NULL), .verified = true };
+    message_t *messages = NULL;
+    char log_path[PATH_MAX];
+    char line[MESSAGE_LOG_MAX_LINE];
+    FILE *fp;
+
+    setup_state_dir();
+    snprintf(log_path, sizeof(log_path), "%s/messages.log", test_state_dir);
+    strcpy(msg.username, "alice");
+    strcpy(msg.content, "signed");
+    assert(message_save(&msg) == 0);
+    msg.verified = false;
+    strcpy(msg.content, "plain");
+    assert(message_save(&msg) == 0);
+
+    fp = fopen(log_path, "r");
+    assert(fp != NULL);
+    assert(fgets(line, sizeof(line), fp) != NULL);
+    assert(fgets(line, sizeof(line), fp) != NULL);
+    assert(strstr(line, "|alice|signed|v\n") != NULL);
+    assert(fgets(line, sizeof(line), fp) != NULL);
+    assert(strstr(line, "|alice|plain|\n") != NULL);
+    fclose(fp);
+
+    assert(message_load(&messages, 10) == 2);
+    assert(messages[0].verified);
+    assert(!messages[1].verified);
+    free(messages);
     cleanup_state_dir();
 }
 
@@ -264,9 +296,9 @@ TEST(message_load_migrates_a_v1_log_once) {
     fp = fopen(log_path, "r");
     assert(fp != NULL);
     assert(fgets(line, sizeof(line), fp) != NULL);
-    assert(message_log_is_header(line));
+    assert(message_log_header_version(line) == MESSAGE_LOG_VERSION);
     assert(fgets(line, sizeof(line), fp) != NULL);
-    assert(strstr(line, "|alice|C:\\\\new\n") != NULL);
+    assert(strstr(line, "|alice|C:\\\\new|\n") != NULL);
     fclose(fp);
 
     /* A second load must leave the escaped form alone. */
@@ -316,9 +348,11 @@ TEST(message_search_skips_malformed_records) {
 
     FILE *fp = fopen(log_path, "wb");
     assert(fp != NULL);
-    fprintf(fp, "%s|alice|needle valid\n", ts);
-    fprintf(fp, "%s|mallory|needle extra|pipe\n", ts);
-    fprintf(fp, "%s|partial|needle truncated", ts);
+    fprintf(fp, MESSAGE_LOG_HEADER "\n");
+    fprintf(fp, "%s|alice|needle valid|\n", ts);
+    fprintf(fp, "%s|mallory|needle extra|pipe|\n", ts);
+    fprintf(fp, "%s|old|needle without flags\n", ts);
+    fprintf(fp, "%s|partial|needle truncated|", ts);
     fclose(fp);
 
     int count = message_search("needle", &results, 10);
@@ -341,7 +375,7 @@ TEST(message_search_keeps_last_matches_in_order) {
     FILE *fp = fopen(log_path, "wb");
     assert(fp != NULL);
     for (int i = 0; i < 5; i++) {
-        fprintf(fp, "%s|user%d|needle %d\n", ts, i, i);
+        fprintf(fp, "%s|user%d|needle %d|\n", ts, i, i);
     }
     fclose(fp);
 
@@ -367,11 +401,12 @@ TEST(message_dump_exports_valid_records) {
 
     FILE *fp = fopen(log_path, "wb");
     assert(fp != NULL);
-    fprintf(fp, "%s|alice|first valid\n", ts);
-    fprintf(fp, "%s|mallory|extra|pipe\n", ts);
-    fprintf(fp, "%s|bob|second valid\n", ts);
-    fprintf(fp, "%s|carol|third valid\n", ts);
-    fprintf(fp, "%s|partial|truncated record", ts);
+    fprintf(fp, MESSAGE_LOG_HEADER "\n");
+    fprintf(fp, "%s|alice|first valid|\n", ts);
+    fprintf(fp, "%s|mallory|extra|pipe|\n", ts);
+    fprintf(fp, "%s|bob|second valid|v\n", ts);
+    fprintf(fp, "%s|carol|third valid|\n", ts);
+    fprintf(fp, "%s|partial|truncated record|", ts);
     fclose(fp);
 
     snprintf(expected_all, sizeof(expected_all),
@@ -496,6 +531,7 @@ int main(void) {
     RUN_TEST(message_save_basic);
     RUN_TEST(message_save_rejects_control_characters);
     RUN_TEST(message_save_stamps_the_format_on_a_fresh_log);
+    RUN_TEST(message_save_records_a_verified_sender);
     RUN_TEST(message_save_keeps_a_newline);
     RUN_TEST(message_save_still_flattens_a_carriage_return);
     RUN_TEST(message_load_migrates_a_v1_log_once);

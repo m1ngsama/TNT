@@ -60,7 +60,7 @@ send_repeat "\033\[D" 2
 send_wait "\033\[3~"
 send_enter
 '
-check_case "delete" "|abc$" \
+check_case "delete" "|abc|$" \
     "Delete removes the character under the caret" \
     "Delete did not remove the character under the caret"
 

@@ -36,7 +36,7 @@ tnt_expect_session "plain" '
 send_wait ":list"
 send_enter
 '
-check_case "plain" "|:list$" \
+check_case "plain" "|:list|$" \
     "a colon types instead of opening COMMAND" \
     "the colon was treated as a command prefix"
 
@@ -46,7 +46,7 @@ send_lone_escape
 send_wait "after-escape"
 send_enter
 '
-check_case "plain" "|after-escape$" \
+check_case "plain" "|after-escape|$" \
     "Esc does not leave the input" \
     "Esc changed modes, so the following keys were lost"
 
@@ -55,7 +55,7 @@ tnt_expect_session "plain" '
 send_wait "/me waves"
 send_enter
 '
-check_case "plain" "|\*|plain waves$" \
+check_case "plain" "|\*|plain waves|$" \
     "a leading slash runs the command" \
     "/me was not dispatched as a command"
 
@@ -65,7 +65,7 @@ tnt_expect_session "plain" '
 send_wait "//slash"
 send_enter
 '
-check_case "plain" "|/slash$" \
+check_case "plain" "|/slash|$" \
     "a doubled slash sends a literal slash" \
     "// did not produce a literal slash"
 
@@ -74,7 +74,7 @@ tnt_expect_session "plain" '
 send_wait "/usr/local/bin is where it lives"
 send_enter
 '
-check_case "plain" "|/usr/local/bin is where it lives$" \
+check_case "plain" "|/usr/local/bin is where it lives|$" \
     "an unknown slash word sends as text" \
     "a path starting with / was swallowed"
 
@@ -86,7 +86,7 @@ send -- "q"
 send_wait "after-pager"
 send_enter
 '
-check_case "plain" "|after-pager$" \
+check_case "plain" "|after-pager|$" \
     "closing a pager returns to the input" \
     "closing a pager left the session in NORMAL"
 

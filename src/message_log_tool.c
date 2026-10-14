@@ -23,7 +23,7 @@ static int print_recovered_record(const message_t *msg) {
     char record[MAX_USERNAME_LEN + MAX_MESSAGE_LEN + 48];
     size_t record_len = 0;
 
-    if (message_log_format_record(msg, record, sizeof(record),
+    if (message_log_format_record(msg, true, record, sizeof(record),
                                   &record_len) < 0) {
         return -1;
     }
@@ -67,14 +67,14 @@ static int scan_log(const char *path, bool recover) {
     }
 
     report.format_version = 1;
-    if (fgets(line, sizeof(line), fp) && message_log_is_header(line)) {
-        report.format_version = 2;
+    if (fgets(line, sizeof(line), fp) && message_log_header_version(line)) {
+        report.format_version = message_log_header_version(line);
         line_no++;
     } else {
         rewind(fp);
     }
 
-    /* Recovered output is always v2, so it says so. */
+    /* Recovered output is always current, so it says so. */
     if (recover && fputs(MESSAGE_LOG_HEADER "\n", stdout) < 0) {
         fclose(fp);
         fprintf(stderr, "log: failed to write recovered output\n");
@@ -91,11 +91,12 @@ static int scan_log(const char *path, bool recover) {
 
         if (line_len >= sizeof(line) - 1 && line[line_len - 1] != '\n') {
             discard_line_remainder(fp);
-        } else if (report.format_version == 1) {
-            /* Escape before parsing, or a v1 `C:\new` is read as a newline and
-             * the recovered file would mean something the original did not. */
-            valid = message_log_upgrade_record(line, upgraded,
-                                               sizeof(upgraded)) &&
+        } else if (report.format_version < MESSAGE_LOG_VERSION) {
+            /* Upgrade before parsing, or a v1 `C:\new` is read as a newline
+             * and the recovered file would mean something the original did
+             * not. */
+            valid = message_log_upgrade_record(line, report.format_version,
+                                               upgraded, sizeof(upgraded)) &&
                     message_log_parse_record(upgraded, &parsed, now);
         } else {
             valid = message_log_parse_record(line, &parsed, now);

@@ -13,6 +13,15 @@ int history_view_height(int terminal_height, int input_rows);
  * messages fall off the bottom of a full screen. */
 void history_view_message_time(const message_t *msg, char out[16]);
 int history_view_message_prefix_width(const message_t *msg);
+
+/* A verified sender carries a check mark after its name.  For a verified
+ * action the actor's name moves into the prefix with the mark, so this is
+ * the length of that name in the content, or 0 when nothing moves. */
+#define HISTORY_VIEW_VERIFIED_MARK "✓"
+size_t history_view_action_actor_len(const message_t *msg);
+
+/* The part of the content that wraps after the prefix. */
+const char *history_view_message_body(const message_t *msg);
 int history_view_message_content_width(const message_t *msg, int width);
 
 /* Display rows one message occupies at the given render width.  Always at

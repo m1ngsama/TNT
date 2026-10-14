@@ -39,18 +39,19 @@ void message_log_format_timestamp_utc(time_t ts, char *buffer,
     strftime(buffer, buf_size, "%Y-%m-%dT%H:%M:%SZ", &tm_info);
 }
 
-bool message_log_is_header(const char *line) {
-    size_t len;
+int message_log_header_version(const char *line) {
+    static const char prefix[] = "#tnt-message-log v";
+    size_t len = sizeof(prefix) - 1;
 
-    if (!line) {
-        return false;
-    }
-    len = strlen(MESSAGE_LOG_HEADER);
-    if (strncmp(line, MESSAGE_LOG_HEADER, len) != 0) {
-        return false;
+    if (!line || strncmp(line, prefix, len) != 0 ||
+        (line[len] != '2' && line[len] != '3')) {
+        return 0;
     }
     /* Accept the line with or without its terminator. */
-    return line[len] == '\0' || line[len] == '\n';
+    if (line[len + 1] != '\0' && line[len + 1] != '\n') {
+        return 0;
+    }
+    return line[len] - '0';
 }
 
 bool message_log_encode_content(const char *in, char *out, size_t out_size) {
@@ -150,7 +151,8 @@ bool message_log_content_has_forbidden_control(const char *s) {
     return utf8_contains_control(stripped);
 }
 
-bool message_log_upgrade_record(const char *line, char *out, size_t out_size) {
+bool message_log_upgrade_record(const char *line, int from_version, char *out,
+                                size_t out_size) {
     const char *first_sep;
     const char *second_sep;
     const char *content_start;
@@ -159,7 +161,8 @@ bool message_log_upgrade_record(const char *line, char *out, size_t out_size) {
     size_t content_len;
     int written;
 
-    if (!line || !out || out_size == 0) {
+    if (!line || !out || out_size == 0 || from_version < 1 ||
+        from_version >= MESSAGE_LOG_VERSION) {
         return false;
     }
 
@@ -182,13 +185,17 @@ bool message_log_upgrade_record(const char *line, char *out, size_t out_size) {
     memcpy(content, content_start, content_len);
     content[content_len] = '\0';
 
-    if (!message_log_encode_content(content, encoded, sizeof(encoded))) {
-        return false;
+    if (from_version == 1) {
+        if (!message_log_encode_content(content, encoded, sizeof(encoded))) {
+            return false;
+        }
+    } else {
+        memcpy(encoded, content, content_len + 1);
     }
 
     /* The original terminator is copied rather than rebuilt, so an
      * unterminated last line stays unterminated and still fails to parse. */
-    written = snprintf(out, out_size, "%.*s%s%s",
+    written = snprintf(out, out_size, "%.*s%s|%s",
                        (int)(content_start - line), line, encoded,
                        content_start + content_len);
     return written >= 0 && (size_t)written < out_size;
@@ -263,14 +270,10 @@ int message_log_migrate(const char *path) {
     FILE *in;
     FILE *out;
     bool at_record_start = true;
+    int version;
     int rc = 0;
 
     if (!path || path[0] == '\0') {
-        return -1;
-    }
-    if ((size_t)snprintf(backup, sizeof(backup), "%s.v1.bak", path) >=
-            sizeof(backup) ||
-        (size_t)snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= sizeof(tmp)) {
         return -1;
     }
 
@@ -278,13 +281,24 @@ int message_log_migrate(const char *path) {
     if (!in) {
         return errno == ENOENT ? 0 : -1;
     }
-    if (!fgets(line, sizeof(line), in) || message_log_is_header(line)) {
-        /* Empty, or already v2.  message_save writes the header when it
-         * creates the file, so a fresh install never migrates. */
+    if (!fgets(line, sizeof(line), in) ||
+        (version = message_log_header_version(line)) == MESSAGE_LOG_VERSION) {
+        /* Empty, or already current.  message_save writes the header when
+         * it creates the file, so a fresh install never migrates. */
         fclose(in);
         return 0;
     }
-    rewind(in);
+    if (version == 0) {
+        /* No marker: the first line is a v1 record. */
+        version = 1;
+        rewind(in);
+    }
+    if ((size_t)snprintf(backup, sizeof(backup), "%s.v%d.bak", path,
+                         version) >= sizeof(backup) ||
+        (size_t)snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= sizeof(tmp)) {
+        fclose(in);
+        return -1;
+    }
 
     if (copy_file(path, backup) < 0) {
         fclose(in);
@@ -308,7 +322,7 @@ int message_log_migrate(const char *path) {
         const char *emit = line;
 
         if (at_record_start && complete) {
-            if (!message_log_upgrade_record(line, migrated,
+            if (!message_log_upgrade_record(line, version, migrated,
                                             sizeof(migrated))) {
                 at_record_start = true;
                 continue;
@@ -345,9 +359,11 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     char line_copy[MESSAGE_LOG_MAX_LINE];
     char *first_sep;
     char *second_sep;
+    char *third_sep;
     char *timestamp_str;
     char *username;
     char *content;
+    char *flags;
     time_t msg_time;
     size_t line_len;
     char decoded[MAX_MESSAGE_LEN];
@@ -372,15 +388,26 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
         return false;
     }
     second_sep = strchr(first_sep + 1, '|');
-    if (!second_sep || strchr(second_sep + 1, '|')) {
+    third_sep = second_sep ? strchr(second_sep + 1, '|') : NULL;
+    if (!third_sep || strchr(third_sep + 1, '|')) {
         return false;
     }
 
     *first_sep = '\0';
     *second_sep = '\0';
+    *third_sep = '\0';
     timestamp_str = line_copy;
     username = first_sep + 1;
     content = second_sep + 1;
+    flags = third_sep + 1;
+
+    /* Flags are single lowercase letters; ones this version does not know
+     * are ignored, so a later flag does not invalidate the record. */
+    for (const char *f = flags; *f; f++) {
+        if (*f < 'a' || *f > 'z') {
+            return false;
+        }
+    }
 
     if (timestamp_str[0] == '\0' || username[0] == '\0' ||
         content[0] == '\0') {
@@ -415,13 +442,15 @@ bool message_log_parse_record(const char *line, message_t *out, time_t now) {
     out->timestamp = msg_time;
     snprintf(out->username, sizeof(out->username), "%s", username);
     snprintf(out->content, sizeof(out->content), "%s", decoded);
+    out->verified = strchr(flags, MESSAGE_LOG_FLAG_VERIFIED) != NULL;
     out->display_time[0] = '\0';
     out->display_date[0] = '\0';
     return true;
 }
 
-int message_log_format_record(const message_t *msg, char *buffer,
-                              size_t buf_size, size_t *record_len) {
+int message_log_format_record(const message_t *msg, bool with_flags,
+                              char *buffer, size_t buf_size,
+                              size_t *record_len) {
     char timestamp[64];
     int needed;
 
@@ -442,8 +471,14 @@ int message_log_format_record(const message_t *msg, char *buffer,
 
     message_log_format_timestamp_utc(msg->timestamp, timestamp,
                                      sizeof(timestamp));
-    needed = snprintf(buffer, buf_size, "%s|%s|%s\n", timestamp,
-                      msg->username, encoded);
+    if (with_flags) {
+        needed = snprintf(buffer, buf_size, "%s|%s|%s|%s\n", timestamp,
+                          msg->username, encoded,
+                          msg->verified ? "v" : "");
+    } else {
+        needed = snprintf(buffer, buf_size, "%s|%s|%s\n", timestamp,
+                          msg->username, encoded);
+    }
     if (needed < 0) {
         return -1;
     }

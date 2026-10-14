@@ -125,12 +125,46 @@ fi
 
 UPGRADED="$STATE_DIR/upgraded.log"
 "$BIN" --log-recover "$V1_LOG" > "$UPGRADED" 2>/dev/null
-if head -n 1 "$UPGRADED" | grep -qx '#tnt-message-log v2' &&
-   grep -qF 'C:\\new' "$UPGRADED"; then
+if head -n 1 "$UPGRADED" | grep -qx '#tnt-message-log v3' &&
+   grep -qxF "$TS|alice|C:\\\\new|" "$UPGRADED"; then
     pass "recover writes the header and escapes a v1 backslash"
 else
     fail "v1 recovery"
     cat "$UPGRADED" 2>/dev/null
+fi
+
+UPGRADED_V2="$STATE_DIR/upgraded-v2.log"
+"$BIN" --log-recover "$V2_LOG" > "$UPGRADED_V2" 2>/dev/null
+if head -n 1 "$UPGRADED_V2" | grep -qx '#tnt-message-log v3' &&
+   grep -qxF "$TS|alice|one|" "$UPGRADED_V2" &&
+   grep -qxF "$TS|bob|C:\\\\new|" "$UPGRADED_V2"; then
+    pass "recover gives v2 records an empty flags field"
+else
+    fail "v2 recovery"
+    cat "$UPGRADED_V2" 2>/dev/null
+fi
+
+V3_LOG="$STATE_DIR/v3.log"
+printf '#tnt-message-log v3\n' > "$V3_LOG"
+printf '%s|alice|signed|v\n' "$TS" >> "$V3_LOG"
+printf '%s|bob|later flag|vq\n' "$TS" >> "$V3_LOG"
+printf '%s|carol|plain|\n' "$TS" >> "$V3_LOG"
+printf '%s|dave|no flags field\n' "$TS" >> "$V3_LOG"
+printf '%s|erin|bad flag|V\n' "$TS" >> "$V3_LOG"
+
+V3_RECOVERED="$STATE_DIR/v3-recovered.log"
+V3_REPORT="$STATE_DIR/v3.report"
+"$BIN" --log-recover "$V3_LOG" > "$V3_RECOVERED" 2> "$V3_REPORT"
+if grep -q '^format_version 3$' "$V3_REPORT" &&
+   grep -q '^valid_records 3$' "$V3_REPORT" &&
+   grep -q '^first_invalid_line 5$' "$V3_REPORT" &&
+   grep -qxF "$TS|alice|signed|v" "$V3_RECOVERED" &&
+   grep -qxF "$TS|bob|later flag|v" "$V3_RECOVERED" &&
+   grep -qxF "$TS|carol|plain|" "$V3_RECOVERED"; then
+    pass "v3 flags are checked, kept when known, and dropped when not"
+else
+    fail "v3 recovery"
+    cat "$V3_RECOVERED" "$V3_REPORT" 2>/dev/null
 fi
 
 MISSING_OUTPUT=$("$BIN" --log-check "$STATE_DIR/missing.log" 2>&1)

@@ -67,7 +67,7 @@ else
     cat "$LOG" 2>/dev/null
 fi
 
-if [ "$(head -n 1 "$LOG")" = "#tnt-message-log v2" ]; then
+if [ "$(head -n 1 "$LOG")" = "#tnt-message-log v3" ]; then
     pass "a fresh log is v2"
 else
     fail "header missing"

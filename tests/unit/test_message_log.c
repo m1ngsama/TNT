@@ -91,7 +91,7 @@ TEST(record_round_trip_carries_a_newline) {
     snprintf(msg.username, sizeof(msg.username), "alice");
     snprintf(msg.content, sizeof(msg.content), "first\nsecond");
 
-    assert(message_log_format_record(&msg, line, sizeof(line), NULL) == 0);
+    assert(message_log_format_record(&msg, true, line, sizeof(line), NULL) == 0);
     assert(strstr(line, "first\\nsecond") != NULL);          /* stored escaped */
     assert(strchr(line, '\n') == line + strlen(line) - 1);   /* still one line */
 
@@ -107,13 +107,13 @@ TEST(record_still_rejects_other_control_characters) {
     snprintf(msg.username, sizeof(msg.username), "alice");
 
     snprintf(msg.content, sizeof(msg.content), "esc\033[2Jhere");
-    assert(message_log_format_record(&msg, line, sizeof(line), NULL) < 0);
+    assert(message_log_format_record(&msg, true, line, sizeof(line), NULL) < 0);
 
     snprintf(msg.content, sizeof(msg.content), "del\177here");
-    assert(message_log_format_record(&msg, line, sizeof(line), NULL) < 0);
+    assert(message_log_format_record(&msg, true, line, sizeof(line), NULL) < 0);
 
     snprintf(msg.content, sizeof(msg.content), "tab\there");
-    assert(message_log_format_record(&msg, line, sizeof(line), NULL) < 0);
+    assert(message_log_format_record(&msg, true, line, sizeof(line), NULL) < 0);
 }
 
 TEST(username_still_rejects_newline) {
@@ -123,16 +123,136 @@ TEST(username_still_rejects_newline) {
     msg.timestamp = 1704067200;
     snprintf(msg.username, sizeof(msg.username), "a\nb");
     snprintf(msg.content, sizeof(msg.content), "hi");
-    assert(message_log_format_record(&msg, line, sizeof(line), NULL) < 0);
+    assert(message_log_format_record(&msg, true, line, sizeof(line), NULL) < 0);
 }
 
 TEST(header_is_recognised_and_is_not_a_record) {
     message_t out = {0};
 
-    assert(message_log_is_header(MESSAGE_LOG_HEADER "\n"));
-    assert(!message_log_is_header("2024-01-01T00:00:00Z|a|b\n"));
+    assert(message_log_header_version(MESSAGE_LOG_HEADER "\n") == 3);
+    assert(message_log_header_version("#tnt-message-log v2\n") == 2);
+    assert(message_log_header_version("#tnt-message-log v2") == 2);
+    assert(message_log_header_version("#tnt-message-log v4\n") == 0);
+    assert(message_log_header_version("#tnt-message-log v22\n") == 0);
+    assert(message_log_header_version("2024-01-01T00:00:00Z|a|b|\n") == 0);
     assert(!message_log_parse_record(MESSAGE_LOG_HEADER "\n", &out,
                                      time(NULL)));
+}
+
+TEST(records_carry_the_verified_flag) {
+    message_t msg = {0};
+    message_t back = {0};
+    char line[MESSAGE_LOG_MAX_LINE];
+
+    msg.timestamp = 1704067200;
+    snprintf(msg.username, sizeof(msg.username), "alice");
+    snprintf(msg.content, sizeof(msg.content), "hi");
+
+    assert(message_log_format_record(&msg, true, line, sizeof(line), NULL) ==
+           0);
+    assert(strcmp(line, "2024-01-01T00:00:00Z|alice|hi|\n") == 0);
+    assert(message_log_parse_record(line, &back, msg.timestamp));
+    assert(!back.verified);
+
+    msg.verified = true;
+    assert(message_log_format_record(&msg, true, line, sizeof(line), NULL) ==
+           0);
+    assert(strcmp(line, "2024-01-01T00:00:00Z|alice|hi|v\n") == 0);
+    assert(message_log_parse_record(line, &back, msg.timestamp));
+    assert(back.verified);
+
+    /* Exec dump keeps the three-field form. */
+    assert(message_log_format_record(&msg, false, line, sizeof(line), NULL) ==
+           0);
+    assert(strcmp(line, "2024-01-01T00:00:00Z|alice|hi\n") == 0);
+}
+
+TEST(parser_ignores_unknown_flags_and_rejects_bad_ones) {
+    message_t out = {0};
+    time_t now = 1704067200;
+
+    assert(message_log_parse_record("2024-01-01T00:00:00Z|a|b|xvz\n", &out,
+                                    now));
+    assert(out.verified);
+    assert(message_log_parse_record("2024-01-01T00:00:00Z|a|b|xz\n", &out,
+                                    now));
+    assert(!out.verified);
+    assert(!message_log_parse_record("2024-01-01T00:00:00Z|a|b|V\n", &out,
+                                     now));
+    assert(!message_log_parse_record("2024-01-01T00:00:00Z|a|b|v \n", &out,
+                                     now));
+    assert(!message_log_parse_record("2024-01-01T00:00:00Z|a|b\n", &out,
+                                     now));
+    assert(!message_log_parse_record("2024-01-01T00:00:00Z|a|b|v|\n", &out,
+                                     now));
+    assert(!message_log_parse_record("2024-01-01T00:00:00Z|a||v\n", &out,
+                                     now));
+}
+
+TEST(upgrade_adds_an_empty_flags_field) {
+    char out[MESSAGE_LOG_MAX_LINE];
+
+    assert(message_log_upgrade_record("2024-01-01T00:00:00Z|a|C:\\new\n", 2,
+                                      out, sizeof(out)));
+    assert(strcmp(out, "2024-01-01T00:00:00Z|a|C:\\new|\n") == 0);
+    assert(message_log_upgrade_record("2024-01-01T00:00:00Z|a|C:\\new\n", 1,
+                                      out, sizeof(out)));
+    assert(strcmp(out, "2024-01-01T00:00:00Z|a|C:\\\\new|\n") == 0);
+    assert(message_log_upgrade_record("2024-01-01T00:00:00Z|a|b\r\n", 2, out,
+                                      sizeof(out)));
+    assert(strcmp(out, "2024-01-01T00:00:00Z|a|b|\r\n") == 0);
+    /* An unterminated last line stays unterminated. */
+    assert(message_log_upgrade_record("2024-01-01T00:00:00Z|a|b", 2, out,
+                                      sizeof(out)));
+    assert(strcmp(out, "2024-01-01T00:00:00Z|a|b|") == 0);
+    assert(message_log_upgrade_record("not a record\n", 2, out, sizeof(out)));
+    assert(strcmp(out, "not a record\n") == 0);
+    assert(!message_log_upgrade_record("x|y|z\n", 3, out, sizeof(out)));
+}
+
+TEST(migration_from_v2_adds_flags_and_is_idempotent) {
+    char dir[] = "/tmp/tnt-migrate-XXXXXX";
+    char path[512];
+    char backup[512];
+    char seed[512];
+    char first[512];
+    char second[512];
+    char saved[512];
+    char record[128];
+    message_t out = {0};
+    const char *start;
+
+    assert(mkdtemp(dir) != NULL);
+    snprintf(path, sizeof(path), "%s/messages.log", dir);
+    snprintf(backup, sizeof(backup), "%s/messages.log.v2.bak", dir);
+
+    snprintf(seed, sizeof(seed), "#tnt-message-log v2\n"
+             "2024-01-01T00:00:00Z|alice|C:\\\\new\n"
+             "2024-01-01T00:00:01Z|bob|plain\n");
+    write_file(path, seed);
+
+    assert(message_log_migrate(path) == 0);
+    read_file(path, first, sizeof(first));
+    assert(strcmp(first, MESSAGE_LOG_HEADER "\n"
+                         "2024-01-01T00:00:00Z|alice|C:\\\\new|\n"
+                         "2024-01-01T00:00:01Z|bob|plain|\n") == 0);
+    read_file(backup, saved, sizeof(saved));
+    assert(strcmp(saved, seed) == 0);
+
+    start = strchr(first, '\n') + 1;
+    snprintf(record, sizeof(record), "%.*s",
+             (int)(strchr(start, '\n') - start + 1), start);
+    assert(message_log_parse_record(record, &out, 1704067200));
+    assert(strcmp(out.content, "C:\\new") == 0);
+    assert(!out.verified);
+
+    assert(message_log_migrate(path) == 0);
+    read_file(path, second, sizeof(second));
+    assert(strcmp(first, second) == 0);
+
+    unlink(path);
+    unlink(backup);
+    rmdir(dir);
 }
 
 TEST(a_v1_record_with_a_backslash_survives_migration) {
@@ -172,8 +292,8 @@ TEST(migration_escapes_backslashes_and_is_idempotent) {
     assert(message_log_migrate(path) == 0);
     read_file(path, first, sizeof(first));
     assert(strncmp(first, MESSAGE_LOG_HEADER, strlen(MESSAGE_LOG_HEADER)) == 0);
-    assert(strstr(first, "|alice|C:\\\\new\n") != NULL);
-    assert(strstr(first, "|bob|plain\n") != NULL);
+    assert(strstr(first, "|alice|C:\\\\new|\n") != NULL);
+    assert(strstr(first, "|bob|plain|\n") != NULL);
     assert(file_exists(backup));
 
     /* A second run must not escape the escape. */
@@ -191,7 +311,7 @@ TEST(migration_preserves_what_a_record_means) {
     message_t out = {0};
     char line[MESSAGE_LOG_MAX_LINE];
 
-    snprintf(line, sizeof(line), "2024-01-01T00:00:00Z|alice|C:\\\\new\n");
+    snprintf(line, sizeof(line), "2024-01-01T00:00:00Z|alice|C:\\\\new|\n");
     assert(message_log_parse_record(line, &out, 1704067200));
     assert(strcmp(out.content, "C:\\new") == 0);
 }
@@ -229,7 +349,7 @@ TEST(migration_keeps_a_line_it_cannot_represent_out_of_the_log) {
     assert(message_log_migrate(path) == 0);
     read_file(path, migrated, sizeof(migrated));
     assert(strstr(migrated, "|alice|") == NULL);
-    assert(strstr(migrated, "|bob|kept\n") != NULL);
+    assert(strstr(migrated, "|bob|kept|\n") != NULL);
     assert(file_exists(backup));
 
     unlink(path);
@@ -247,6 +367,10 @@ int main(void) {
     RUN_TEST(record_still_rejects_other_control_characters);
     RUN_TEST(username_still_rejects_newline);
     RUN_TEST(header_is_recognised_and_is_not_a_record);
+    RUN_TEST(records_carry_the_verified_flag);
+    RUN_TEST(parser_ignores_unknown_flags_and_rejects_bad_ones);
+    RUN_TEST(upgrade_adds_an_empty_flags_field);
+    RUN_TEST(migration_from_v2_adds_flags_and_is_idempotent);
     RUN_TEST(a_v1_record_with_a_backslash_survives_migration);
     RUN_TEST(encoded_length_counts_the_escapes);
     RUN_TEST(migration_escapes_backslashes_and_is_idempotent);

@@ -84,8 +84,8 @@ void buffer_appendf(char *buffer, size_t buf_size, size_t *pos,
  * non-numeric, or out of range. */
 int env_int(const char *name, int fallback, int min_val, int max_val);
 
-/* Reject usernames containing shell metacharacters, control characters, or
- * a leading space/dot/dash.  Used by username read, exec post (SSH login as
+/* Reject usernames containing shell metacharacters, control characters, a
+ * check mark (the verified sign), or a leading space/dot/dash.  Used by username read, exec post (SSH login as
  * author), and the :nick command. */
 bool is_valid_username(const char *username);
 

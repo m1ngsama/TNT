@@ -92,7 +92,7 @@ EOF
 
 if expect "$EXPECT_SCRIPT" >"$STATE_DIR/expect.log" 2>&1; then
     if grep -qF 'tester|line1\nline2\nline3' "$STATE_DIR/messages.log" &&
-       ! grep -q 'tester|line1$' "$STATE_DIR/messages.log"; then
+       ! grep -q 'tester|line1|$' "$STATE_DIR/messages.log"; then
         echo "✓ bracketed paste becomes one message keeping its line breaks"
         PASS=$((PASS + 1))
     else
@@ -134,7 +134,7 @@ expect eof
 EOF
 
 if expect "$CONTROL_SCRIPT" >"$STATE_DIR/control-input.log" 2>&1 &&
-   grep -q '|c1user|safetail$' "$STATE_DIR/messages.log"; then
+   grep -q '|c1user|safetail|$' "$STATE_DIR/messages.log"; then
     echo "✓ C1 terminal controls are dropped from username and paste"
     PASS=$((PASS + 1))
 else
@@ -168,6 +168,7 @@ if expect "$LONG_SCRIPT" >"$STATE_DIR/long-paste.log" 2>&1; then
     long_line=$(grep 'longer|' "$STATE_DIR/messages.log" | tail -1)
     content=${long_line#*|}
     content=${content#*|}
+    content=${content%|*}
     content_len=$(printf '%s' "$content" | wc -c | tr -d ' ')
     if [ "$content_len" -eq 1023 ]; then
         echo "✓ overlong paste is capped at message limit"
@@ -212,6 +213,7 @@ if expect "$ACTION_SCRIPT" >"$STATE_DIR/action-boundary.log" 2>&1; then
     action_line=$(grep 'actor action-fit-' "$STATE_DIR/messages.log" | tail -1)
     action_content=${action_line#*|}
     action_content=${action_content#*|}
+    action_content=${action_content%|*}
     action_len=$(printf '%s' "$action_content" | wc -c | tr -d ' ')
     case "$action_content" in
         *中) action_utf8=0 ;;
@@ -219,7 +221,7 @@ if expect "$ACTION_SCRIPT" >"$STATE_DIR/action-boundary.log" 2>&1; then
     esac
     if [ "$action_len" -eq 1023 ] && [ "$action_utf8" -eq 0 ] &&
        ! grep -q 'action-reject-' "$STATE_DIR/messages.log" &&
-       grep -q '|actor|after-action$' "$STATE_DIR/messages.log"; then
+       grep -q '|actor|after-action|$' "$STATE_DIR/messages.log"; then
         echo "✓ /me accepts exact fit and rejects expansion overflow"
         PASS=$((PASS + 1))
     else
@@ -608,7 +610,7 @@ fi
 scroll_ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 scroll_i=1
 while [ "$scroll_i" -le 30 ]; do
-    printf '%s|fixture|scroll fixture %02d\n' "$scroll_ts" "$scroll_i" >>"$STATE_DIR/messages.log"
+    printf '%s|fixture|scroll fixture %02d|\n' "$scroll_ts" "$scroll_i" >>"$STATE_DIR/messages.log"
     scroll_i=$((scroll_i + 1))
 done
 

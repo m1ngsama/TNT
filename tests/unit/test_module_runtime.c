@@ -53,6 +53,11 @@ bool input_identity_notice(const char *session, const char *plain_text) {
     return false;
 }
 
+int input_identity_reserve(const char *handle) {
+    (void)handle;
+    return 0;
+}
+
 bool input_identity_verified(const char *session, const char *handle) {
     (void)session;
     (void)handle;
@@ -590,7 +595,7 @@ TEST(presence_saturation_logs_outside_the_notifier) {
     assert(tnt_module_runtime_init() == 0);
     assert(dup2(log_fd, STDERR_FILENO) >= 0);
 
-    tnt_module_runtime_publish_message_created(&msg, false);
+    tnt_module_runtime_publish_message_created(&msg);
     sleep_millis(200);
     for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
         snprintf(nickname, sizeof(nickname), "user%d", i);

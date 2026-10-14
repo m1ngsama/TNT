@@ -34,6 +34,8 @@ TEST(every_theme_has_complete_slots) {
         assert(t->accent_bold && t->accent_bold[0] != '\0');
         assert(t->accent_dim && t->accent_dim[0] != '\0');
         assert(t->accent_italic && t->accent_italic[0] != '\0');
+        assert(t->verified && strcmp(t->verified, t->accent) != 0 &&
+               strcmp(t->verified, t->accent_bold) != 0);
     }
 }
 

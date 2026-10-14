@@ -153,6 +153,14 @@ bool is_valid_username(const char *username) {
         return false;
     }
 
+    /* The chat view marks verified senders with a check mark. */
+    static const char *const check_marks[] = {"✓", "✔", "☑", "✅"};
+    for (size_t i = 0; i < sizeof(check_marks) / sizeof(check_marks[0]); i++) {
+        if (strstr(username, check_marks[i])) {
+            return false;
+        }
+    }
+
     /* Check for illegal characters that could cause injection */
     const char *illegal_chars = "|;&$`\n\r<>(){}[]'\"\\";
     length = strlen(username);
