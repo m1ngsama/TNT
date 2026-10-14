@@ -272,6 +272,113 @@ TEST(presence_snapshot_reports_overflow) {
                                                names, 2) < 0);
 }
 
+TEST(appends_private_created_jsonl) {
+    char out[512] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_private_created(out, sizeof(out), &pos, "bob",
+                                             "alice", "hi \"there\"\nok", 0,
+                                             true) == 0);
+    assert(strcmp(out,
+                  "{\"type\":\"private.created\",\"from\":\"bob\","
+                  "\"to\":\"alice\",\"plain_text\":\"hi \\\"there\\\"\\nok\","
+                  "\"timestamp\":\"1970-01-01T00:00:00Z\","
+                  "\"verified\":true}\n") == 0);
+
+    out[0] = '\0';
+    pos = 0;
+    assert(tnt_module_append_private_created(out, sizeof(out), &pos, "bob",
+                                             "alice", "x", 0, false) == 0);
+    assert(strstr(out, ",\"verified\":false}\n") != NULL);
+
+    pos = 0;
+    assert(tnt_module_append_private_created(out, 16, &pos, "bob", "alice",
+                                             "x", 0, false) < 0);
+}
+
+TEST(parse_presence_remote_accepts_names) {
+    static tnt_module_presence_remote_t remote;
+
+    assert(tnt_module_parse_presence_remote(
+        "{\"type\":\"presence.remote\",\"nicknames\":[\"alice\",\"Bob\","
+        "\"bob\",\"\u5c0f\u660e\"]}", &remote));
+    assert(remote.count == 3);
+    assert(strcmp(remote.nicknames[0], "alice") == 0);
+    assert(strcmp(remote.nicknames[1], "Bob") == 0);
+    assert(strcmp(remote.nicknames[2], "\xe5\xb0\x8f\xe6\x98\x8e") == 0);
+
+    assert(tnt_module_parse_presence_remote(
+        "{\"type\":\"presence.remote\",\"nicknames\":[]}", &remote));
+    assert(remote.count == 0);
+}
+
+TEST(parse_presence_remote_takes_256_names) {
+    static tnt_module_presence_remote_t remote;
+    char line[4096];
+    size_t pos = 0;
+
+    buffer_appendf(line, sizeof(line), &pos,
+                   "{\"type\":\"presence.remote\",\"nicknames\":[");
+    for (int i = 0; i < TNT_MODULE_REMOTE_USERS_MAX; i++) {
+        buffer_appendf(line, sizeof(line), &pos, "%s\"%x\"", i ? "," : "", i);
+    }
+    buffer_appendf(line, sizeof(line), &pos, "]}");
+    assert(tnt_module_parse_presence_remote(line, &remote));
+    assert(remote.count == TNT_MODULE_REMOTE_USERS_MAX);
+
+    pos -= 2;
+    buffer_appendf(line, sizeof(line), &pos, ",\"zz\"]}");
+    assert(!tnt_module_parse_presence_remote(line, &remote));
+    assert(remote.count == 0);
+}
+
+TEST(parse_presence_remote_rejects_invalid) {
+    static const char *const lines[] = {
+        "{\"type\":\"presence.remote\"}",
+        "{\"type\":\"presence.remote\",\"nicknames\":\"alice\"}",
+        "{\"type\":\"presence.remote\",\"nicknames\":[\"alice\",1]}",
+        "{\"type\":\"presence.remote\",\"nicknames\":[\"\"]}",
+        "{\"type\":\"presence.remote\",\"nicknames\":[\"system\"]}",
+        "{\"type\":\"presence.remote\",\"nicknames\":[\"a:b\"]}",
+        "{\"type\":\"presence.remote\",\"nicknames\":[\"a|b\"]}",
+        "{\"type\":\"presence.remote\","
+        "\"nicknames\":[\"abcdefghijklmnopqrstu\"]}",
+        "{\"type\":\"presence.snapshot\",\"nicknames\":[\"alice\"]}",
+    };
+    static tnt_module_presence_remote_t remote;
+
+    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); i++) {
+        assert(!tnt_module_parse_presence_remote(lines[i], &remote));
+    }
+}
+
+TEST(parse_private_post) {
+    tnt_module_private_post_t post;
+
+    assert(tnt_module_parse_private_post(
+        "{\"type\":\"private.post\",\"from\":\"alice\",\"to\":\"Bob\","
+        "\"plain_text\":\"hi\\nthere\"}", &post));
+    assert(strcmp(post.from, "alice") == 0);
+    assert(strcmp(post.to, "Bob") == 0);
+    assert(strcmp(post.plain_text, "hi\nthere") == 0);
+
+    assert(!tnt_module_parse_private_post(
+        "{\"type\":\"private.post\",\"from\":\"system\",\"to\":\"bob\","
+        "\"plain_text\":\"hi\"}", &post));
+    assert(!tnt_module_parse_private_post(
+        "{\"type\":\"private.post\",\"from\":\"alice\","
+        "\"plain_text\":\"hi\"}", &post));
+    assert(!tnt_module_parse_private_post(
+        "{\"type\":\"private.post\",\"from\":\"alice\",\"to\":\"bob\","
+        "\"plain_text\":\"\"}", &post));
+    assert(!tnt_module_parse_private_post(
+        "{\"type\":\"private.post\",\"from\":\"alice\",\"to\":\"bob\","
+        "\"plain_text\":\"\\u001b[2J\"}", &post));
+    assert(!tnt_module_parse_private_post(
+        "{\"type\":\"message.post\",\"from\":\"alice\",\"to\":\"bob\","
+        "\"plain_text\":\"hi\"}", &post));
+}
+
 int main(void) {
     printf("Running module protocol unit tests...\n\n");
 
@@ -294,6 +401,11 @@ int main(void) {
     RUN_TEST(appends_presence_jsonl);
     RUN_TEST(appends_presence_snapshot_jsonl);
     RUN_TEST(presence_snapshot_reports_overflow);
+    RUN_TEST(appends_private_created_jsonl);
+    RUN_TEST(parse_presence_remote_accepts_names);
+    RUN_TEST(parse_presence_remote_takes_256_names);
+    RUN_TEST(parse_presence_remote_rejects_invalid);
+    RUN_TEST(parse_private_post);
 
     printf("\nAll %d module protocol tests passed.\n", tests_passed);
     return 0;

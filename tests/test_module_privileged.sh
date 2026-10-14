@@ -76,7 +76,7 @@ TNT_MODULE_PATHS="$POSTER_DIR:$ECHO_DIR"
 export TNT_MODULE_PATHS
 
 tnt_start_server "$PORT" "$STATE_DIR"
-if grep -q "poster requests message:post, presence:read or identity:write" "$STATE_DIR/server.log" &&
+if grep -q "poster requests message:post, presence:read, identity:write or message:private" "$STATE_DIR/server.log" &&
    ! grep -q "enabled poster" "$STATE_DIR/server.log"; then
     pass "an ungranted module requesting message:post is refused"
 else

@@ -18,6 +18,7 @@
 #include "input_buffer.h"
 #include "message.h"
 #include "message_log.h"
+#include "module_protocol.h"
 #include "module_runtime.h"
 #include "ratelimit.h"
 #include "system_message.h"
@@ -638,6 +639,40 @@ static size_t prefix_filter(const char **cands, size_t ncand,
     return count;
 }
 
+static char (*copy_remote_users(int *count))[MAX_USERNAME_LEN] {
+    char (*remote)[MAX_USERNAME_LEN] =
+        calloc(TNT_MODULE_REMOTE_USERS_MAX, sizeof(*remote));
+
+    *count = remote ? tnt_module_runtime_copy_remote_users(
+                          remote, TNT_MODULE_REMOTE_USERS_MAX)
+                    : 0;
+    return remote;
+}
+
+/* Remote users follow the SSH sessions, without a name an SSH session
+ * already offers. */
+static size_t append_remote_candidates(const char **cands,
+                                       char (*namebufs)[MAX_USERNAME_LEN],
+                                       size_t ncand, size_t max) {
+    int count;
+    char (*remote)[MAX_USERNAME_LEN] = copy_remote_users(&count);
+
+    for (int i = 0; i < count && ncand < max; i++) {
+        bool listed = false;
+
+        for (size_t j = 0; j < ncand && !listed; j++) {
+            listed = strcasecmp(cands[j], remote[i]) == 0;
+        }
+        if (!listed) {
+            snprintf(namebufs[ncand], MAX_USERNAME_LEN, "%s", remote[i]);
+            cands[ncand] = namebufs[ncand];
+            ncand++;
+        }
+    }
+    free(remote);
+    return ncand;
+}
+
 /* Tab completion for COMMAND mode.  Completes the command name when no
  * argument has been started, otherwise completes the first argument for the
  * handful of commands with a closed/known candidate set (theme, lang, and
@@ -709,6 +744,7 @@ static void command_tab_complete(client_t *client) {
             ncand++;
         }
         pthread_rwlock_unlock(&g_room->lock);
+        ncand = append_remote_candidates(cands, namebufs, ncand, 64);
     } else {
         return;
     }
@@ -1240,6 +1276,23 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                         }
                     }
                     pthread_rwlock_unlock(&g_room->lock);
+                    if (match[0] == '\0') {
+                        int count;
+                        char (*remote)[MAX_USERNAME_LEN] =
+                            copy_remote_users(&count);
+
+                        for (int i = 0; i < count; i++) {
+                            if (plen == 0
+                                    ? strcmp(remote[i], client->username) != 0
+                                    : strncasecmp(remote[i], prefix,
+                                                  plen) == 0) {
+                                snprintf(match, sizeof(match), "%s",
+                                         remote[i]);
+                                break;
+                            }
+                        }
+                        free(remote);
+                    }
                     if (match[0] != '\0') {
                         /* Replace "@<prefix>" with "@<match> " (trailing
                          * space so the next word starts cleanly). */

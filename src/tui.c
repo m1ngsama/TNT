@@ -9,6 +9,7 @@
 #include "editor.h"
 #include "i18n.h"
 #include "message_log.h"
+#include "module_runtime.h"
 #include "system_message.h"
 #include "theme.h"
 #include "tui_status.h"
@@ -281,7 +282,8 @@ void tui_render_screen(client_t *client) {
     buffer[0] = '\0';
 
     /* First pass: compute indices and counts. */
-    int online = room_get_client_count(g_room);
+    int online = room_get_client_count(g_room) +
+                 tnt_module_runtime_remote_user_count();
     int msg_count = room_get_message_count(g_room);
     int raw_msg_count = msg_count;
 
@@ -320,7 +322,8 @@ void tui_render_screen(client_t *client) {
 
             raw_msg_count = room_copy_messages(
                 g_room, 0, visible_messages, MAX_MESSAGES);
-            online = room_get_client_count(g_room);
+            online = room_get_client_count(g_room) +
+                     tnt_module_runtime_remote_user_count();
             for (int i = 0; i < raw_msg_count; i++) {
                 if (!system_message_is_join_leave(&visible_messages[i])) {
                     visible_messages[visible_count++] = visible_messages[i];

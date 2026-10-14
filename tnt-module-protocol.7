@@ -1,4 +1,4 @@
-.TH TNT-MODULE-PROTOCOL 7 "2026-10-14" "TNT 1.5.0"
+.TH TNT-MODULE-PROTOCOL 7 "2026-10-14" "TNT 1.6.0"
 .SH NAME
 tnt-module-protocol \- implement an external TNT message module
 .SH DESCRIPTION
@@ -10,7 +10,8 @@ The supported protocol identifier is
 Modules receive selected public message events and may create public
 plain-text messages.
 Modules the operator grants may also post as a chat user, observe
-presence, and sign sessions in.
+presence, sign sessions in, and carry private messages to and from users
+connected elsewhere.
 The core chat path continues when an individual module is invalid, slow,
 stopped, or saturated.
 .SH ACTIVATION
@@ -30,16 +31,19 @@ No command-line arguments are supplied.
 A module whose manifest requests
 .BR message:post ,
 .BR presence:read ,
+.BR identity:write ,
 or
-.B identity:write
+.B message:private
 is enabled only when its name appears in
 .BR TNT_MODULE_GRANTS ,
 a colon-separated list of module names.
 Otherwise TNT reports the refusal on standard error and skips the module.
 At most one enabled module holds
-.BR identity:write ;
-TNT skips every later module that requests it and says so on standard
-error.
+.BR identity:write ,
+and at most one holds
+.BR message:private ;
+TNT skips every later module that requests either one and says so on
+standard error.
 .SH MANIFEST
 The manifest is a JSON object of at most 4094 bytes.
 The following fields are required:
@@ -71,8 +75,9 @@ and
 It may also contain
 .BR message:post ,
 .BR presence:read ,
+.BR identity:write ,
 and
-.BR identity:write ;
+.BR message:private ;
 see
 .BR "GRANTED PERMISSIONS" .
 .TP
@@ -221,7 +226,15 @@ messages, and messages another module posts with
 .B message.post
 generate events.
 Private messages, room lifecycle notices, and module-created messages
-produce no events.
+produce no
+.B message.created
+events.
+A private message to a remote user reaches the module holding
+.B message:private
+as a
+.B private.created
+record; see
+.BR message:private .
 Module-created messages are not fed back into the module set, and a posted
 message is never sent back to the module that posted it.
 .SH RESPONSES
@@ -343,8 +356,12 @@ for the new one:
 Presence records are notifications and must not be answered.
 They open no response window.
 For a module holding any granted permission, any record other than a valid
-.B message.post
-or identity record that arrives while no
+.BR message.post ,
+identity,
+.BR presence.remote ,
+or
+.B private.post
+record that arrives while no
 .B message.created
 event is waiting is a protocol failure.
 Around startup a joined record can name a user the snapshot already listed,
@@ -432,6 +449,110 @@ without binding a key, for a member who signed in elsewhere.
 .P
 An identity record with a missing or invalid member, or an invalid handle,
 is a protocol failure like any other invalid response.
+.SS message:private
+The module holding
+.B message:private
+reports the users who are online through it, such as people using an app,
+and carries private messages between them and SSH users.
+TNT calls them remote users.
+.P
+The module may write these records at any time, as with
+.BR message.post :
+.TP
+.B presence.remote
+.EX
+{"type":"presence.remote","nicknames":["alice","bob"]}
+.EE
+.IP
+.B nicknames
+is the complete set of remote users and replaces the previous one; an
+empty array clears it.
+Each name must be a valid interactive nickname, as for the
+.B message.post
+sender.
+A record lists at most 256 names and must still fit the 4094-byte record
+limit.
+A name repeated without regard to ASCII letter case is kept once.
+.IP
+SSH users see remote users after the SSH sessions in
+.BR :users ,
+marked
+.BR app ,
+and in the online count of the status bar, which refreshes with the next
+screen update.
+Remote users complete like online users after
+.B :msg
+and
+.BR @ .
+TNT forgets every remote user when the module stops or is disabled.
+.TP
+.B private.post
+.EX
+{"type":"private.post","from":"alice","to":"bob",\c
+"plain_text":"hi"}
+.EE
+.IP
+Deliver a private message from
+.B from
+to every interactive session named
+.BR to ,
+matched without regard to ASCII letter case.
+Each session receives it as it would a private message from an SSH user:
+an unread inbox entry, a bell, and
+.B from
+as its
+.B :reply
+target.
+.B from
+and
+.B to
+must be valid interactive nicknames, and
+.B plain_text
+follows the
+.B message.create
+rules.
+Unless the module also holds
+.BR identity:write ,
+.B from
+must not be a reserved handle.
+TNT ignores a
+.B to
+that no session uses.
+.P
+When an SSH user sends a private message with
+.BR :msg ,
+.BR :w ,
+or
+.B :reply
+to a name that no SSH session uses but a remote user does, TNT sends the
+module one notification:
+.P
+.EX
+{"type":"private.created","from":"carol","to":"alice",\c
+"plain_text":"hi","timestamp":"2026-06-04T12:00:00Z","verified":false}
+.EE
+.P
+.B to
+is the remote user's name as the module reported it.
+.B verified
+is
+.B true
+when the sender is a signed-in session.
+Like presence records, this notification opens no response window and must
+not be answered.
+When an SSH session and a remote user share a name, the SSH session gets
+the message.
+When the module cannot take the notification, for example because its
+queue is full, the sender is told that the user was not found.
+.P
+An invalid
+.B presence.remote
+or
+.B private.post
+record is a protocol failure.
+Private messages are never logged and never produce
+.B message.created
+events.
 .SH FAILURE HANDLING
 A handshake failure skips the affected module.
 After activation, a write failure, write timeout, read failure, response
@@ -479,6 +600,11 @@ Maximum nicknames in one
 .B presence.snapshot
 record.
 .TP
+.B 256 nicknames
+Maximum nicknames in one
+.B presence.remote
+record.
+.TP
 .B 64 files
 Open file limit for a module process.
 A granted module may open 4096.
@@ -512,7 +638,11 @@ except a reserved handle.
 A module holding
 .B identity:write
 can post under, and sign any session in as, any handle.
-Grant either only to a module you trust as much as the server.
+A module holding
+.B message:private
+reads every private message SSH users send to remote users and can send
+private messages under any nickname that is not a reserved handle.
+Grant any of them only to a module you trust as much as the server.
 .P
 The child inherits most of the server environment.
 TNT removes

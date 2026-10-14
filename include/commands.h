@@ -28,6 +28,11 @@ int commands_rename(client_t *client, const char *new_name, bool verified);
 /* Rename to "anonymous", or "anonymousN" when that is taken. */
 void commands_become_anonymous(client_t *client);
 
+/* Deliver a private message from a remote user to every session named `to`,
+ * matched without regard to ASCII letter case. */
+void commands_deliver_private(const char *from, const char *to,
+                              const char *plain_text);
+
 /* Rebuild the currently visible command output when it is backed by live
  * client state, such as :inbox.  Returns true if output changed and the caller
  * should render it again. */

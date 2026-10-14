@@ -79,6 +79,45 @@ TEST(get_string_field_rejects_output_overflow) {
                                       "plain_text", value, sizeof(value)));
 }
 
+TEST(get_string_array_field_extracts_strings) {
+    char items[3][8];
+    size_t count = 99;
+
+    assert(tnt_json_get_string_array_field(
+        "{\"type\":\"x\",\"names\": [ \"a\" , \"b\\u00e9\" ]}", "names",
+        &items[0][0], sizeof(items[0]), 3, &count));
+    assert(count == 2);
+    assert(strcmp(items[0], "a") == 0);
+    assert(strcmp(items[1], "b\xc3\xa9") == 0);
+
+    assert(tnt_json_get_string_array_field("{\"names\":[]}", "names",
+                                           &items[0][0], sizeof(items[0]), 3,
+                                           &count));
+    assert(count == 0);
+}
+
+TEST(get_string_array_field_rejects_bad_arrays) {
+    static const char *const lines[] = {
+        "{\"names\":\"a\"}",
+        "{\"names\":[1]}",
+        "{\"names\":[\"a\",]}",
+        "{\"names\":[\"a\" \"b\"]}",
+        "{\"names\":[\"a\"",
+        "{\"names\":[\"a\",\"b\",\"c\",\"d\"]}",
+        "{\"names\":[\"abcdefgh\"]}",
+        "{\"other\":[\"a\"]}",
+    };
+    char items[3][8];
+    size_t count;
+
+    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); i++) {
+        assert(!tnt_json_get_string_array_field(lines[i], "names",
+                                                &items[0][0],
+                                                sizeof(items[0]), 3, &count));
+        assert(count == 0);
+    }
+}
+
 int main(void) {
     printf("Running JSON text unit tests...\n\n");
 
@@ -89,6 +128,8 @@ int main(void) {
     RUN_TEST(get_string_field_decodes_unicode_escape);
     RUN_TEST(get_string_field_rejects_missing_and_malformed_values);
     RUN_TEST(get_string_field_rejects_output_overflow);
+    RUN_TEST(get_string_array_field_extracts_strings);
+    RUN_TEST(get_string_array_field_rejects_bad_arrays);
 
     printf("\nAll %d JSON text tests passed.\n", tests_passed);
     return 0;

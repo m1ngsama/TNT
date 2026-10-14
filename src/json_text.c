@@ -287,16 +287,66 @@ static bool skip_json_value(const char **cursor) {
     return true;
 }
 
-bool tnt_json_get_string_field(const char *json, const char *key,
-                               char *out, size_t out_size) {
+typedef bool (*json_value_reader_fn)(const char **cursor, void *ctx);
+
+typedef struct {
+    char *out;
+    size_t size;
+} json_string_target_t;
+
+typedef struct {
+    char *items;
+    size_t item_size;
+    size_t max_items;
+    size_t count;
+} json_string_array_target_t;
+
+static bool read_string_value(const char **cursor, void *ctx) {
+    json_string_target_t *target = ctx;
+
+    return **cursor == '"' &&
+           parse_json_string(cursor, target->out, target->size);
+}
+
+static bool read_string_array_value(const char **cursor, void *ctx) {
+    json_string_array_target_t *target = ctx;
+    const char *p = *cursor;
+
+    target->count = 0;
+    if (*p != '[') {
+        return false;
+    }
+    p = skip_ws(p + 1);
+    if (*p == ']') {
+        *cursor = p + 1;
+        return true;
+    }
+    for (;;) {
+        if (target->count >= target->max_items || *p != '"' ||
+            !parse_json_string(&p,
+                               target->items +
+                                   target->count * target->item_size,
+                               target->item_size)) {
+            return false;
+        }
+        target->count++;
+        p = skip_ws(p);
+        if (*p == ']') {
+            *cursor = p + 1;
+            return true;
+        }
+        if (*p != ',') {
+            return false;
+        }
+        p = skip_ws(p + 1);
+    }
+}
+
+static bool read_top_level_field(const char *json, const char *key,
+                                 json_value_reader_fn read, void *ctx) {
     const char *p;
     bool found = false;
 
-    if (!json || !key || key[0] == '\0' || !out || out_size == 0) {
-        return false;
-    }
-
-    out[0] = '\0';
     p = skip_ws(json);
     if (*p != '{') {
         return false;
@@ -322,7 +372,7 @@ bool tnt_json_get_string_field(const char *json, const char *key,
         p = skip_ws(p + 1);
 
         if (strcmp(parsed_key, key) == 0) {
-            if (*p != '"' || !parse_json_string(&p, out, out_size)) {
+            if (!read(&p, ctx)) {
                 return false;
             }
             found = true;
@@ -340,4 +390,42 @@ bool tnt_json_get_string_field(const char *json, const char *key,
         }
         return false;
     }
+}
+
+bool tnt_json_get_string_field(const char *json, const char *key,
+                               char *out, size_t out_size) {
+    json_string_target_t target = {
+        .out = out,
+        .size = out_size,
+    };
+
+    if (!json || !key || key[0] == '\0' || !out || out_size == 0) {
+        return false;
+    }
+
+    out[0] = '\0';
+    return read_top_level_field(json, key, read_string_value, &target);
+}
+
+bool tnt_json_get_string_array_field(const char *json, const char *key,
+                                     char *items, size_t item_size,
+                                     size_t max_items, size_t *count) {
+    json_string_array_target_t target = {
+        .items = items,
+        .item_size = item_size,
+        .max_items = max_items,
+    };
+
+    if (count) {
+        *count = 0;
+    }
+    if (!json || !key || key[0] == '\0' || !items || item_size == 0 ||
+        !count) {
+        return false;
+    }
+    if (!read_top_level_field(json, key, read_string_array_value, &target)) {
+        return false;
+    }
+    *count = target.count;
+    return true;
 }

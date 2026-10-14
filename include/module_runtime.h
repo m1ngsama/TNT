@@ -18,6 +18,7 @@ typedef struct {
     bool can_post_messages;
     bool can_read_presence;
     bool can_write_identity;
+    bool can_message_private;
 } tnt_module_manifest_t;
 
 int tnt_module_manifest_load(const char *module_dir,
@@ -39,6 +40,18 @@ void tnt_module_runtime_publish_presence(const char *nickname, bool joined);
  * false when no such module can take the request. */
 bool tnt_module_runtime_request_identity(const char *session,
                                          const char *nickname);
+
+/* Copy up to `capacity` names of the users the message:private module reports
+ * as online elsewhere.  Returns the number copied. */
+int tnt_module_runtime_copy_remote_users(char (*out)[MAX_USERNAME_LEN],
+                                         int capacity);
+int tnt_module_runtime_remote_user_count(void);
+
+/* Hand a private message for a remote user to the message:private module.
+ * `to` matches remote names without regard to ASCII letter case.  Returns
+ * false when no remote user has that name or the module cannot take it. */
+bool tnt_module_runtime_send_private(const char *from, const char *to,
+                                     const char *plain_text, bool verified);
 
 #ifdef TNT_TESTING
 /* Pipe-level test seams for deterministic backpressure/deadline coverage. */

@@ -13,6 +13,10 @@
 #define TNT_MODULE_EVENT_PRESENCE_SNAPSHOT "presence.snapshot"
 #define TNT_MODULE_EVENT_IDENTITY_REQUESTED "identity.requested"
 #define TNT_MODULE_RECORD_IDENTITY_PREFIX "identity."
+#define TNT_MODULE_RECORD_PRESENCE_REMOTE "presence.remote"
+#define TNT_MODULE_RECORD_PRIVATE_POST "private.post"
+#define TNT_MODULE_EVENT_PRIVATE_CREATED "private.created"
+#define TNT_MODULE_REMOTE_USERS_MAX 256
 #define TNT_MODULE_SESSION_ID_SIZE 32
 
 typedef struct {
@@ -37,6 +41,17 @@ typedef struct {
     char plain_text[MAX_MESSAGE_LEN];
 } tnt_module_identity_record_t;
 
+typedef struct {
+    char nicknames[TNT_MODULE_REMOTE_USERS_MAX][MAX_USERNAME_LEN];
+    size_t count;
+} tnt_module_presence_remote_t;
+
+typedef struct {
+    char from[MAX_USERNAME_LEN];
+    char to[MAX_USERNAME_LEN];
+    char plain_text[MAX_MESSAGE_LEN];
+} tnt_module_private_post_t;
+
 int tnt_module_append_handshake(char *buffer, size_t buf_size, size_t *pos,
                                 const char *server_version);
 
@@ -57,6 +72,11 @@ int tnt_module_append_identity_requested(char *buffer, size_t buf_size,
                                          size_t *pos, const char *session,
                                          const char *nickname);
 
+int tnt_module_append_private_created(char *buffer, size_t buf_size,
+                                      size_t *pos, const char *from,
+                                      const char *to, const char *plain_text,
+                                      time_t timestamp, bool verified);
+
 bool tnt_module_parse_message_create(const char *line,
                                      tnt_module_message_create_t *out);
 
@@ -65,5 +85,12 @@ bool tnt_module_parse_message_post(const char *line,
 
 bool tnt_module_parse_identity_record(const char *line,
                                       tnt_module_identity_record_t *out);
+
+/* Names repeated without regard to ASCII letter case are kept once. */
+bool tnt_module_parse_presence_remote(const char *line,
+                                      tnt_module_presence_remote_t *out);
+
+bool tnt_module_parse_private_post(const char *line,
+                                   tnt_module_private_post_t *out);
 
 #endif /* MODULE_PROTOCOL_H */
