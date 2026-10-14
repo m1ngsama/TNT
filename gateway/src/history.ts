@@ -2,7 +2,7 @@ import { byteLength } from "./text";
 
 export const ROOM = "lobby";
 
-export type Entry = { timestamp: string; sender: string; text: string };
+export type Entry = { timestamp: string; sender: string; text: string; verified?: boolean };
 export type Kind = "text" | "action" | "system" | "module";
 export type Message = {
   id: string;
@@ -12,6 +12,7 @@ export type Message = {
   timestamp: string;
   kind: Kind;
   mentions: string[];
+  verified: boolean;
 };
 
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -148,6 +149,7 @@ export class Ledger {
       timestamp: entry.timestamp,
       kind: shown.kind,
       mentions: mentions(shown.text),
+      verified: entry.verified === true && (shown.kind === "text" || shown.kind === "action"),
     };
     this.#messages.push(message);
     this.#entries.push(entry);
@@ -169,3 +171,19 @@ export class Ledger {
     return { messages: this.#messages.slice(start, index), more: start > 0 };
   }
 }
+
+const HANDLE = /^[a-z0-9_]{1,20}$/;
+
+/** Handles TNT reserves for signed-in members, from the first word of each line of its identities file. */
+export async function readReserved(stateDir: string): Promise<Set<string>> {
+  const file = Bun.file(`${stateDir}/identities`);
+  if (!(await file.exists())) return new Set();
+  const handles = (await file.text()).split("\n").map((line) => line.split(" ")[0]!);
+  return new Set(handles.filter((handle) => HANDLE.test(handle)));
+}
+
+/** History predates the live metadata, so a past message counts as verified when its sender is reserved now. */
+export function markReserved(entry: Entry, reserved: Set<string>): Entry {
+  return { ...entry, verified: reserved.has(classify(entry).sender.toLowerCase()) };
+}
+

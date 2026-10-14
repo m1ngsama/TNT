@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Ledger, decodeContent, messageId, parseRecord, readHistory } from "../src/history";
+import { Ledger, decodeContent, markReserved, messageId, parseRecord, readHistory, readReserved } from "../src/history";
 
 const HELLO = { timestamp: "2026-09-22T10:00:00Z", sender: "alice", text: "hello" };
 const NOW = Date.parse("2026-09-22T12:00:00Z");
@@ -64,8 +64,8 @@ describe("Ledger", () => {
     expect(ledger.add(HELLO).id).toBe("aa2df149c78d997a");
     ledger.add({ ...HELLO, text: "later" });
     expect(ledger.recent()).toEqual([
-      { id: "aa2df149c78d997a", room: "lobby", sender: "alice", text: "hello", timestamp: "2026-09-22T10:00:00Z", kind: "text", mentions: [] },
-      { id: messageId({ ...HELLO, text: "later" }, 0), room: "lobby", sender: "alice", text: "later", timestamp: "2026-09-22T10:00:00Z", kind: "text", mentions: [] },
+      { id: "aa2df149c78d997a", room: "lobby", sender: "alice", text: "hello", timestamp: "2026-09-22T10:00:00Z", kind: "text", mentions: [], verified: false },
+      { id: messageId({ ...HELLO, text: "later" }, 0), room: "lobby", sender: "alice", text: "later", timestamp: "2026-09-22T10:00:00Z", kind: "text", mentions: [], verified: false },
     ]);
   });
 });
@@ -155,5 +155,23 @@ describe("readHistory whole files", () => {
     for (let i = 0; i < 3000; i++) lines.push(`2026-09-22T10:00:00Z|alice|message number ${i} with some padding to make the file large enough`);
     writeFileSync(join(dir, "messages.log"), lines.join("\n") + "\n");
     expect((await readHistory(dir, 5000, NOW)).length).toBe(3000);
+  });
+});
+
+describe("reservations", () => {
+  test("marks past messages from reserved handles, actions included", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tnt-reserved-"));
+    try {
+      writeFileSync(join(dir, "identities"), "lune SHA256:abc\nm1ngsama\nNot Valid\n");
+      const reserved = await readReserved(dir);
+      expect([...reserved]).toEqual(["lune", "m1ngsama"]);
+      const ledger = new Ledger(10);
+      expect(ledger.add(markReserved({ timestamp: "2026-09-22T10:00:00Z", sender: "Lune", text: "hi" }, reserved)).verified).toBe(true);
+      expect(ledger.add(markReserved({ timestamp: "2026-09-22T10:00:01Z", sender: "*", text: "m1ngsama waves" }, reserved)).verified).toBe(true);
+      expect(ledger.add(markReserved({ timestamp: "2026-09-22T10:00:02Z", sender: "carol", text: "hi" }, reserved)).verified).toBe(false);
+      expect(await readReserved(join(dir, "missing"))).toEqual(new Set());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

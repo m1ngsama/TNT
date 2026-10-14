@@ -1,7 +1,11 @@
 export type TntEvent =
-  | { type: "message.created"; message: { timestamp: string; sender: string; plain_text: string } }
+  | { type: "handshake"; version: string }
+  | { type: "message.created"; message: { timestamp: string; sender: string; plain_text: string; verified: boolean } }
+  | { type: "identity.requested"; session: string }
   | { type: "presence.snapshot"; nicknames: string[] }
   | { type: "presence.joined" | "presence.left"; nickname: string };
+
+export type RoomEvent = Exclude<TntEvent, { type: "handshake" | "identity.requested" }>;
 
 export const HANDSHAKE_OK = `${JSON.stringify({
   type: "handshake.ok",
@@ -16,6 +20,16 @@ export function encodePost(sender: string, text: string): string {
   return `${JSON.stringify({ type: "message.post", sender, plain_text: text })}\n`;
 }
 
+export function encodeRecord(record: Record<string, string>): string {
+  return `${JSON.stringify(record)}\n`;
+}
+
+/** Identity records arrived in TNT 1.5.0; older servers treat them as protocol failures. */
+export function supportsIdentity(version: string): boolean {
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  return major > 1 || (major === 1 && minor >= 5);
+}
+
 export function parseTntLine(line: string): { reply: string | null; event: TntEvent | null } {
   let record: Record<string, unknown>;
   try {
@@ -27,16 +41,21 @@ export function parseTntLine(line: string): { reply: string | null; event: TntEv
   }
 
   switch (record.type) {
-    case "handshake":
-      return { reply: HANDSHAKE_OK, event: null };
+    case "handshake": {
+      const version = (record.server as Record<string, unknown> | undefined)?.version;
+      return { reply: HANDSHAKE_OK, event: { type: "handshake", version: isString(version) ? version : "" } };
+    }
     case "message.created": {
-      const { timestamp, sender, plain_text } = (record.message ?? {}) as Record<string, unknown>;
+      const { timestamp, sender, plain_text, metadata } = (record.message ?? {}) as Record<string, unknown>;
       const valid = isString(timestamp) && isString(sender) && isString(plain_text);
+      const verified = (metadata as Record<string, unknown> | undefined)?.verified === true;
       return {
         reply: EVENT_OK,
-        event: valid ? { type: "message.created", message: { timestamp, sender, plain_text } } : null,
+        event: valid ? { type: "message.created", message: { timestamp, sender, plain_text, verified } } : null,
       };
     }
+    case "identity.requested":
+      return isString(record.session) ? { reply: null, event: { type: "identity.requested", session: record.session } } : NOTHING;
     case "presence.snapshot":
       return Array.isArray(record.nicknames)
         ? { reply: null, event: { type: "presence.snapshot", nicknames: record.nicknames.filter(isString) } }
