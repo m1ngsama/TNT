@@ -211,3 +211,89 @@ describe("history and typing", () => {
     await expect(alice.next((f) => f.type === "typing", 300)).rejects.toThrow();
   });
 });
+
+describe("private messages", () => {
+  let delivered: [string, string, string][];
+  let remote: string[][];
+  let direct: ReturnType<typeof createGateway>;
+  let directServer: ReturnType<typeof Bun.serve>;
+  let directUrl: string;
+
+  beforeEach(() => {
+    delivered = [];
+    remote = [];
+    direct = createGateway({
+      ledger: new Ledger(100),
+      verify: async (token) => (["alice", "bob"].includes(token) ? token : null),
+      post: () => {},
+      privatePost: (from, to, text) => {
+        delivered.push([from, to, text]);
+        return true;
+      },
+      remotePresence: (handles) => remote.push(handles),
+      now: () => new Date("2026-09-22T10:00:00.900Z"),
+    });
+    directServer = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: direct.fetch, websocket: direct.websocket });
+    directUrl = `ws://127.0.0.1:${directServer.port}/ws`;
+  });
+
+  afterEach(() => {
+    void directServer.stop(true);
+  });
+
+  test("tells TNT which app users are online", async () => {
+    const alice = connect(directUrl, "alice");
+    await alice.next((f) => f.type === "ready");
+    const bob = connect(directUrl, "bob");
+    await bob.next((f) => f.type === "ready");
+    bob.ws.close();
+    await bob.closed;
+    await alice.next((f) => f.type === "presence" && f.online.length === 1);
+    expect(remote).toEqual([["alice"], ["alice", "bob"], ["alice"]]);
+  });
+
+  test("delivers between app users and echoes to the sender", async () => {
+    const alice = connect(directUrl, "alice");
+    const bob = connect(directUrl, "bob");
+    await alice.next((f) => f.type === "ready");
+    await bob.next((f) => f.type === "ready");
+    alice.send({ type: "private", to: "bob", text: "psst", nonce: "n1" });
+    expect(await bob.next((f) => f.type === "private")).toMatchObject({ from: "alice", to: "bob", text: "psst", verified: true });
+    expect(await alice.next((f) => f.type === "private")).toMatchObject({ from: "alice", to: "bob", nonce: "n1" });
+    expect(delivered).toEqual([]);
+  });
+
+  test("hands messages for SSH users to TNT and refuses names nobody uses", async () => {
+    direct.handleEvent({ type: "presence.snapshot", nicknames: ["Carol"] });
+    const alice = connect(directUrl, "alice");
+    await alice.next((f) => f.type === "ready");
+    alice.send({ type: "private", to: "carol", text: "hi carol" });
+    expect(await alice.next((f) => f.type === "private")).toMatchObject({ to: "carol", text: "hi carol" });
+    expect(delivered).toEqual([["alice", "carol", "hi carol"]]);
+    alice.send({ type: "private", to: "nobody", text: "hello?" });
+    expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "not_online" });
+  });
+
+  test("passes TNT's private messages to the app user they name", async () => {
+    const bob = connect(directUrl, "bob");
+    await bob.next((f) => f.type === "ready");
+    direct.handlePrivate({ type: "private.created", from: "carol", to: "Bob", plain_text: "back at you", timestamp: "2026-09-22T10:00:00Z", verified: false });
+    expect(await bob.next((f) => f.type === "private")).toMatchObject({ from: "carol", to: "bob", text: "back at you", verified: false });
+  });
+});
+
+describe("search", () => {
+  test("finds senders and text, newest first, without notices", async () => {
+    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:01Z", sender: "system", plain_text: "Release joined", verified: false } });
+    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:02Z", sender: "dave", plain_text: "the release is out", verified: false } });
+    gateway.handleEvent({ type: "message.created", message: { timestamp: "2026-09-22T10:00:03Z", sender: "release_bot", plain_text: "ok", verified: false } });
+    const alice = connect(url, "alice");
+    await alice.next((f) => f.type === "ready");
+    alice.send({ type: "search", query: " RELEASE " });
+    const result = await alice.next((f) => f.type === "search");
+    expect(result.query).toBe("RELEASE");
+    expect(result.messages.map((m: { sender: string }) => m.sender)).toEqual(["release_bot", "dave"]);
+    alice.send({ type: "search", query: "" });
+    expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "invalid_frame" });
+  });
+});

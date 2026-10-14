@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { EVENT_OK, HANDSHAKE_OK, encodePost, parseTntLine, supportsIdentity } from "../src/module";
+import { EVENT_OK, HANDSHAKE_OK, encodePost, parseTntLine, supportsIdentity, supportsPrivate } from "../src/module";
 
 describe("parseTntLine", () => {
   test("answers the handshake", () => {
@@ -35,6 +35,18 @@ describe("parseTntLine", () => {
       event: { type: "identity.requested", session: "s-3" },
     });
     expect(parseTntLine('{"type":"identity.requested"}')).toEqual({ reply: null, event: null });
+  });
+
+  test("parses private messages from TNT and knows which servers take them", () => {
+    expect(
+      parseTntLine('{"type":"private.created","from":"carol","to":"bob","plain_text":"hi","timestamp":"2026-09-22T10:00:00Z","verified":true}'),
+    ).toEqual({
+      reply: null,
+      event: { type: "private.created", from: "carol", to: "bob", plain_text: "hi", timestamp: "2026-09-22T10:00:00Z", verified: true },
+    });
+    expect(parseTntLine('{"type":"private.created","from":"carol"}')).toEqual({ reply: null, event: null });
+    expect(supportsPrivate("1.5.0")).toBe(false);
+    expect(supportsPrivate("1.6.0")).toBe(true);
   });
 
   test("parses presence records without answering them", () => {

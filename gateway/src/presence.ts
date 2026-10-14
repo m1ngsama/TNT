@@ -30,6 +30,21 @@ export class Presence {
     if (connections.size === 0) this.#web.delete(nickname);
   }
 
+  /** App users, for TNT to list beside its SSH sessions. */
+  web(): string[] {
+    return [...this.#web.keys()].sort();
+  }
+
+  isWeb(nickname: string): boolean {
+    return this.#web.has(nickname);
+  }
+
+  isSsh(nickname: string): boolean {
+    const wanted = nickname.toLowerCase();
+    for (const name of this.#ssh) if (name.toLowerCase() === wanted) return true;
+    return false;
+  }
+
   online(): string[] {
     return [...new Set([...this.#ssh, ...this.#web.keys()])].sort();
   }

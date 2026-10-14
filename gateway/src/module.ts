@@ -2,10 +2,12 @@ export type TntEvent =
   | { type: "handshake"; version: string }
   | { type: "message.created"; message: { timestamp: string; sender: string; plain_text: string; verified: boolean } }
   | { type: "identity.requested"; session: string }
+  | { type: "private.created"; from: string; to: string; plain_text: string; timestamp: string; verified: boolean }
   | { type: "presence.snapshot"; nicknames: string[] }
   | { type: "presence.joined" | "presence.left"; nickname: string };
 
-export type RoomEvent = Exclude<TntEvent, { type: "handshake" | "identity.requested" }>;
+export type RoomEvent = Exclude<TntEvent, { type: "handshake" | "identity.requested" | "private.created" }>;
+export type PrivateEvent = Extract<TntEvent, { type: "private.created" }>;
 
 export const HANDSHAKE_OK = `${JSON.stringify({
   type: "handshake.ok",
@@ -20,7 +22,7 @@ export function encodePost(sender: string, text: string): string {
   return `${JSON.stringify({ type: "message.post", sender, plain_text: text })}\n`;
 }
 
-export function encodeRecord(record: Record<string, string>): string {
+export function encodeRecord(record: Record<string, string | string[]>): string {
   return `${JSON.stringify(record)}\n`;
 }
 
@@ -28,6 +30,12 @@ export function encodeRecord(record: Record<string, string>): string {
 export function supportsIdentity(version: string): boolean {
   const [major = 0, minor = 0] = version.split(".").map(Number);
   return major > 1 || (major === 1 && minor >= 5);
+}
+
+/** Private messages and app presence arrived in TNT 1.6.0. */
+export function supportsPrivate(version: string): boolean {
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  return major > 1 || (major === 1 && minor >= 6);
 }
 
 export function parseTntLine(line: string): { reply: string | null; event: TntEvent | null } {
@@ -53,6 +61,12 @@ export function parseTntLine(line: string): { reply: string | null; event: TntEv
         reply: EVENT_OK,
         event: valid ? { type: "message.created", message: { timestamp, sender, plain_text, verified } } : null,
       };
+    }
+    case "private.created": {
+      const { from, to, plain_text, timestamp } = record;
+      return isString(from) && isString(to) && isString(plain_text) && isString(timestamp)
+        ? { reply: null, event: { type: "private.created", from, to, plain_text, timestamp, verified: record.verified === true } }
+        : NOTHING;
     }
     case "identity.requested":
       return isString(record.session) ? { reply: null, event: { type: "identity.requested", session: record.session } } : NOTHING;

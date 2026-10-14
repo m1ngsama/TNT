@@ -2,7 +2,7 @@ import { createVerifier, remoteKeys } from "./auth";
 import { createGateway } from "./gateway";
 import { Ledger, markReserved, readHistory, readReserved } from "./history";
 import { signIn } from "./identity";
-import { encodePost, encodeRecord, parseTntLine, supportsIdentity } from "./module";
+import { encodePost, encodeRecord, parseTntLine, supportsIdentity, supportsPrivate } from "./module";
 
 const HISTORY_LIMIT = 5000;
 const env = process.env;
@@ -20,12 +20,20 @@ for (const entry of await readHistory(stateDir, HISTORY_LIMIT)) ledger.add(markR
 
 const verify = createVerifier(issuer, remoteKeys(env.TNT_GATEWAY_JWKS_URL || `${issuer}/oidc/jwks`));
 let identity = false;
+let direct = false;
 const signingIn = new Set<string>();
 
 const gateway = createGateway({
   ledger,
   verify,
   post: (sender, text) => write(encodePost(sender, text)),
+  privatePost: (from, to, plain_text) => {
+    if (direct) write(encodeRecord({ type: "private.post", from, to, plain_text }));
+    return direct;
+  },
+  remotePresence: (nicknames) => {
+    if (direct) write(encodeRecord({ type: "presence.remote", nicknames }));
+  },
   signedIn: (handle) => {
     if (!identity || reserved.has(handle)) return;
     reserved.add(handle);
@@ -49,6 +57,9 @@ for await (const line of console) {
   if (!event) continue;
   if (event.type === "handshake") {
     identity = supportsIdentity(event.version);
+    direct = supportsPrivate(event.version);
+  } else if (event.type === "private.created") {
+    gateway.handlePrivate(event);
   } else if (event.type === "identity.requested") {
     const { session } = event;
     if (!identity || signingIn.has(session)) continue;
