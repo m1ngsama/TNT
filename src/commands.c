@@ -14,6 +14,7 @@
 #include "keymap.h"
 #include "manual.h"
 #include "message.h"
+#include "module_protocol.h"
 #include "module_runtime.h"
 #include "richtext.h"
 #include "system_message.h"
@@ -127,9 +128,11 @@ static void send_private_message(client_t *client, const char *target_name,
                                  const char *content, char *output,
                                  size_t buf_size, size_t *pos) {
     bool found = false;
+    bool verified;
     client_t *target = NULL;
 
     pthread_rwlock_rdlock(&g_room->lock);
+    verified = client->verified;
     for (int i = 0; i < g_room->client_count; i++) {
         if (strcasecmp(g_room->clients[i]->username, target_name) == 0) {
             target = g_room->clients[i];
@@ -152,6 +155,11 @@ static void send_private_message(client_t *client, const char *target_name,
          * persistent signal without cross-client SSH writes. */
         client_queue_bell(target);
         client_release(target);
+    } else if (tnt_module_runtime_send_private(client->username, target_name,
+                                               content, verified)) {
+        client_append_whisper(client, client->username, target_name, content,
+                              true, false);
+        found = true;
     }
 
     if (found) {
@@ -164,6 +172,31 @@ static void send_private_message(client_t *client, const char *target_name,
                                  I18N_MSG_USER_NOT_FOUND_FORMAT),
                        target_name);
     }
+}
+
+void commands_deliver_private(const char *from, const char *to,
+                              const char *plain_text) {
+    client_t **targets = NULL;
+    int target_count = 0;
+
+    pthread_rwlock_rdlock(&g_room->lock);
+    if (g_room->client_count > 0) {
+        targets = calloc((size_t)g_room->client_count, sizeof(*targets));
+    }
+    for (int i = 0; targets && i < g_room->client_count; i++) {
+        if (strcasecmp(g_room->clients[i]->username, to) == 0) {
+            client_addref(g_room->clients[i]);
+            targets[target_count++] = g_room->clients[i];
+        }
+    }
+    pthread_rwlock_unlock(&g_room->lock);
+
+    for (int i = 0; i < target_count; i++) {
+        client_append_whisper(targets[i], from, to, plain_text, false, true);
+        client_queue_bell(targets[i]);
+        client_release(targets[i]);
+    }
+    free(targets);
 }
 
 static void append_inbox_output(client_t *client, char *output,
@@ -374,12 +407,19 @@ void commands_dispatch(client_t *client) {
         char self_gutter[32];
         snprintf(self_gutter, sizeof(self_gutter), "%s▎\033[0m", theme->accent);
 
+        char (*remote)[MAX_USERNAME_LEN] =
+            calloc(TNT_MODULE_REMOTE_USERS_MAX, sizeof(*remote));
+        int remote_count = remote ? tnt_module_runtime_copy_remote_users(
+                                        remote, TNT_MODULE_REMOTE_USERS_MAX)
+                                  : 0;
+
         pthread_rwlock_rdlock(&g_room->lock);
         int total = g_room->client_count;
         buffer_appendf(output, sizeof(output), &pos,
                        "%s%s\033[0m  \033[2;37m· %d\033[0m\n",
                        theme->accent_bold,
-                       i18n_text(client->ui_lang, I18N_USERS_TITLE), total);
+                       i18n_text(client->ui_lang, I18N_USERS_TITLE),
+                       total + remote_count);
 
         time_t now = time(NULL);
         for (int i = 0; i < total; i++) {
@@ -401,6 +441,13 @@ void commands_dispatch(client_t *client) {
                            g_room->clients[i]->username, dur_str);
         }
         pthread_rwlock_unlock(&g_room->lock);
+        for (int i = 0; i < remote_count; i++) {
+            buffer_appendf(output, sizeof(output), &pos,
+                           "   \033[37m%s\033[0m  \033[2;37m· %s\033[0m\n",
+                           remote[i],
+                           i18n_text(client->ui_lang, I18N_USERS_APP));
+        }
+        free(remote);
 
     } else if (command_id == TNT_COMMAND_HELP) {
         manual_append_interactive_panel(output, sizeof(output), &pos,

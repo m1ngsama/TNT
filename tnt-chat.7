@@ -213,7 +213,7 @@ Delete the input line.
 Move through this session's last 16 sent messages.
 .TP
 .B Tab
-Complete an online nickname in the trailing
+Complete an online nickname, including an app user's, in the trailing
 .B @
 token.
 .TP
@@ -300,7 +300,9 @@ For
 .BR theme ,
 and
 .BR lang ,
-it also completes the first argument.
+it also completes the first argument; for
+.B msg
+that includes app users.
 .SH MESSAGES
 A public message must be valid UTF-8 and may contain at most 1023 bytes as
 stored, where a line break costs two.
@@ -364,12 +366,18 @@ The following aliases have identical behavior.
 .TP
 .B :users, :list, :who
 List active nicknames and connection durations.
+Users connected through an app follow, marked
+.BR app .
+The online count in the status bar includes them.
 .TP
 .BI ":msg " "user message"
 .TQ
 .BI ":w " "user message"
-Send a private message to an active user.
+Send a private message to an active user, including one connected through
+an app.
 Both the sender and recipient receive a session-local inbox copy.
+When an SSH user and an app user share a name, the SSH user gets the
+message.
 .TP
 .BI ":reply " message
 .TQ

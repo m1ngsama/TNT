@@ -59,6 +59,13 @@ bool input_identity_verified(const char *session, const char *handle) {
     return false;
 }
 
+void commands_deliver_private(const char *from, const char *to,
+                              const char *plain_text) {
+    (void)from;
+    (void)to;
+    (void)plain_text;
+}
+
 static void cleanup_module_dir(void) {
     if (module_dir[0] == '\0') return;
 
@@ -202,11 +209,12 @@ TEST(loads_granted_permissions) {
         "{\"protocol\":\"tnt.module.v1\",\"name\":\"tnt-gateway\","
         "\"entrypoint\":\"./tnt-gateway\","
         "\"permissions\":[\"message:read\",\"message:create\","
-        "\"message:post\",\"presence:read\"],"
+        "\"message:post\",\"presence:read\",\"message:private\"],"
         "\"events\":[\"message.created\"]}");
     assert(tnt_module_manifest_load(module_dir, &manifest) == 0);
     assert(manifest.can_post_messages);
     assert(manifest.can_read_presence);
+    assert(manifest.can_message_private);
 
     write_manifest(
         "{\"protocol\":\"tnt.module.v1\",\"name\":\"echo\","
@@ -216,6 +224,7 @@ TEST(loads_granted_permissions) {
     assert(tnt_module_manifest_load(module_dir, &manifest) == 0);
     assert(!manifest.can_post_messages);
     assert(!manifest.can_read_presence);
+    assert(!manifest.can_message_private);
     cleanup_module_dir();
 }
 

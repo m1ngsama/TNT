@@ -133,6 +133,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "Online users",
         "在线用户"
     ),
+    [I18N_USERS_APP] = I18N_STRING(
+        "app",
+        "应用"
+    ),
     [I18N_MSG_SENT_FORMAT] = I18N_STRING(
         "Private message sent to %s\n",
         "私信已发送给 %s\n"

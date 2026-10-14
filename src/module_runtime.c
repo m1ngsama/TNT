@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -36,20 +37,25 @@ struct client;
 void notify_mentions(const char *content, const struct client *sender);
 bool input_identity_notice(const char *session, const char *plain_text);
 bool input_identity_verified(const char *session, const char *handle);
+void commands_deliver_private(const char *from, const char *to,
+                              const char *plain_text);
 
 typedef enum module_event_kind {
     MODULE_EVENT_MESSAGE_CREATED,
     MODULE_EVENT_PRESENCE_JOINED,
     MODULE_EVENT_PRESENCE_LEFT,
     MODULE_EVENT_PRESENCE_SNAPSHOT,
-    MODULE_EVENT_IDENTITY_REQUESTED
+    MODULE_EVENT_IDENTITY_REQUESTED,
+    MODULE_EVENT_PRIVATE_CREATED
 } module_event_kind_t;
 
 /* An identity request carries the nickname in msg.username and the session
- * id in msg.content. */
+ * id in msg.content.  A private message carries its sender in msg.username
+ * and its recipient in target. */
 typedef struct module_event {
     module_event_kind_t kind;
     message_t msg;
+    char target[MAX_USERNAME_LEN];
     uint64_t event_id;
     bool verified;
 } module_event_t;
@@ -121,6 +127,10 @@ static atomic_bool g_stop_requested = ATOMIC_VAR_INIT(true);
 static pthread_mutex_t g_dispatch_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_module_publish_lock = PTHREAD_MUTEX_INITIALIZER;
 static module_process_t *g_identity_module = NULL;
+static module_process_t *g_private_module = NULL;
+static pthread_mutex_t g_remote_lock = PTHREAD_MUTEX_INITIALIZER;
+static char g_remote[TNT_MODULE_REMOTE_USERS_MAX][MAX_USERNAME_LEN];
+static int g_remote_count = 0;
 static char g_online[TNT_MAX_CONFIGURED_CLIENTS][MAX_USERNAME_LEN];
 static int g_online_count = 0;
 
@@ -271,6 +281,8 @@ int tnt_module_manifest_load(const char *module_dir,
         manifest, "permissions", "presence:read");
     out->can_write_identity = json_array_contains_string(
         manifest, "permissions", "identity:write");
+    out->can_message_private = json_array_contains_string(
+        manifest, "permissions", "message:private");
 
     if (!out->wants_message_created || !out->can_read_messages ||
         !out->can_create_messages) {
@@ -616,6 +628,11 @@ static void close_module_process(module_process_t *module) {
         return;
     }
 
+    if (module->manifest.can_message_private) {
+        pthread_mutex_lock(&g_remote_lock);
+        g_remote_count = 0;
+        pthread_mutex_unlock(&g_remote_lock);
+    }
     if (module->stdin_fd >= 0) {
         close(module->stdin_fd);
         module->stdin_fd = -1;
@@ -801,8 +818,9 @@ static module_queue_push_result_t module_queue_push(module_process_t *module,
     active = atomic_load_explicit(&module->active, memory_order_acquire);
     if (!module->queue_running || queue_full || !active) {
         if (module->queue_running && queue_full && active &&
-            event->kind != MODULE_EVENT_MESSAGE_CREATED &&
-            event->kind != MODULE_EVENT_IDENTITY_REQUESTED) {
+            (event->kind == MODULE_EVENT_PRESENCE_JOINED ||
+             event->kind == MODULE_EVENT_PRESENCE_LEFT ||
+             event->kind == MODULE_EVENT_PRESENCE_SNAPSHOT)) {
             module->dropped_presence++;
         } else if (module->queue_running && queue_full && active &&
                    !module->saturation_reported) {
@@ -1065,6 +1083,14 @@ static void apply_identity_record(const tnt_module_identity_record_t *record) {
     }
 }
 
+static void apply_remote_users(const tnt_module_presence_remote_t *remote) {
+    pthread_mutex_lock(&g_remote_lock);
+    memcpy(g_remote, remote->nicknames,
+           remote->count * sizeof(remote->nicknames[0]));
+    g_remote_count = (int)remote->count;
+    pthread_mutex_unlock(&g_remote_lock);
+}
+
 /* Records a granted module may write at any time, outside the response
  * window of an event. */
 static bool is_unsolicited_record(const module_process_t *module,
@@ -1078,13 +1104,18 @@ static bool is_unsolicited_record(const module_process_t *module,
             strcmp(type, TNT_MODULE_RECORD_MESSAGE_POST) == 0) ||
            (module->manifest.can_write_identity &&
             strncmp(type, TNT_MODULE_RECORD_IDENTITY_PREFIX,
-                    strlen(TNT_MODULE_RECORD_IDENTITY_PREFIX)) == 0);
+                    strlen(TNT_MODULE_RECORD_IDENTITY_PREFIX)) == 0) ||
+           (module->manifest.can_message_private &&
+            (strcmp(type, TNT_MODULE_RECORD_PRESENCE_REMOTE) == 0 ||
+             strcmp(type, TNT_MODULE_RECORD_PRIVATE_POST) == 0));
 }
 
 static module_response_action_t handle_module_record(module_process_t *module,
                                                      const char *line) {
     tnt_module_message_post_t post;
     tnt_module_identity_record_t identity;
+    tnt_module_presence_remote_t remote;
+    tnt_module_private_post_t private_post;
 
     if (module->manifest.can_post_messages &&
         tnt_module_parse_message_post(line, &post) &&
@@ -1094,6 +1125,15 @@ static module_response_action_t handle_module_record(module_process_t *module,
     } else if (module->manifest.can_write_identity &&
                tnt_module_parse_identity_record(line, &identity)) {
         apply_identity_record(&identity);
+    } else if (module->manifest.can_message_private &&
+               tnt_module_parse_presence_remote(line, &remote)) {
+        apply_remote_users(&remote);
+    } else if (module->manifest.can_message_private &&
+               tnt_module_parse_private_post(line, &private_post) &&
+               (module->manifest.can_write_identity ||
+                !identity_is_reserved(private_post.from))) {
+        commands_deliver_private(private_post.from, private_post.to,
+                                 private_post.plain_text);
     } else {
         fprintf(stderr, "module runtime: ignored invalid response from %s\n",
                 module->manifest.name);
@@ -1246,6 +1286,20 @@ static void deliver_identity_request_to_module(module_process_t *module,
     (void)write_module_record(module, record);
 }
 
+static void deliver_private_to_module(module_process_t *module,
+                                      const module_event_t *event) {
+    char record[TNT_MODULE_LINE_MAX] = "";
+    size_t pos = 0;
+
+    if (tnt_module_append_private_created(
+            record, sizeof(record), &pos, event->msg.username, event->target,
+            event->msg.content, event->msg.timestamp, event->verified) < 0) {
+        disable_module(module, "event encoding failure");
+        return;
+    }
+    (void)write_module_record(module, record);
+}
+
 static void deliver_snapshot_to_module(module_process_t *module) {
     char (*online)[MAX_USERNAME_LEN] = malloc(sizeof(g_online));
     int count;
@@ -1301,6 +1355,9 @@ static void deliver_event_to_module(module_process_t *module,
             break;
         case MODULE_EVENT_IDENTITY_REQUESTED:
             deliver_identity_request_to_module(module, event);
+            break;
+        case MODULE_EVENT_PRIVATE_CREATED:
+            deliver_private_to_module(module, event);
             break;
         case MODULE_EVENT_PRESENCE_SNAPSHOT:
             deliver_snapshot_to_module(module);
@@ -1396,11 +1453,13 @@ static bool module_permissions_allowed(module_process_t *module) {
 
     module->privileged = manifest->can_post_messages ||
                          manifest->can_read_presence ||
-                         manifest->can_write_identity;
+                         manifest->can_write_identity ||
+                         manifest->can_message_private;
     if (module->privileged && !module_is_granted(manifest->name)) {
         fprintf(stderr,
-                "module runtime: %s requests message:post, presence:read or "
-                "identity:write but is not listed in TNT_MODULE_GRANTS\n",
+                "module runtime: %s requests message:post, presence:read, "
+                "identity:write or message:private but is not listed in "
+                "TNT_MODULE_GRANTS\n",
                 manifest->name);
         return false;
     }
@@ -1409,6 +1468,13 @@ static bool module_permissions_allowed(module_process_t *module) {
                 "module runtime: %s requests identity:write, which %s "
                 "already holds\n",
                 manifest->name, g_identity_module->manifest.name);
+        return false;
+    }
+    if (manifest->can_message_private && g_private_module) {
+        fprintf(stderr,
+                "module runtime: %s requests message:private, which %s "
+                "already holds\n",
+                manifest->name, g_private_module->manifest.name);
         return false;
     }
     return true;
@@ -1446,6 +1512,9 @@ static int load_modules_from_env(void) {
                     module->manifest.name);
             if (module->manifest.can_write_identity) {
                 g_identity_module = module;
+            }
+            if (module->manifest.can_message_private) {
+                g_private_module = module;
             }
             g_module_count++;
         } else {
@@ -1572,6 +1641,7 @@ fail:
     pthread_mutex_lock(&g_dispatch_lock);
     g_module_count = 0;
     g_identity_module = NULL;
+    g_private_module = NULL;
     pthread_mutex_unlock(&g_dispatch_lock);
     pthread_mutex_unlock(&g_lifecycle_lock);
     return -1;
@@ -1593,6 +1663,7 @@ void tnt_module_runtime_shutdown(void) {
     pthread_mutex_lock(&g_dispatch_lock);
     g_module_count = 0;
     g_identity_module = NULL;
+    g_private_module = NULL;
     g_next_event_id = 0;
     pthread_mutex_unlock(&g_dispatch_lock);
     pthread_mutex_unlock(&g_lifecycle_lock);
@@ -1642,6 +1713,64 @@ bool tnt_module_runtime_request_identity(const char *session,
     if (g_accepting && g_identity_module &&
         !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
         pushed = module_queue_push(g_identity_module, &event);
+    }
+    pthread_mutex_unlock(&g_dispatch_lock);
+    return pushed == MODULE_QUEUE_PUSHED;
+}
+
+int tnt_module_runtime_copy_remote_users(char (*out)[MAX_USERNAME_LEN],
+                                         int capacity) {
+    int count;
+
+    if (!out || capacity <= 0) {
+        return 0;
+    }
+    pthread_mutex_lock(&g_remote_lock);
+    count = g_remote_count < capacity ? g_remote_count : capacity;
+    memcpy(out, g_remote, (size_t)count * sizeof(g_remote[0]));
+    pthread_mutex_unlock(&g_remote_lock);
+    return count;
+}
+
+int tnt_module_runtime_remote_user_count(void) {
+    int count;
+
+    pthread_mutex_lock(&g_remote_lock);
+    count = g_remote_count;
+    pthread_mutex_unlock(&g_remote_lock);
+    return count;
+}
+
+bool tnt_module_runtime_send_private(const char *from, const char *to,
+                                     const char *plain_text, bool verified) {
+    module_event_t event = {
+        .kind = MODULE_EVENT_PRIVATE_CREATED,
+        .verified = verified,
+    };
+    module_queue_push_result_t pushed = MODULE_QUEUE_DROPPED;
+
+    if (!from || !to || !plain_text) {
+        return false;
+    }
+    pthread_mutex_lock(&g_remote_lock);
+    for (int i = 0; i < g_remote_count; i++) {
+        if (strcasecmp(g_remote[i], to) == 0) {
+            memcpy(event.target, g_remote[i], sizeof(event.target));
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_remote_lock);
+    if (event.target[0] == '\0') {
+        return false;
+    }
+    event.msg.timestamp = time(NULL);
+    snprintf(event.msg.username, sizeof(event.msg.username), "%s", from);
+    snprintf(event.msg.content, sizeof(event.msg.content), "%s", plain_text);
+
+    pthread_mutex_lock(&g_dispatch_lock);
+    if (g_accepting && g_private_module &&
+        !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+        pushed = module_queue_push(g_private_module, &event);
     }
     pthread_mutex_unlock(&g_dispatch_lock);
     return pushed == MODULE_QUEUE_PUSHED;

@@ -12,4 +12,12 @@ void tnt_json_append_string(char *buffer, size_t buf_size, size_t *pos,
 bool tnt_json_get_string_field(const char *json, const char *key,
                                char *out, size_t out_size);
 
+/* Extract a top-level JSON array of strings into `max_items` slots of
+ * `item_size` bytes each and store the element count in `count`.  Returns
+ * false for malformed JSON, a missing key, a non-string element, an element
+ * overflow, or more than `max_items` elements. */
+bool tnt_json_get_string_array_field(const char *json, const char *key,
+                                     char *items, size_t item_size,
+                                     size_t max_items, size_t *count);
+
 #endif /* JSON_TEXT_H */

@@ -137,7 +137,7 @@ TNT_MODULE_PATHS="$MODULE_DIR"
 export TNT_MODULE_PATHS
 
 tnt_start_server "$PORT" "$STATE_DIR"
-if grep -q "ident requests message:post, presence:read or identity:write" \
+if grep -q "ident requests message:post, presence:read, identity:write or message:private" \
         "$STATE_DIR/server.log"; then
     pass "an ungranted identity:write module is refused"
 else
