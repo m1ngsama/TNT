@@ -15,7 +15,7 @@ export type SignInOptions = {
 
 type Grant = { device_code: string; user_code: string; verification_uri_complete: string; expires_in: number; interval: number };
 
-const UNAVAILABLE = "Sign-in is unavailable right now. Try :login again later. 登录暂时不可用，请稍后再试。";
+const UNAVAILABLE = "Sign-in is unavailable now. 登录暂时不可用，请稍后再试。";
 
 /** Runs an RFC 8628 device authorization grant against m1ngsama ID for one terminal session. */
 export async function signIn(options: SignInOptions): Promise<void> {
@@ -28,10 +28,10 @@ export async function signIn(options: SignInOptions): Promise<void> {
     if (!started.ok) return options.notice(UNAVAILABLE);
     const grant = (await started.json()) as Grant;
     const minutes = Math.round(grant.expires_in / 60);
-    options.notice(
-      `Open ${grant.verification_uri_complete} and approve code ${grant.user_code} within ${minutes} minutes. ` +
-        `在浏览器打开链接，确认验证码 ${grant.user_code}。`,
-    );
+    // TNT cuts a notice at the terminal width, so each line goes on its own.
+    options.notice("Open this link to sign in / 在浏览器打开链接登录:");
+    options.notice(grant.verification_uri_complete);
+    options.notice(`Code / 验证码 ${grant.user_code}, ${minutes} min`);
     const deadline = now() + grant.expires_in * 1000;
     let interval = grant.interval * 1000;
     while (now() < deadline) {
@@ -53,7 +53,7 @@ export async function signIn(options: SignInOptions): Promise<void> {
       if (body.error === "access_denied") return options.notice("Sign-in was cancelled. 已取消登录。");
       break;
     }
-    options.notice("The sign-in code expired. Run :login again. 验证码已过期，请重新执行 :login。");
+    options.notice("The code expired. Run :login again. 验证码已过期。");
   } catch {
     options.notice(UNAVAILABLE);
   }

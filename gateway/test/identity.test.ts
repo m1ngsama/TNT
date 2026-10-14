@@ -43,7 +43,12 @@ describe("signIn", () => {
       { status: 400, body: { error: "slow_down" } },
       { status: 200, body: { access_token: "good", token_type: "Bearer", expires_in: 300 } },
     ]);
-    expect(result.notices[0]).toContain("https://id.test/device?code=BCDF-GHJK");
+    expect(result.notices.slice(0, 3)).toEqual([
+      "Open this link to sign in / 在浏览器打开链接登录:",
+      "https://id.test/device?code=BCDF-GHJK",
+      "Code / 验证码 BCDF-GHJK, 10 min",
+    ]);
+    for (const line of result.notices) expect(line.length).toBeLessThanOrEqual(60);
     expect(result.waits).toEqual([5000, 5000, 10000]);
     expect(result.verified).toEqual(["lune"]);
     expect(result.requests[0]).toBe("https://id.test/device/code client_id=tnt");
