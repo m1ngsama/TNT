@@ -1,5 +1,5 @@
-#ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE  /* for strcasestr() on glibc */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE      /* for strcasestr() on glibc and musl */
 #endif
 #if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
 #define _DARWIN_C_SOURCE /* for strcasestr() on macOS */
