@@ -372,7 +372,6 @@ static int exec_command_post(client_t *client, const char *args) {
     char content[MAX_MESSAGE_LEN];
     char username[MAX_USERNAME_LEN];
     char handle[TNT_IDENTITY_HANDLE_MAX + 1];
-    bool verified = false;
     message_t msg = {
         .timestamp = time(NULL),
     };
@@ -423,7 +422,7 @@ static int exec_command_post(client_t *client, const char *args) {
             return TNT_EXIT_ERROR;
         }
         snprintf(username, sizeof(username), "%s", handle);
-        verified = true;
+        msg.verified = true;
     }
 
     if (strncmp(content, "/me ", 4) == 0 && content[4] != '\0') {
@@ -459,7 +458,7 @@ static int exec_command_post(client_t *client, const char *args) {
 
     room_broadcast(g_room, &msg);
     notify_mentions(msg.content, client);
-    tnt_module_runtime_publish_message_created(&msg, verified);
+    tnt_module_runtime_publish_message_created(&msg);
 
     if (client_send(client, "posted\n", 7) != 0) {
         return TNT_EXIT_ERROR;

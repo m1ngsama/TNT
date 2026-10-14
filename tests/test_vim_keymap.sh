@@ -44,7 +44,7 @@ else
     printf '%s\n' "$MODES_OUTPUT" | tail -20
 fi
 
-if tnt_wait_for "$LOG" "|typed in insert$"; then
+if tnt_wait_for "$LOG" "|typed in insert|$"; then
     pass "i returns to INSERT and Enter still sends"
 else
     fail "i did not return to INSERT"

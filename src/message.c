@@ -31,7 +31,7 @@ static int append_dump_record(char **output, size_t *capacity,
         return -1;
     }
 
-    if (message_log_format_record(msg, NULL, 0, &needed) < 0) {
+    if (message_log_format_record(msg, false, NULL, 0, &needed) < 0) {
         return -1;
     }
 
@@ -53,8 +53,8 @@ static int append_dump_record(char **output, size_t *capacity,
         *capacity = new_capacity;
     }
 
-    if (message_log_format_record(msg, *output + *len, *capacity - *len,
-                                  NULL) < 0) {
+    if (message_log_format_record(msg, false, *output + *len,
+                                  *capacity - *len, NULL) < 0) {
         return -1;
     }
     *len += needed;
@@ -105,13 +105,14 @@ int message_load(message_t **messages, int max_messages) {
 
     pthread_mutex_lock(&g_message_file_lock);
 
-    /* A pre-v2 log must be escaped before anything decodes it, or a stored
-     * `C:\new` reads back as `C:` plus a newline. */
+    /* An older log must be upgraded before anything parses it: a v1
+     * `C:\new` would read back as `C:` plus a newline, and no v2 record has
+     * the flags field the parser requires. */
     if (message_log_migrate(log_path) < 0) {
         fprintf(stderr,
-                "message: could not migrate %s to the escaped log format; "
-                "history containing a backslash may read back wrong\n",
-                log_path);
+                "message: could not migrate %s to log format v%d; "
+                "older history will not be shown\n",
+                log_path, MESSAGE_LOG_VERSION);
     }
 
     FILE *fp = fopen(log_path, "r");
@@ -240,6 +241,7 @@ int message_save(const message_t *msg) {
 
     /* Sanitize username and content to prevent log injection */
     safe_msg.timestamp = msg->timestamp;
+    safe_msg.verified = msg->verified;
     strncpy(safe_msg.username, msg->username, sizeof(safe_msg.username) - 1);
     safe_msg.username[sizeof(safe_msg.username) - 1] = '\0';
 
@@ -259,7 +261,7 @@ int message_save(const message_t *msg) {
         }
     }
 
-    if (message_log_format_record(&safe_msg, record, sizeof(record),
+    if (message_log_format_record(&safe_msg, true, record, sizeof(record),
                                   &record_len) < 0 ||
         fwrite(record, 1, record_len, fp) != record_len ||
         fflush(fp) != 0) {

@@ -8,6 +8,7 @@ typedef struct {
     time_t timestamp;
     char username[MAX_USERNAME_LEN];
     char content[MAX_MESSAGE_LEN];
+    bool verified;                   /* The sender proved its identity */
     /* Cached server-local display fields.  A room message is formatted once
      * when inserted instead of making every connected TUI contend on the
      * platform timezone lock for every repaint. */
@@ -34,7 +35,8 @@ void message_format(const message_t *msg, char *buffer, size_t buf_size, int wid
  * Returns the last max_results matches in chronological order; caller must free *results. */
 int message_search(const char *query, message_t **results, int max_results);
 
-/* Export valid persisted log records in messages.log v1 format.  max_records
+/* Export valid persisted log records without their flags field, as exec dump
+ * always has.  max_records
  * 0 exports all valid records; positive values export the last max_records
  * valid records.  Caller must free *output. */
 int message_dump_text(char **output, size_t *output_len, int max_records);

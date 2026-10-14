@@ -37,6 +37,7 @@ struct client;
 void notify_mentions(const char *content, const struct client *sender);
 bool input_identity_notice(const char *session, const char *plain_text);
 bool input_identity_verified(const char *session, const char *handle);
+int input_identity_reserve(const char *handle);
 void commands_deliver_private(const char *from, const char *to,
                               const char *plain_text);
 
@@ -57,7 +58,6 @@ typedef struct module_event {
     message_t msg;
     char target[MAX_USERNAME_LEN];
     uint64_t event_id;
-    bool verified;
 } module_event_t;
 
 typedef struct module_read_buffer {
@@ -930,11 +930,10 @@ static bool online_update_locked(const char *nickname, bool joined) {
 }
 
 static int queue_event_locked(module_event_kind_t kind, const message_t *msg,
-                              bool verified, const module_process_t *origin,
+                              const module_process_t *origin,
                               char saturated[][TNT_MODULE_NAME_MAX + 1]) {
     module_event_t event = {
         .kind = kind,
-        .verified = verified,
     };
     int saturated_count = 0;
 
@@ -979,7 +978,7 @@ static void report_saturated(char saturated[][TNT_MODULE_NAME_MAX + 1],
 }
 
 static void dispatch_event(module_event_kind_t kind, const message_t *msg,
-                           bool verified, const module_process_t *origin) {
+                           const module_process_t *origin) {
     char saturated[TNT_MAX_MODULES][TNT_MODULE_NAME_MAX + 1];
     int saturated_count = 0;
 
@@ -990,7 +989,7 @@ static void dispatch_event(module_event_kind_t kind, const message_t *msg,
     pthread_mutex_lock(&g_dispatch_lock);
     if (g_accepting &&
         !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
-        saturated_count = queue_event_locked(kind, msg, verified, origin,
+        saturated_count = queue_event_locked(kind, msg, origin,
                                              saturated);
     }
     pthread_mutex_unlock(&g_dispatch_lock);
@@ -1045,7 +1044,7 @@ static void publish_module_message(const module_process_t *module,
              TNT_MODULE_NAME_MAX, module->manifest.name);
     snprintf(msg.content, sizeof(msg.content), "%s", plain_text);
     if (publish_message(&msg)) {
-        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, false, module);
+        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
     }
 }
 
@@ -1053,6 +1052,7 @@ static void publish_posted_message(const module_process_t *module,
                                    const tnt_module_message_post_t *post) {
     message_t msg = {
         .timestamp = time(NULL),
+        .verified = module->manifest.can_write_identity,
     };
 
     if (strncmp(post->plain_text, "/me ", 4) == 0 && post->plain_text[4] != '\0') {
@@ -1064,8 +1064,7 @@ static void publish_posted_message(const module_process_t *module,
         snprintf(msg.content, sizeof(msg.content), "%s", post->plain_text);
     }
     if (publish_message(&msg)) {
-        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg,
-                       module->manifest.can_write_identity, module);
+        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
     }
 }
 
@@ -1078,7 +1077,7 @@ static void apply_identity_record(const tnt_module_identity_record_t *record) {
             (void)input_identity_verified(record->session, record->handle);
             break;
         case TNT_MODULE_IDENTITY_RESERVE:
-            (void)identity_reserve(record->handle, NULL);
+            (void)input_identity_reserve(record->handle);
             break;
     }
 }
@@ -1182,7 +1181,7 @@ static bool write_module_record(module_process_t *module, const char *record) {
 
 static void deliver_message_to_module(module_process_t *module,
                                       const message_t *msg,
-                                      uint64_t event_id, bool verified) {
+                                      uint64_t event_id) {
     char event[TNT_MODULE_LINE_MAX] = "";
     char line[TNT_MODULE_LINE_MAX];
     char message_id[64];
@@ -1193,7 +1192,7 @@ static void deliver_message_to_module(module_process_t *module,
     snprintf(message_id, sizeof(message_id), "local-%llu",
              (unsigned long long)event_id);
     if (tnt_module_append_message_created(event, sizeof(event), &pos,
-                                          message_id, msg, verified) < 0) {
+                                          message_id, msg) < 0) {
         disable_module(module, "event encoding failure");
         return;
     }
@@ -1293,7 +1292,7 @@ static void deliver_private_to_module(module_process_t *module,
 
     if (tnt_module_append_private_created(
             record, sizeof(record), &pos, event->msg.username, event->target,
-            event->msg.content, event->msg.timestamp, event->verified) < 0) {
+            event->msg.content, event->msg.timestamp, event->msg.verified) < 0) {
         disable_module(module, "event encoding failure");
         return;
     }
@@ -1350,8 +1349,7 @@ static void deliver_event_to_module(module_process_t *module,
 
     switch (event->kind) {
         case MODULE_EVENT_MESSAGE_CREATED:
-            deliver_message_to_module(module, &event->msg, event->event_id,
-                                      event->verified);
+            deliver_message_to_module(module, &event->msg, event->event_id);
             break;
         case MODULE_EVENT_IDENTITY_REQUESTED:
             deliver_identity_request_to_module(module, event);
@@ -1627,7 +1625,7 @@ int tnt_module_runtime_init(void) {
 
     pthread_mutex_lock(&g_dispatch_lock);
     g_accepting = true;
-    (void)queue_event_locked(MODULE_EVENT_PRESENCE_SNAPSHOT, NULL, false, NULL,
+    (void)queue_event_locked(MODULE_EVENT_PRESENCE_SNAPSHOT, NULL, NULL,
                              NULL);
     pthread_mutex_unlock(&g_dispatch_lock);
     pthread_mutex_unlock(&g_lifecycle_lock);
@@ -1669,10 +1667,9 @@ void tnt_module_runtime_shutdown(void) {
     pthread_mutex_unlock(&g_lifecycle_lock);
 }
 
-void tnt_module_runtime_publish_message_created(const message_t *msg,
-                                                bool verified) {
+void tnt_module_runtime_publish_message_created(const message_t *msg) {
     if (msg) {
-        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, msg, verified, NULL);
+        dispatch_event(MODULE_EVENT_MESSAGE_CREATED, msg, NULL);
     }
 }
 
@@ -1691,7 +1688,7 @@ void tnt_module_runtime_publish_presence(const char *nickname, bool joined) {
         !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
         (void)queue_event_locked(
             joined ? MODULE_EVENT_PRESENCE_JOINED : MODULE_EVENT_PRESENCE_LEFT,
-            &msg, false, NULL, NULL);
+            &msg, NULL, NULL);
     }
     pthread_mutex_unlock(&g_dispatch_lock);
 }
@@ -1745,7 +1742,7 @@ bool tnt_module_runtime_send_private(const char *from, const char *to,
                                      const char *plain_text, bool verified) {
     module_event_t event = {
         .kind = MODULE_EVENT_PRIVATE_CREATED,
-        .verified = verified,
+        .msg.verified = verified,
     };
     module_queue_push_result_t pushed = MODULE_QUEUE_DROPPED;
 

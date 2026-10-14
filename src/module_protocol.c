@@ -48,7 +48,7 @@ int tnt_module_append_handshake(char *buffer, size_t buf_size, size_t *pos,
 
 int tnt_module_append_message_created(char *buffer, size_t buf_size,
                                       size_t *pos, const char *message_id,
-                                      const message_t *msg, bool verified) {
+                                      const message_t *msg) {
     char timestamp[64];
     size_t before;
 
@@ -73,7 +73,7 @@ int tnt_module_append_message_created(char *buffer, size_t buf_size,
                    "\"plain_text\":");
     tnt_json_append_string(buffer, buf_size, pos, msg->content);
     buffer_appendf(buffer, buf_size, pos, ",\"metadata\":{%s}}}\n",
-                   verified ? "\"verified\":true" : "");
+                   msg->verified ? "\"verified\":true" : "");
 
     return append_result(before, *pos, buf_size);
 }

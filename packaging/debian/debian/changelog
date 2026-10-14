@@ -1,3 +1,14 @@
+tnt-chat (1.7.0-1) unstable; urgency=medium
+
+  * Treat a name that looks like a reserved handle as reserved, and rename
+    unverified sessions using one when identity.reserve reserves it.
+  * Mark messages from verified senders, and verified sessions in :users,
+    with a check mark. Nicknames may not contain check marks.
+  * Move messages.log to format v3, which records verified senders. v1 and
+    v2 logs are migrated in place at start.
+
+ -- M1ng <contact@m1ng.space>  Wed, 14 Oct 2026 00:00:00 +0800
+
 tnt-chat (1.6.0-1) unstable; urgency=medium
 
   * Add the message:private module permission. Users the module reports

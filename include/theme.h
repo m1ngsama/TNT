@@ -19,6 +19,7 @@ typedef struct {
     const char *accent_bold;   /* bold accent, e.g. "\033[1;36m" */
     const char *accent_dim;    /* dim accent, e.g. "\033[2;36m" */
     const char *accent_italic; /* italic accent, e.g. "\033[3;36m" */
+    const char *verified;      /* verified mark, never the accent colour */
 } theme_t;
 
 /* Number of registered themes. */

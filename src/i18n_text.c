@@ -186,9 +186,9 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "昵称已修改: %s -> %s\n"
     ),
     [I18N_NICK_RESERVED_FORMAT] = I18N_STRING(
-        "@%s belongs to a signed-in member.\n"
+        "@%s is taken by a signed-in member, or looks like their name.\n"
         "Use :login if it is you, or pick another name.\n",
-        "@%s 属于一位已登录的成员。\n"
+        "@%s 与一位已登录成员的名字相同或相似。\n"
         "如果是你本人，请用 :login 登录，否则请换一个名字。\n"
     ),
     [I18N_NICK_SIGNED_IN_FORMAT] = I18N_STRING(
@@ -328,10 +328,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "post: 消息持久化失败\n"
     ),
     [I18N_EXEC_POST_RESERVED_FORMAT] = I18N_STRING(
-        "post: %s belongs to a signed-in member; "
-        "connect with that member's SSH key to post as it\n",
-        "post: %s 属于一位已登录的成员，"
-        "只有用这位成员的 SSH 密钥连接才能以这个名字发帖\n"
+        "post: %s is taken by a signed-in member, or looks like their name; "
+        "only that member can post under it, with their SSH key\n",
+        "post: %s 与一位已登录成员的名字相同或相似，"
+        "只有这位成员用自己的 SSH 密钥连接才能以这个名字发帖\n"
     ),
     [I18N_EXEC_COMMAND_TOO_LONG] = I18N_STRING(
         "exec: command too long\n",

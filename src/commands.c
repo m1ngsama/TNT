@@ -9,6 +9,7 @@
 #include "client.h"
 #include "command_catalog.h"
 #include "common.h"
+#include "history_view.h"
 #include "i18n.h"
 #include "identity.h"
 #include "keymap.h"
@@ -53,12 +54,16 @@ static void append_highlighted(char *output, size_t buf_size, size_t *pos,
 }
 
 static bool append_message_row(char *output, size_t buf_size, size_t *pos,
-                               const message_t *msg, const char *needle) {
+                               const message_t *msg, const char *needle,
+                               const theme_t *theme) {
     size_t mark = *pos;
+    size_t actor_len = history_view_action_actor_len(msg);
+    char actor[MAX_USERNAME_LEN];
     char visible[MAX_MESSAGE_LEN];
     richtext_run_t runs[RICHTEXT_MAX_RUNS];
-    size_t run_count = richtext_parse(msg->content, visible, sizeof(visible),
-                                      NULL, runs, RICHTEXT_MAX_RUNS);
+    size_t run_count = richtext_parse(history_view_message_body(msg), visible,
+                                      sizeof(visible), NULL, runs,
+                                      RICHTEXT_MAX_RUNS);
     char ts[20];
     struct tm tmi;
 
@@ -66,7 +71,17 @@ static bool append_message_row(char *output, size_t buf_size, size_t *pos,
     strftime(ts, sizeof(ts), "%m-%d %H:%M", &tmi);
     buffer_appendf(output, buf_size, pos, "[%s] ", ts);
     append_highlighted(output, buf_size, pos, msg->username, NULL, 0, needle);
-    buffer_appendf(output, buf_size, pos, ": ");
+    if (actor_len > 0) {
+        snprintf(actor, sizeof(actor), "%.*s", (int)actor_len, msg->content);
+        buffer_appendf(output, buf_size, pos, ": ");
+        append_highlighted(output, buf_size, pos, actor, NULL, 0, needle);
+    }
+    if (msg->verified) {
+        buffer_appendf(output, buf_size, pos,
+                       " %s" HISTORY_VIEW_VERIFIED_MARK "\033[0m",
+                       theme->verified);
+    }
+    buffer_appendf(output, buf_size, pos, actor_len > 0 ? " " : ": ");
     append_highlighted(output, buf_size, pos, visible, runs, run_count,
                        needle);
     buffer_appendf(output, buf_size, pos, "\n");
@@ -304,7 +319,7 @@ int commands_rename(client_t *client, const char *new_name, bool verified) {
                              client->ui_lang);
     room_broadcast(g_room, &nick_msg);
     message_save(&nick_msg);
-    tnt_module_runtime_publish_message_created(&nick_msg, false);
+    tnt_module_runtime_publish_message_created(&nick_msg);
     return 0;
 }
 
@@ -436,9 +451,15 @@ void commands_dispatch(client_t *client) {
             }
             /* 1-column gutter: ▎ for you, blank for others */
             buffer_appendf(output, sizeof(output), &pos,
-                           "%s  \033[37m%s\033[0m  \033[2;37m· %s\033[0m\n",
-                           is_self ? self_gutter : " ",
-                           g_room->clients[i]->username, dur_str);
+                           "%s  \033[37m%s\033[0m", is_self ? self_gutter : " ",
+                           g_room->clients[i]->username);
+            if (g_room->clients[i]->verified) {
+                buffer_appendf(output, sizeof(output), &pos,
+                               " %s" HISTORY_VIEW_VERIFIED_MARK "\033[0m",
+                               theme->verified);
+            }
+            buffer_appendf(output, sizeof(output), &pos,
+                           "  \033[2;37m· %s\033[0m\n", dur_str);
         }
         pthread_rwlock_unlock(&g_room->lock);
         for (int i = 0; i < remote_count; i++) {
@@ -649,7 +670,8 @@ void commands_dispatch(client_t *client) {
         }
         for (int i = 0; i < last_count; i++) {
             if (!append_message_row(output, sizeof(output), &pos,
-                                    &last_msgs[start + i], NULL)) {
+                                    &last_msgs[start + i], NULL,
+                                    theme_resolve(client->theme_index))) {
                 break;
             }
         }
@@ -684,7 +706,8 @@ void commands_dispatch(client_t *client) {
             }
             for (int i = 0; i < display_count; i++) {
                 if (!append_message_row(output, sizeof(output), &pos,
-                                        &found[start + i], query)) {
+                                        &found[start + i], query,
+                                        theme_resolve(client->theme_index))) {
                     break;
                 }
             }

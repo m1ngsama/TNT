@@ -1,4 +1,4 @@
-.TH TNT-EXEC 7 "2026-10-14" "TNT 1.6.0"
+.TH TNT-EXEC 7 "2026-10-14" "TNT 1.7.0"
 .SH NAME
 tnt-exec \- TNT SSH exec command and output protocol
 .SH DESCRIPTION
@@ -115,6 +115,8 @@ Each message is one tab-separated line:
 The three fields are an RFC 3339 UTC timestamp, sender, and content.
 .B tail
 does not read the complete persistent log.
+It does not say whether a sender was verified; the output keeps the three
+fields it has always had, so existing scripts keep working.
 .SS dump
 .SY dump
 .RI [ count ]
@@ -128,8 +130,14 @@ does not read the complete persistent log.
 .YS
 Write valid records from the active persistent message log in chronological
 order.
-The output is the exact format defined by
-.BR tnt\-message\-log (5).
+Each record is a
+.BR tnt\-message\-log (5)
+record without its flags field: three fields and two separators, with the
+content escaped, as in log version 2.
+No marker line is written.
+Read
+.I messages.log
+itself to see which senders were verified.
 .P
 Without an argument,
 .B dump

@@ -58,6 +58,64 @@ TEST(validates_handles) {
     assert(!identity_handle_valid("用户"));
 }
 
+static void assert_skeleton(const char *name, const char *expected) {
+    char out[64];
+
+    identity_skeleton(name, out, sizeof(out));
+    if (strcmp(out, expected) != 0) {
+        printf("\nskeleton(\"%s\") = \"%s\", want \"%s\"\n", name, out,
+               expected);
+        assert(0);
+    }
+}
+
+TEST(skeleton_folds_look_alikes) {
+    static const char *const mingsama[] = {
+        "m1ngsama",
+        "MINGSAMA",
+        "m1ng_sama",
+        "m1ngs\xd0\xb0ma",                         /* Cyrillic a */
+        "m1ngsarna",
+        "\xef\xbd\x8d\xef\xbc\x91\xef\xbd\x8e\xef\xbd\x87"
+        "\xef\xbd\x93\xef\xbd\x81\xef\xbd\x8d\xef\xbd\x81",  /* fullwidth */
+        "m\xe2\x80\x8b" "1ngsama",                 /* zero-width space */
+    };
+
+    for (size_t i = 0; i < sizeof(mingsama) / sizeof(mingsama[0]); i++) {
+        assert_skeleton(mingsama[i], "mlngsama");
+    }
+    assert_skeleton("vvave", "wave");
+    assert_skeleton("vvavve", "wawe");
+    assert_skeleton("lune", "lune");
+    assert_skeleton("rnrn", "mm");
+    assert_skeleton("rrn", "rm");
+    assert_skeleton("a-b.c d_e", "abcde");
+    assert_skeleton("\xc3\xa9t\xc3\xa9", "\xc3\xa9t\xc3\xa9");   /* precomposed é kept */
+    assert_skeleton("e\xcc\x81", "e");                       /* combining acute removed */
+    assert_skeleton("\xc2\xad" "ab\xef\xbb\xbf", "ab");      /* soft hyphen, BOM */
+    assert_skeleton("\xce\x91\xce\xbd\xce\xbd\xce\xb1", "awa");   /* Greek Alpha nu nu alpha */
+    assert_skeleton("\xe2\x84\x93" "0|", "lol");               /* script l, zero, bar */
+    assert_skeleton("\xc4\xb1\xc9\xa9", "ll");                  /* dotless i, iota */
+    assert_skeleton("\xef\xbc\xbf", "_");                     /* fullwidth low line kept */
+    assert_skeleton("\xe7\x94\xa8\xe6\x88\xb7", "\xe7\x94\xa8\xe6\x88\xb7");
+    assert_skeleton("", "");
+}
+
+TEST(skeleton_keeps_invalid_utf8_bytes) {
+    char out[8];
+
+    assert_skeleton("ab\xff" "1", "ab\xff" "l");
+    assert_skeleton("\xd0", "\xd0");                       /* truncated sequence */
+    assert_skeleton("\xd0" "1", "\xd0" "l");
+    assert_skeleton("\xc0\xae" "x", "\xc0\xae" "x");        /* overlong '.' is not a '.' */
+    assert_skeleton("\xed\xa0\x80" "I", "\xed\xa0\x80" "l");  /* surrogate */
+
+    identity_skeleton("abcdefghijkl", out, sizeof(out));
+    assert(strcmp(out, "abcdefg") == 0);
+    identity_skeleton(NULL, out, sizeof(out));
+    assert(strcmp(out, "") == 0);
+}
+
 TEST(validates_fingerprints) {
     assert(identity_fingerprint_valid(KEY_SHA256));
     assert(!identity_fingerprint_valid("SHA256:"));
@@ -185,6 +243,9 @@ TEST(store_reserves_and_reloads_on_change) {
     assert(!identity_is_reserved("alice"));
     assert(identity_reserve("alice", KEY_SHA256) == 0);
     assert(identity_is_reserved("Alice"));
+    assert(identity_is_reserved("AL1CE"));
+    assert(identity_is_reserved("\xd0\xb0lice"));
+    assert(!identity_is_reserved("alicia"));
     assert(identity_handle_for_key(KEY_SHA256, handle, sizeof(handle)));
     assert(strcmp(handle, "alice") == 0);
 
@@ -210,6 +271,8 @@ int main(void) {
     setenv("TNT_STATE_DIR", state_dir, 1);
 
     RUN_TEST(validates_handles);
+    RUN_TEST(skeleton_folds_look_alikes);
+    RUN_TEST(skeleton_keeps_invalid_utf8_bytes);
     RUN_TEST(validates_fingerprints);
     RUN_TEST(formats_fingerprints_like_ssh_keygen);
     RUN_TEST(parses_and_skips_invalid_lines);

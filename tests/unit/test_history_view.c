@@ -167,6 +167,32 @@ TEST(wrapped_rows_account_for_the_sender_prefix) {
     assert(history_view_message_lines(&msg, 80) == 16);
 }
 
+TEST(verified_mark_widens_the_prefix) {
+    message_t msg = make_msg(0, "hello");
+    int plain = history_view_message_prefix_width(&msg);
+
+    msg.verified = true;
+    assert(history_view_message_prefix_width(&msg) == plain + 2);
+    assert(strcmp(history_view_message_body(&msg), "hello") == 0);
+    assert(history_view_action_actor_len(&msg) == 0);
+}
+
+TEST(verified_action_moves_the_actor_into_the_prefix) {
+    message_t msg = make_msg(0, "alice waves hello");
+    int plain;
+
+    snprintf(msg.username, sizeof(msg.username), "*");
+    plain = history_view_message_prefix_width(&msg);
+    assert(history_view_action_actor_len(&msg) == 0);
+    assert(strcmp(history_view_message_body(&msg), "alice waves hello") == 0);
+
+    msg.verified = true;
+    assert(history_view_action_actor_len(&msg) == 5);
+    assert(strcmp(history_view_message_body(&msg), "waves hello") == 0);
+    /* "alice ✓ " joins the prefix. */
+    assert(history_view_message_prefix_width(&msg) == plain + 8);
+}
+
 TEST(latest_slice_fits_the_screen_after_a_wrapped_message) {
     message_t messages[6];
 
@@ -210,6 +236,8 @@ int main(void) {
     RUN_TEST(wrapped_rows_account_for_the_sender_prefix);
     RUN_TEST(latest_slice_fits_the_screen_after_a_wrapped_message);
     RUN_TEST(latest_start_accounts_for_wrapped_rows);
+    RUN_TEST(verified_mark_widens_the_prefix);
+    RUN_TEST(verified_action_moves_the_actor_into_the_prefix);
 
     printf("\nAll %d tests passed!\n", tests_passed);
     return 0;

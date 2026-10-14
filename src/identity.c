@@ -1,5 +1,7 @@
 #include "identity.h"
 
+#include "utf8.h"
+
 #include <errno.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -32,6 +34,111 @@ bool identity_handle_valid(const char *handle) {
         }
     }
     return true;
+}
+
+static bool skeleton_drops(uint32_t cp) {
+    return cp == 0x00AD || (cp >= 0x200B && cp <= 0x200F) ||
+           (cp >= 0x2060 && cp <= 0x2064) || cp == 0xFEFF ||
+           (cp >= 0x0300 && cp <= 0x036F) || cp == '_' || cp == '-' ||
+           cp == '.' || cp == ' ';
+}
+
+static uint32_t skeleton_fold(uint32_t cp) {
+    static const struct {
+        uint16_t from;
+        char to;
+    } lookalikes[] = {
+        {0x0430, 'a'}, {0x0435, 'e'}, {0x043E, 'o'}, {0x0440, 'p'},
+        {0x0441, 'c'}, {0x0443, 'y'}, {0x0445, 'x'}, {0x0456, 'i'},
+        {0x0458, 'j'}, {0x0455, 's'}, {0x04BB, 'h'}, {0x0501, 'd'},
+        {0x04CF, 'l'}, {0x0410, 'a'}, {0x0412, 'b'}, {0x0415, 'e'},
+        {0x041A, 'k'}, {0x041C, 'm'}, {0x041D, 'h'}, {0x041E, 'o'},
+        {0x0420, 'p'}, {0x0421, 'c'}, {0x0422, 't'}, {0x0425, 'x'},
+        {0x0423, 'y'}, {0x0406, 'i'}, {0x0408, 'j'}, {0x0405, 's'},
+        {0x03B1, 'a'}, {0x03BF, 'o'}, {0x03BD, 'v'}, {0x03C1, 'p'},
+        {0x03B9, 'i'}, {0x03BA, 'k'}, {0x03C4, 't'}, {0x03C5, 'u'},
+        {0x0391, 'a'}, {0x0392, 'b'}, {0x0395, 'e'}, {0x0396, 'z'},
+        {0x0397, 'h'}, {0x0399, 'i'}, {0x039A, 'k'}, {0x039C, 'm'},
+        {0x039D, 'n'}, {0x039F, 'o'}, {0x03A1, 'p'}, {0x03A4, 't'},
+        {0x03A5, 'y'}, {0x03A7, 'x'}, {0x0131, 'i'}, {0x0269, 'i'},
+        {0x2113, 'l'},
+    };
+
+    if (cp >= 0xFF01 && cp <= 0xFF5E) {
+        cp -= 0xFEE0;
+    }
+    for (size_t i = 0; i < sizeof(lookalikes) / sizeof(lookalikes[0]); i++) {
+        if (lookalikes[i].from == cp) {
+            cp = (uint32_t)lookalikes[i].to;
+            break;
+        }
+    }
+    if (cp >= 'A' && cp <= 'Z') {
+        cp += 'a' - 'A';
+    }
+    switch (cp) {
+        case '0': return 'o';
+        case '1': case 'i': case '|': return 'l';
+        default: return cp;
+    }
+}
+
+static void skeleton_collapse(char *s, const char *pair, char single) {
+    char *out = s;
+
+    for (const char *in = s; *in;) {
+        if (in[0] == pair[0] && in[1] == pair[1]) {
+            *out++ = single;
+            in += 2;
+        } else {
+            *out++ = *in++;
+        }
+    }
+    *out = '\0';
+}
+
+void identity_skeleton(const char *name, char *out, size_t out_size) {
+    size_t pos = 0;
+
+    if (!out || out_size == 0) {
+        return;
+    }
+    for (const char *p = name ? name : ""; *p;) {
+        int len = utf8_byte_length((unsigned char)*p);
+        int used = 1;
+        uint32_t cp;
+
+        if (!utf8_is_valid_sequence(p, len)) {
+            /* Kept byte for byte, so a broken name still compares. */
+            if (pos + 1 >= out_size) {
+                break;
+            }
+            out[pos++] = *p++;
+            continue;
+        }
+        cp = utf8_decode(p, &used);
+        if (skeleton_drops(cp)) {
+            p += used;
+            continue;
+        }
+        cp = skeleton_fold(cp);
+        if (cp < 0x80) {
+            if (pos + 1 >= out_size) {
+                break;
+            }
+            out[pos++] = (char)cp;
+        } else {
+            if (pos + (size_t)used >= out_size) {
+                break;
+            }
+            memcpy(out + pos, p, (size_t)used);
+            pos += (size_t)used;
+        }
+        p += used;
+    }
+    out[pos] = '\0';
+    skeleton_collapse(out, "rn", 'm');
+    skeleton_collapse(out, "vv", 'w');
 }
 
 bool identity_fingerprint_valid(const char *fingerprint) {
@@ -98,6 +205,22 @@ const identity_entry_t *identity_table_find(const identity_table_t *table,
     return NULL;
 }
 
+const identity_entry_t *identity_table_find_lookalike(
+    const identity_table_t *table, const char *name) {
+    char skeleton[MAX_USERNAME_LEN];
+
+    if (!table || !name) {
+        return NULL;
+    }
+    identity_skeleton(name, skeleton, sizeof(skeleton));
+    for (size_t i = 0; i < table->count; i++) {
+        if (strcmp(table->entries[i].skeleton, skeleton) == 0) {
+            return &table->entries[i];
+        }
+    }
+    return NULL;
+}
+
 const char *identity_table_handle_for_key(const identity_table_t *table,
                                           const char *fingerprint) {
     if (!table || !fingerprint || fingerprint[0] == '\0') {
@@ -158,6 +281,7 @@ int identity_table_add(identity_table_t *table, const char *handle,
         entry = &table->entries[table->count++];
         memset(entry, 0, sizeof(*entry));
         snprintf(entry->handle, sizeof(entry->handle), "%s", handle);
+        identity_skeleton(handle, entry->skeleton, sizeof(entry->skeleton));
     }
 
     if (fingerprint) {
@@ -322,7 +446,7 @@ bool identity_is_reserved(const char *name) {
     }
     pthread_mutex_lock(&g_identity_lock);
     (void)refresh_locked(path);
-    reserved = identity_table_find(&g_identities, name) != NULL;
+    reserved = identity_table_find_lookalike(&g_identities, name) != NULL;
     pthread_mutex_unlock(&g_identity_lock);
     return reserved;
 }

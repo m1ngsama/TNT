@@ -4,25 +4,26 @@
 #include <string.h>
 
 /* Accent slot helper: normal / bold / dim / italic variants of one ANSI
- * foreground colour code (30-37).  Kept in the 16-colour space for maximum
- * terminal compatibility. */
-#define THEME_ACCENT(name, code)                 \
+ * foreground colour code (30-37), plus the bold colour of the verified mark.
+ * Kept in the 16-colour space for maximum terminal compatibility. */
+#define THEME_ACCENT(name, code, mark)           \
     {                                            \
         (name),                                  \
         "\033[" #code "m",                       \
         "\033[1;" #code "m",                     \
         "\033[2;" #code "m",                     \
-        "\033[3;" #code "m"                       \
+        "\033[3;" #code "m",                     \
+        "\033[1;" #mark "m"                       \
     }
 
 static const theme_t g_themes[] = {
-    THEME_ACCENT("cyan", 36),     /* default */
-    THEME_ACCENT("green", 32),
-    THEME_ACCENT("magenta", 35),
-    THEME_ACCENT("blue", 34),
-    THEME_ACCENT("amber", 33),
-    THEME_ACCENT("red", 31),
-    THEME_ACCENT("mono", 37),
+    THEME_ACCENT("cyan", 36, 32),     /* default */
+    THEME_ACCENT("green", 32, 36),
+    THEME_ACCENT("magenta", 35, 32),
+    THEME_ACCENT("blue", 34, 32),
+    THEME_ACCENT("amber", 33, 32),
+    THEME_ACCENT("red", 31, 32),
+    THEME_ACCENT("mono", 37, 97),
 };
 
 #define THEME_COUNT (sizeof(g_themes) / sizeof(g_themes[0]))

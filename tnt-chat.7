@@ -1,4 +1,4 @@
-.TH TNT-CHAT 7 "2026-10-14" "TNT 1.6.0"
+.TH TNT-CHAT 7 "2026-10-14" "TNT 1.7.0"
 .SH NAME
 tnt-chat \- use the TNT interactive terminal interface
 .SH DESCRIPTION
@@ -30,7 +30,15 @@ or the first free
 .BR anonymous2 ,
 .BR anonymous3 ,
 and so on when that is taken.
-Nicknames are limited to 20 Unicode characters.
+Nicknames are limited to 20 Unicode characters
+and may not contain
+.BR ✓ ,
+.BR ✔ ,
+.BR ☑ ,
+or
+.BR ✅ ,
+which would pass for the verified mark described in
+.BR "SIGNING IN" .
 They must be unique among active
 sessions without regard to ASCII letter case.
 The names
@@ -57,8 +65,14 @@ The module shows what to do next, usually a link and a code.
 Once it confirms the member, the session is renamed to the handle and
 shows
 .BI "Signed in as @" handle .
-A session that was using that name without signing in is renamed to
-.BR anonymous .
+A session that was using that name, or one that looks like it, without
+signing in is renamed to
+.BR anonymous ,
+or to the first free
+.BR anonymous \fIN\fR,
+and the room sees the rename.
+The same happens when the identity module reserves a handle for a member
+who signed in elsewhere.
 Several sessions may be signed in to the same handle at once.
 .P
 TNT recognises a member by SSH key only when the SSH login name is their
@@ -82,9 +96,47 @@ unbinds the key, and the session becomes
 .B anonymous
 again.
 .P
-Nobody else can take a reserved handle, at the nickname prompt or with
+Nobody else can take a reserved handle, or a name that looks like one, at
+the nickname prompt, with
 .BR :nick ,
-without regard to ASCII letter case.
+or as the login name of
+.BR "exec post" .
+Two names look alike when they are equal after TNT drops invisible
+characters, combining accents,
+.BR _ ,
+.BR \- ,
+.BR . ,
+and spaces, reads fullwidth letters and common Cyrillic, Greek, and Latin
+look-alikes as the ASCII letters they resemble, ignores ASCII letter case,
+reads
+.BR 0 ,
+.BR 1 ,
+.BR i ,
+and
+.B |
+as
+.BR o ,
+.BR l ,
+.BR l ,
+and
+.BR l ,
+and reads
+.B rn
+as
+.B m
+and
+.B vv
+as
+.BR w .
+So
+.BR m1ngsama ,
+.BR MINGSAMA ,
+.BR m1ng_sama ,
+and
+.B m1ngsarna
+all look like
+.BR mingsama .
+m1ngsama ID applies the same rule when a member picks a handle.
 The prompt falls back to
 .BR anonymous ,
 or to the first free
@@ -93,9 +145,30 @@ or to the first free
 and so on, and both say:
 .P
 .EX
-@alice belongs to a signed-in member.
+@alice is taken by a signed-in member, or looks like their name.
 Use :login if it is you, or pick another name.
 .EE
+.P
+Messages a signed-in member sends, public text and
+.B /me
+actions alike, show
+.B ✓
+after the sender's name, live and in history.
+The mark has its own colour, never the theme's accent, and is bold in the
+.B mono
+theme.
+.BR :users ,
+.BR :last ,
+and
+.B :search
+mark signed-in members the same way.
+Since no nickname may contain a check mark, a name followed by
+.B ✓
+was signed in when it spoke.
+TNT records the mark in
+.I messages.log
+when the message is sent; see
+.BR tnt\-message\-log (5).
 .SH KEYS
 Typing inserts at the caret.
 Nothing a user types moves the session into a different keyboard state.
@@ -366,6 +439,8 @@ The following aliases have identical behavior.
 .TP
 .B :users, :list, :who
 List active nicknames and connection durations.
+Signed-in members are marked
+.BR ✓ .
 Users connected through an app follow, marked
 .BR app .
 The online count in the status bar includes them.

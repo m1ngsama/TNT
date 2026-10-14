@@ -16,22 +16,46 @@ void history_view_message_time(const message_t *msg, char out[16]) {
     strftime(out, 16, "%H:%M", &tmi);
 }
 
+size_t history_view_action_actor_len(const message_t *msg) {
+    const char *space;
+
+    if (!msg || !msg->verified || strcmp(msg->username, "*") != 0) {
+        return 0;
+    }
+    space = strchr(msg->content, ' ');
+    return space && space != msg->content ? (size_t)(space - msg->content)
+                                          : 0;
+}
+
+const char *history_view_message_body(const message_t *msg) {
+    size_t actor_len = history_view_action_actor_len(msg);
+
+    return actor_len > 0 ? msg->content + actor_len + 1 : msg->content;
+}
+
 int history_view_message_prefix_width(const message_t *msg) {
     char time_str[16];
-    char prefix_plain[MAX_USERNAME_LEN + 32];
+    char prefix_plain[MAX_USERNAME_LEN + MAX_MESSAGE_LEN + 32];
+    size_t actor_len;
 
     if (!msg) {
         return 0;
     }
 
     history_view_message_time(msg, time_str);
+    actor_len = history_view_action_actor_len(msg);
     if (system_message_is_system(msg)) {
         snprintf(prefix_plain, sizeof(prefix_plain), " --> ");
+    } else if (actor_len > 0) {
+        snprintf(prefix_plain, sizeof(prefix_plain), " %s * %.*s %s ",
+                 time_str, (int)actor_len, msg->content,
+                 HISTORY_VIEW_VERIFIED_MARK);
     } else if (strcmp(msg->username, "*") == 0) {
         snprintf(prefix_plain, sizeof(prefix_plain), " %s * ", time_str);
     } else {
-        snprintf(prefix_plain, sizeof(prefix_plain), " %s %s: ", time_str,
-                 msg->username);
+        snprintf(prefix_plain, sizeof(prefix_plain), " %s %s%s%s: ",
+                 time_str, msg->username, msg->verified ? " " : "",
+                 msg->verified ? HISTORY_VIEW_VERIFIED_MARK : "");
     }
     return utf8_string_width(prefix_plain);
 }
@@ -52,8 +76,8 @@ int history_view_message_lines(const message_t *msg, int width) {
 
     /* Count rows over the same visible text the renderer draws, or markers
      * that never reach the screen push the count out by a row. */
-    richtext_parse(msg->content, visible, sizeof(visible), NULL, NULL,
-                   RICHTEXT_MAX_RUNS);
+    richtext_parse(history_view_message_body(msg), visible, sizeof(visible),
+                   NULL, NULL, RICHTEXT_MAX_RUNS);
     rows = richtext_wrap(visible,
                          history_view_message_content_width(msg, width), spans,
                          HISTORY_VIEW_MAX_WRAPPED_ROWS);

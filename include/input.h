@@ -32,5 +32,8 @@ void notify_mentions(const char *content, const client_t *sender);
  * Each returns false when no interactive session has that id. */
 bool input_identity_notice(const char *session, const char *plain_text);
 bool input_identity_verified(const char *session, const char *handle);
+/* Reserve `handle` without a key and rename every unverified session whose
+ * name looks like it. */
+int input_identity_reserve(const char *handle);
 
 #endif /* INPUT_H */

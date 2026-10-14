@@ -1,4 +1,4 @@
-.TH TNT 8 "2026-10-14" "TNT 1.6.0"
+.TH TNT 8 "2026-10-14" "TNT 1.7.0"
 .SH NAME
 tnt \- run the TNT SSH chat server
 .SH SYNOPSIS
@@ -314,6 +314,7 @@ See
 .TP
 .I messages.log.1
 The previous log produced by automatic rotation.
+It is not migrated when the active log is, so it may be in an older format.
 .TP
 .I identities
 Handles reserved by signed-in members, created with mode 0600 and replaced
@@ -330,6 +331,8 @@ alice SHA256:UMSdY3XS0sbuWW4MC+rV6SEa0OanWxNxnFV35VM5Sng
 A handle is 1 through 20 ASCII lowercase letters, digits, and underscores;
 invalid lines are skipped.
 TNT rereads the file when it changes.
+A nickname that looks like a handle here is reserved along with it; see
+.BR tnt\-chat (7).
 .TP
 .I motd.txt
 Optional text displayed before the chat screen for each new interactive

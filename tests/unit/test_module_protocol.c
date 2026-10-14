@@ -36,7 +36,7 @@ TEST(appends_message_created_jsonl_with_escaping) {
     snprintf(msg.content, sizeof(msg.content), "%s", "hello \"core\"");
 
     assert(tnt_module_append_message_created(out, sizeof(out), &pos,
-                                             "local-1", &msg, false) == 0);
+                                             "local-1", &msg) == 0);
     assert(strstr(out, "\"type\":\"message.created\"") != NULL);
     assert(strstr(out, "\"id\":\"local-1\"") != NULL);
     assert(strstr(out, "\"timestamp\":\"1970-01-01T00:00:00Z\"") != NULL);
@@ -56,8 +56,9 @@ TEST(appends_verified_metadata) {
 
     snprintf(msg.username, sizeof(msg.username), "%s", "alice");
     snprintf(msg.content, sizeof(msg.content), "%s", "hi");
+    msg.verified = true;
     assert(tnt_module_append_message_created(out, sizeof(out), &pos,
-                                             "local-2", &msg, true) == 0);
+                                             "local-2", &msg) == 0);
     assert(strstr(out, "\"metadata\":{\"verified\":true}}}\n") != NULL);
 }
 
@@ -202,7 +203,8 @@ TEST(parse_message_post_accepts_valid_sender) {
 TEST(parse_message_post_rejects_invalid_sender) {
     static const char *const senders[] = {
         "", "system", "module:echo", "*", "-dash", ".dot", "a|b", "a;b",
-        "abcdefghijklmnopqrstu", "bad\\u0001", "a:b", "module:", ":lead"
+        "abcdefghijklmnopqrstu", "bad\\u0001", "a:b", "module:", ":lead",
+        "alice \\u2713", "alice✔", "☑", "\\u2705bob"
     };
     tnt_module_message_post_t post;
 
@@ -341,6 +343,7 @@ TEST(parse_presence_remote_rejects_invalid) {
         "{\"type\":\"presence.remote\",\"nicknames\":[\"system\"]}",
         "{\"type\":\"presence.remote\",\"nicknames\":[\"a:b\"]}",
         "{\"type\":\"presence.remote\",\"nicknames\":[\"a|b\"]}",
+        "{\"type\":\"presence.remote\",\"nicknames\":[\"bob ✓\"]}",
         "{\"type\":\"presence.remote\","
         "\"nicknames\":[\"abcdefghijklmnopqrstu\"]}",
         "{\"type\":\"presence.snapshot\",\"nicknames\":[\"alice\"]}",
@@ -364,6 +367,9 @@ TEST(parse_private_post) {
 
     assert(!tnt_module_parse_private_post(
         "{\"type\":\"private.post\",\"from\":\"system\",\"to\":\"bob\","
+        "\"plain_text\":\"hi\"}", &post));
+    assert(!tnt_module_parse_private_post(
+        "{\"type\":\"private.post\",\"from\":\"alice\u2713\",\"to\":\"bob\","
         "\"plain_text\":\"hi\"}", &post));
     assert(!tnt_module_parse_private_post(
         "{\"type\":\"private.post\",\"from\":\"alice\","

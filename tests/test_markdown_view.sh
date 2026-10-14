@@ -95,7 +95,7 @@ else
 fi
 
 # The pager reads the log, so a fenced block can be seeded in its stored form.
-printf '%s|author|```\\nfirst line\\nsecond line\\n```\n' \
+printf '%s|author|```\\nfirst line\\nsecond line\\n```|\n' \
     "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >>"$LOG"
 
 PAGER_SCRIPT="$STATE_DIR/markdown-pager.expect"

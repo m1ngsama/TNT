@@ -57,7 +57,7 @@ int tnt_module_append_handshake(char *buffer, size_t buf_size, size_t *pos,
 
 int tnt_module_append_message_created(char *buffer, size_t buf_size,
                                       size_t *pos, const char *message_id,
-                                      const message_t *msg, bool verified);
+                                      const message_t *msg);
 
 int tnt_module_append_presence(char *buffer, size_t buf_size, size_t *pos,
                                const char *type, const char *nickname,

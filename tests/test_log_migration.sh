@@ -1,5 +1,6 @@
 #!/bin/sh
-# End-to-end test: an existing v1 messages.log is migrated once, on startup.
+# End-to-end test: an existing v1 or v2 messages.log is migrated once, on
+# startup.
 
 PORT=${PORT:-12360}
 PASS=0
@@ -82,14 +83,15 @@ else
     fail "backup missing or altered"
 fi
 
-if [ "$(head -n 1 "$LOG")" = "#tnt-message-log v2" ]; then
+if [ "$(head -n 1 "$LOG")" = "#tnt-message-log v3" ]; then
     pass "the migrated log carries the header"
 else
     fail "header missing"
     sed -n '1,5p' "$LOG"
 fi
 
-if grep -qF '|alice|C:\\new' "$LOG" && grep -qF '|bob|plain message' "$LOG"; then
+if grep -qxF "$TS|alice|C:\\\\new|" "$LOG" &&
+   grep -qxF "$TS|bob|plain message|" "$LOG"; then
     pass "the backslash record is escaped and the plain record is untouched"
 else
     fail "migrated content unexpected"
@@ -97,7 +99,7 @@ else
 fi
 
 DUMP=$(ssh $SSH_OPTS anonymous@127.0.0.1 "dump --all" 2>/dev/null)
-if printf '%s\n' "$DUMP" | grep -qF '|alice|C:\\new' &&
+if printf '%s\n' "$DUMP" | grep -qxF "$TS|alice|C:\\\\new" &&
    [ "$(printf '%s\n' "$DUMP" | wc -l | tr -d ' ')" = "2" ]; then
     pass "dump emits the escaped form, one record per line"
 else
@@ -116,6 +118,43 @@ if [ "$(cat "$LOG")" = "$BEFORE" ] && [ "$(cat "$BACKUP")" = "$BACKUP_BEFORE" ];
 else
     fail "second start rewrote the log"
     sed -n '1,5p' "$LOG"
+fi
+
+stop_server
+
+V2_BACKUP="$STATE_DIR/messages.log.v2.bak"
+{
+    printf '#tnt-message-log v2\n'
+    printf '%s|carol|D:\\\\old\n' "$TS"
+    printf '%s|dave|hello v2\n' "$TS"
+} > "$SEED"
+cp "$SEED" "$LOG"
+
+start_server
+
+if [ -f "$V2_BACKUP" ] && cmp -s "$SEED" "$V2_BACKUP"; then
+    pass "a v2 log is backed up verbatim"
+else
+    fail "v2 backup missing or altered"
+fi
+
+if [ "$(head -n 1 "$LOG")" = "#tnt-message-log v3" ] &&
+   [ "$(grep -c '' "$LOG")" = "3" ] &&
+   grep -qxF "$TS|carol|D:\\\\old|" "$LOG" &&
+   grep -qxF "$TS|dave|hello v2|" "$LOG"; then
+    pass "v2 records gain an empty flags field and keep their escapes"
+else
+    fail "v2 migration unexpected"
+    cat "$LOG"
+fi
+
+POST_OUTPUT=$(ssh $SSH_OPTS erin@127.0.0.1 post "after v2" 2>/dev/null)
+if [ "$POST_OUTPUT" = "posted" ] && grep -qxF "$TS|dave|hello v2|" "$LOG" &&
+   tail -n 1 "$LOG" | grep -q '|erin|after v2|$'; then
+    pass "new records are appended in v3 form after migration"
+else
+    fail "append after v2 migration"
+    cat "$LOG"
 fi
 
 stop_server

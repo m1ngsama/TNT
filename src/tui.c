@@ -99,8 +99,9 @@ static bool format_message_row(const message_t *msg, int row, char *buffer,
 
     char visible[MAX_MESSAGE_LEN];
     richtext_run_t runs[RICHTEXT_MAX_RUNS];
-    size_t run_count = richtext_parse(msg->content, visible, sizeof(visible),
-                                      NULL, runs, RICHTEXT_MAX_RUNS);
+    size_t run_count = richtext_parse(history_view_message_body(msg), visible,
+                                      sizeof(visible), NULL, runs,
+                                      RICHTEXT_MAX_RUNS);
 
     richtext_span_t spans[HISTORY_VIEW_MAX_WRAPPED_ROWS];
     size_t rows = richtext_wrap(visible, content_width, spans,
@@ -126,18 +127,30 @@ static bool format_message_row(const message_t *msg, int row, char *buffer,
         return true;
     }
 
+    size_t actor_len = history_view_action_actor_len(msg);
+    char mark[32] = "";
+    if (msg->verified) {
+        snprintf(mark, sizeof(mark), " %s" HISTORY_VIEW_VERIFIED_MARK
+                 "\033[0m", theme->verified);
+    }
+
     if (system_message_is_system(msg)) {
         snprintf(buffer, buf_size,
                  "%s\033[90m--> %s\033[0m", gutter, row_text);
+    } else if (actor_len > 0) {
+        snprintf(buffer, buf_size,
+                 "%s\033[90m%s\033[0m %s* %.*s\033[0m%s %s%s\033[0m",
+                 gutter, time_str, theme->accent_italic, (int)actor_len,
+                 msg->content, mark, theme->accent_italic, row_text);
     } else if (strcmp(msg->username, "*") == 0) {
         snprintf(buffer, buf_size,
                  "%s\033[90m%s\033[0m %s* %s\033[0m",
                  gutter, time_str, theme->accent_italic, row_text);
     } else {
         snprintf(buffer, buf_size,
-                 "%s\033[90m%s\033[0m %s%s\033[0m: %s%s%s",
+                 "%s\033[90m%s\033[0m %s%s\033[0m%s: %s%s%s",
                  gutter, time_str, username_color(msg->username),
-                 msg->username, hl_start, row_text, hl_end);
+                 msg->username, mark, hl_start, row_text, hl_end);
     }
     return true;
 }
