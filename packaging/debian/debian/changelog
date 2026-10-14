@@ -1,3 +1,14 @@
+tnt-chat (1.5.0-1) unstable; urgency=medium
+
+  * Let members of m1ngsama ID sign in with :login and :logout, reserve
+    their handles, and sign in again by SSH key.
+  * Add the identity:write module permission and mark verified senders in
+    message.created metadata.
+  * Refuse the SSH "none" method so clients offer their public key;
+    keyless clients sign in through keyboard-interactive with no prompts.
+
+ -- M1ng <contact@m1ng.space>  Wed, 14 Oct 2026 00:00:00 +0800
+
 tnt-chat (1.4.0-1) unstable; urgency=medium
 
   * Add a WebSocket gateway module that lets signed-in clients read and
