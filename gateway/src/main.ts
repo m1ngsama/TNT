@@ -1,6 +1,7 @@
 import { createVerifier, remoteKeys } from "./auth";
 import { createGateway } from "./gateway";
-import { Ledger, markReserved, readHistory, readReserved } from "./history";
+import { createGuard } from "./guard";
+import { Ledger, readHistory } from "./history";
 import { signIn } from "./identity";
 import { encodePost, encodeRecord, parseTntLine, supportsIdentity, supportsPrivate } from "./module";
 
@@ -14,14 +15,19 @@ const write = (line: string) => {
   stdout.flush();
 };
 
-const reserved = await readReserved(stateDir);
 const ledger = new Ledger(HISTORY_LIMIT);
-for (const entry of await readHistory(stateDir, HISTORY_LIMIT)) ledger.add(markReserved(entry, reserved));
+for (const entry of await readHistory(stateDir, HISTORY_LIMIT)) ledger.add(entry);
 
 const verify = createVerifier(issuer, remoteKeys(env.TNT_GATEWAY_JWKS_URL || `${issuer}/oidc/jwks`));
 let identity = false;
 let direct = false;
 const signingIn = new Set<string>();
+const guard = createGuard({
+  issuer,
+  reserve: (handle) => {
+    if (identity) write(encodeRecord({ type: "identity.reserve", handle }));
+  },
+});
 
 const gateway = createGateway({
   ledger,
@@ -34,11 +40,7 @@ const gateway = createGateway({
   remotePresence: (nicknames) => {
     if (direct) write(encodeRecord({ type: "presence.remote", nicknames }));
   },
-  signedIn: (handle) => {
-    if (!identity || reserved.has(handle)) return;
-    reserved.add(handle);
-    write(encodeRecord({ type: "identity.reserve", handle }));
-  },
+  signedIn: (handle) => guard.reserve(handle),
 });
 
 setInterval(() => gateway.sweep(), 60_000);
@@ -68,12 +70,11 @@ for await (const line of console) {
       issuer,
       verify,
       notice: (plain_text) => write(encodeRecord({ type: "identity.notice", session, plain_text })),
-      verified: (handle) => {
-        reserved.add(handle);
-        write(encodeRecord({ type: "identity.verified", session, handle }));
-      },
+      verified: (handle) => write(encodeRecord({ type: "identity.verified", session, handle })),
     }).finally(() => signingIn.delete(session));
   } else {
+    if (identity && event.type === "presence.joined") void guard.check(event.nickname);
+    if (identity && event.type === "presence.snapshot") for (const nickname of event.nicknames) void guard.check(nickname);
     gateway.handleEvent(event);
   }
 }

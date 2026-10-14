@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Ledger, decodeContent, markReserved, messageId, parseRecord, readHistory, readReserved } from "../src/history";
+import { Ledger, decodeContent, messageId, parseRecord, readHistory } from "../src/history";
 
 const HELLO = { timestamp: "2026-09-22T10:00:00Z", sender: "alice", text: "hello" };
 const NOW = Date.parse("2026-09-22T12:00:00Z");
@@ -20,7 +20,7 @@ describe("parseRecord", () => {
     for (const line of [
       "#tnt-message-log v2",
       "2026-09-22T10:00:00Z|alice",
-      "2026-09-22T10:00:00Z|alice|a|b",
+      "2026-09-22T10:00:00Z|alice|a|v|b",
       "2026-09-22 10:00:00|alice|hi",
       "2026-09-22T10:00:00Z||hi",
       "2026-09-22T10:00:00Z|alice|",
@@ -158,20 +158,10 @@ describe("readHistory whole files", () => {
   });
 });
 
-describe("reservations", () => {
-  test("marks past messages from reserved handles, actions included", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "tnt-reserved-"));
-    try {
-      writeFileSync(join(dir, "identities"), "lune SHA256:abc\nm1ngsama\nNot Valid\n");
-      const reserved = await readReserved(dir);
-      expect([...reserved]).toEqual(["lune", "m1ngsama"]);
-      const ledger = new Ledger(10);
-      expect(ledger.add(markReserved({ timestamp: "2026-09-22T10:00:00Z", sender: "Lune", text: "hi" }, reserved)).verified).toBe(true);
-      expect(ledger.add(markReserved({ timestamp: "2026-09-22T10:00:01Z", sender: "*", text: "m1ngsama waves" }, reserved)).verified).toBe(true);
-      expect(ledger.add(markReserved({ timestamp: "2026-09-22T10:00:02Z", sender: "carol", text: "hi" }, reserved)).verified).toBe(false);
-      expect(await readReserved(join(dir, "missing"))).toEqual(new Set());
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+describe("log v3", () => {
+  test("reads the verified flag and treats v2 records as unverified", () => {
+    expect(parseRecord("2026-09-22T10:00:00Z|lune|hi|v", NOW)).toEqual({ timestamp: "2026-09-22T10:00:00Z", sender: "lune", text: "hi", verified: true });
+    expect(parseRecord("2026-09-22T10:00:00Z|lune|hi|", NOW)?.verified).toBeUndefined();
+    expect(parseRecord("2026-09-22T10:00:00Z|lune|hi", NOW)?.verified).toBeUndefined();
   });
 });
