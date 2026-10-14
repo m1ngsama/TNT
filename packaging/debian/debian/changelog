@@ -1,3 +1,12 @@
+tnt-chat (1.6.0-1) unstable; urgency=medium
+
+  * Add the message:private module permission. Users the module reports
+    with presence.remote appear in :users and nickname completion, and
+    private messages reach them through private.created and come back
+    through private.post.
+
+ -- M1ng <contact@m1ng.space>  Wed, 14 Oct 2026 00:00:00 +0800
+
 tnt-chat (1.5.0-1) unstable; urgency=medium
 
   * Let members of m1ngsama ID sign in with :login and :logout, reserve
