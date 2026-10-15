@@ -238,10 +238,19 @@ TEST(store_reserves_and_reloads_on_change) {
     char path[PATH_MAX];
     char temp[PATH_MAX + 8];
     char handle[TNT_IDENTITY_HANDLE_MAX + 1];
+    char previous[TNT_IDENTITY_HANDLE_MAX + 1];
 
     state_path(path, sizeof(path), TNT_IDENTITY_FILE);
     assert(!identity_is_reserved("alice"));
-    assert(identity_reserve("alice", KEY_SHA256) == 0);
+    assert(identity_reserve("alice", KEY_SHA256, previous,
+                            sizeof(previous)) == 0);
+    assert(previous[0] == '\0');
+    assert(identity_reserve("bob", KEY_SHA256, previous,
+                            sizeof(previous)) == 0);
+    assert(strcmp(previous, "alice") == 0);
+    assert(identity_reserve("alice", KEY_SHA256, previous,
+                            sizeof(previous)) == 0);
+    assert(strcmp(previous, "bob") == 0);
     assert(identity_is_reserved("Alice"));
     assert(identity_is_reserved("AL1CE"));
     assert(identity_is_reserved("\xd0\xb0lice"));
@@ -249,6 +258,7 @@ TEST(store_reserves_and_reloads_on_change) {
     assert(identity_handle_for_key(KEY_SHA256, handle, sizeof(handle)));
     assert(strcmp(handle, "alice") == 0);
 
+    assert(identity_forget_key(KEY_SHA256) == 1);
     assert(identity_forget_key(KEY_SHA256) == 0);
     assert(!identity_handle_for_key(KEY_SHA256, handle, sizeof(handle)));
     assert(identity_is_reserved("alice"));

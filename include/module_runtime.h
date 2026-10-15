@@ -40,6 +40,21 @@ void tnt_module_runtime_publish_presence(const char *nickname, bool joined);
 bool tnt_module_runtime_request_identity(const char *session,
                                          const char *nickname);
 
+typedef enum {
+    TNT_IDENTITY_RECOGNIZED,
+    TNT_IDENTITY_KEY_BOUND,
+    TNT_IDENTITY_SIGNED_OUT
+} tnt_identity_notification_t;
+
+/* Tell the identity:write module about a sign-in change it did not make.
+ * Dropped when the module's queue is full.  `fingerprint` and
+ * `previous_handle` may be NULL or empty. */
+void tnt_module_runtime_notify_identity(tnt_identity_notification_t kind,
+                                        const char *session,
+                                        const char *handle,
+                                        const char *fingerprint,
+                                        const char *previous_handle);
+
 /* Copy up to `capacity` names of the users the message:private module reports
  * as online elsewhere.  Returns the number copied. */
 int tnt_module_runtime_copy_remote_users(char (*out)[MAX_USERNAME_LEN],

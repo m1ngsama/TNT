@@ -69,7 +69,12 @@ bool identity_table_forget_key(identity_table_t *table,
 bool identity_is_reserved(const char *name);
 bool identity_handle_for_key(const char *fingerprint, char *handle,
                              size_t handle_size);
-int identity_reserve(const char *handle, const char *fingerprint);
+/* `previous` receives the handle `fingerprint` was bound to before, or ""
+ * when it was bound to none. */
+int identity_reserve(const char *handle, const char *fingerprint,
+                     char *previous, size_t previous_size);
+/* Returns 1 when the key was bound and is now forgotten, 0 when it was not
+ * bound, and -1 on failure. */
 int identity_forget_key(const char *fingerprint);
 
 #endif /* IDENTITY_H */

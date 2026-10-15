@@ -470,17 +470,27 @@ bool identity_handle_for_key(const char *fingerprint, char *handle,
     return found != NULL;
 }
 
-int identity_reserve(const char *handle, const char *fingerprint) {
+int identity_reserve(const char *handle, const char *fingerprint,
+                     char *previous, size_t previous_size) {
     char path[PATH_MAX];
+    const char *holder;
     int rc = -1;
 
+    if (previous && previous_size > 0) {
+        previous[0] = '\0';
+    }
     if (identities_path(path, sizeof(path)) < 0) {
         return -1;
     }
     pthread_mutex_lock(&g_identity_lock);
-    if (refresh_locked(path) == 0 &&
-        identity_table_add(&g_identities, handle, fingerprint) == 0) {
-        rc = save_locked(path);
+    if (refresh_locked(path) == 0) {
+        holder = identity_table_handle_for_key(&g_identities, fingerprint);
+        if (holder && previous && previous_size > 0) {
+            snprintf(previous, previous_size, "%s", holder);
+        }
+        if (identity_table_add(&g_identities, handle, fingerprint) == 0) {
+            rc = save_locked(path);
+        }
     }
     pthread_mutex_unlock(&g_identity_lock);
     return rc;
@@ -496,7 +506,7 @@ int identity_forget_key(const char *fingerprint) {
     pthread_mutex_lock(&g_identity_lock);
     if (refresh_locked(path) == 0) {
         rc = identity_table_forget_key(&g_identities, fingerprint)
-                 ? save_locked(path)
+                 ? (save_locked(path) == 0 ? 1 : -1)
                  : 0;
     }
     pthread_mutex_unlock(&g_identity_lock);
