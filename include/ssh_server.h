@@ -65,6 +65,8 @@ typedef struct client {
     char ssh_login[MAX_USERNAME_LEN];
     char session_id[32];             /* Opaque id an identity module sees */
     char key_fingerprint[TNT_IDENTITY_FINGERPRINT_SIZE];  /* Signed SSH key */
+    bool has_client_lang;            /* The client sent LANG or LC_* */
+    ui_lang_t client_lang;
     time_t connect_time;
     time_t last_active;
     atomic_bool redraw_pending;

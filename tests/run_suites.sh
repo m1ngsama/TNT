@@ -2,6 +2,9 @@
 set -u
 
 BASE_PORT=${PORT:-2222}
+# ssh forwards these (SendEnv), and a session follows them over the server's
+# TNT_LANG, so a developer's locale would change what the suites see.
+unset LANG LC_ALL LC_MESSAGES
 JOBS=${INTEGRATION_JOBS:-4}
 
 # Slowest first, so the last job slot never waits on a long suite.
@@ -23,7 +26,8 @@ vim_keymap 12
 wide_text_view 9
 module_privileged 16
 identity 17
-module_private 18"
+module_private 18
+client_lang 19"
 
 WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-suites.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT
