@@ -1642,7 +1642,7 @@ void input_run_session(client_t *client) {
      * leaves `ssh vim@host` free to mean "give me the vim keys". */
     client->keymap = tnt_keymap_from_login(client->ssh_login, g_default_keymap);
     client->follow_tail = true;
-    client->ui_lang = g_default_ui_lang;
+    client->ui_lang = client->has_client_lang ? client->client_lang : g_default_ui_lang;
     client->connected = true;
     client->command_history_count = 0;
     client->command_history_pos = 0;

@@ -1,6 +1,7 @@
 #include "bootstrap.h"
 #include "client.h"
 #include "common.h"
+#include "i18n.h"
 #include "identity.h"
 #include "input.h"
 #include "ratelimit.h"
@@ -27,6 +28,8 @@ typedef struct {
     char client_ip[INET6_ADDRSTRLEN];
     char requested_user[MAX_USERNAME_LEN];
     char key_fingerprint[TNT_IDENTITY_FINGERPRINT_SIZE];
+    int lang_rank;              /* 0 none, 1 LANG, 2 LC_MESSAGES, 3 LC_ALL */
+    ui_lang_t lang;
     int pty_width;
     int pty_height;
     char exec_command[MAX_EXEC_COMMAND_LEN];
@@ -422,6 +425,28 @@ static int channel_pty_window_change(ssh_session session, ssh_channel channel,
     return SSH_OK;
 }
 
+/* OpenSSH clients send LANG and LC_* by default (SendEnv), which lets each
+ * session start in its own language.  Nothing is exported to the process. */
+static int channel_env_request(ssh_session session, ssh_channel channel,
+                               const char *name, const char *value,
+                               void *userdata) {
+    (void)session;
+    (void)channel;
+    session_context_t *ctx = (session_context_t *)userdata;
+    int rank = !name                          ? 0
+               : strcmp(name, "LC_ALL") == 0      ? 3
+               : strcmp(name, "LC_MESSAGES") == 0 ? 2
+               : strcmp(name, "LANG") == 0        ? 1
+                                                  : 0;
+    ui_lang_t lang;
+
+    if (rank > ctx->lang_rank && i18n_try_parse_ui_lang(value, &lang)) {
+        ctx->lang_rank = rank;
+        ctx->lang = lang;
+    }
+    return SSH_OK;
+}
+
 /* Shell request callback */
 static int channel_shell_request(ssh_session session, ssh_channel channel,
                                  void *userdata) {
@@ -478,6 +503,7 @@ static void setup_session_channel_callbacks(ssh_channel channel,
     ctx->channel_cb->channel_shell_request_function = channel_shell_request;
     ctx->channel_cb->channel_pty_window_change_function = channel_pty_window_change;
     ctx->channel_cb->channel_exec_request_function = channel_exec_request;
+    ctx->channel_cb->channel_env_request_function = channel_env_request;
 
     ssh_set_channel_callbacks(channel, ctx->channel_cb);
 }
@@ -681,6 +707,8 @@ void *bootstrap_run(void *arg) {
     }
     snprintf(client->key_fingerprint, sizeof(client->key_fingerprint), "%s",
              ctx->key_fingerprint);
+    client->has_client_lang = ctx->lang_rank > 0;
+    client->client_lang = ctx->lang;
     if (ctx->exec_command[0] != '\0') {
         strncpy(client->exec_command, ctx->exec_command,
                 sizeof(client->exec_command) - 1);

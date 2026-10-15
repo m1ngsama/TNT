@@ -519,6 +519,12 @@ The default is
 .TQ
 .BI ":language " [en|zh]
 Show or set the session interface language.
+A session starts in the language the SSH client sends in
+.BR LC_ALL ,
+.B LC_MESSAGES
+or
+.BR LANG ,
+when it is English or Chinese, and in the server's language otherwise.
 .TP
 .B :help
 Open the concise interactive manual.

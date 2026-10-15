@@ -239,6 +239,10 @@ An invalid explicit value selects English.
 Select the language when
 .B TNT_LANG
 is unset, in the precedence shown.
+A session whose SSH client sends one of these variables, as OpenSSH does by
+default with
+.BR SendEnv ,
+starts in that language instead; otherwise it uses the server's.
 .TP
 .B TNT_MAX_CONNECTIONS
 Global connection limit.
