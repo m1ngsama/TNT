@@ -47,16 +47,20 @@ typedef enum module_event_kind {
     MODULE_EVENT_PRESENCE_LEFT,
     MODULE_EVENT_PRESENCE_SNAPSHOT,
     MODULE_EVENT_IDENTITY_REQUESTED,
+    MODULE_EVENT_IDENTITY_RECOGNIZED,
+    MODULE_EVENT_IDENTITY_KEY_BOUND,
+    MODULE_EVENT_IDENTITY_SIGNED_OUT,
     MODULE_EVENT_PRIVATE_CREATED
 } module_event_kind_t;
 
-/* An identity request carries the nickname in msg.username and the session
- * id in msg.content.  A private message carries its sender in msg.username
- * and its recipient in target. */
+/* Identity events carry the nickname or handle in msg.username and the
+ * session id in msg.content, and a previous handle in target.  A private
+ * message carries its sender in msg.username and its recipient in target. */
 typedef struct module_event {
     module_event_kind_t kind;
     message_t msg;
     char target[MAX_USERNAME_LEN];
+    char fingerprint[TNT_IDENTITY_FINGERPRINT_SIZE];
     uint64_t event_id;
 } module_event_t;
 
@@ -84,7 +88,7 @@ typedef struct module_process {
     size_t queued_event_count;
     bool queue_running;
     bool saturation_reported;
-    unsigned dropped_presence;
+    unsigned dropped_notifications;
     bool queue_initialized;
     bool worker_started;
 } module_process_t;
@@ -820,8 +824,11 @@ static module_queue_push_result_t module_queue_push(module_process_t *module,
         if (module->queue_running && queue_full && active &&
             (event->kind == MODULE_EVENT_PRESENCE_JOINED ||
              event->kind == MODULE_EVENT_PRESENCE_LEFT ||
-             event->kind == MODULE_EVENT_PRESENCE_SNAPSHOT)) {
-            module->dropped_presence++;
+             event->kind == MODULE_EVENT_PRESENCE_SNAPSHOT ||
+             event->kind == MODULE_EVENT_IDENTITY_RECOGNIZED ||
+             event->kind == MODULE_EVENT_IDENTITY_KEY_BOUND ||
+             event->kind == MODULE_EVENT_IDENTITY_SIGNED_OUT)) {
+            module->dropped_notifications++;
         } else if (module->queue_running && queue_full && active &&
                    !module->saturation_reported) {
             module->saturation_reported = true;
@@ -853,17 +860,17 @@ static void take_queued_event_locked(module_process_t *module,
     }
 }
 
-static void report_dropped_presence(module_process_t *module) {
+static void report_dropped_notifications(module_process_t *module) {
     unsigned dropped;
 
     pthread_mutex_lock(&module->queue_lock);
-    dropped = module->dropped_presence;
-    module->dropped_presence = 0;
+    dropped = module->dropped_notifications;
+    module->dropped_notifications = 0;
     pthread_mutex_unlock(&module->queue_lock);
     if (dropped > 0) {
         fprintf(stderr,
-                "module runtime: event queue full for %s, dropped %u presence "
-                "events\n",
+                "module runtime: event queue full for %s, dropped %u "
+                "notifications\n",
                 module->manifest.name, dropped);
     }
 }
@@ -1285,6 +1292,38 @@ static void deliver_identity_request_to_module(module_process_t *module,
     (void)write_module_record(module, record);
 }
 
+static void deliver_identity_notification_to_module(
+    module_process_t *module, const module_event_t *event) {
+    char record[TNT_MODULE_LINE_MAX] = "";
+    size_t pos = 0;
+    int rc = -1;
+
+    switch (event->kind) {
+        case MODULE_EVENT_IDENTITY_RECOGNIZED:
+            rc = tnt_module_append_identity_recognized(
+                record, sizeof(record), &pos, event->msg.content,
+                event->msg.username, event->fingerprint);
+            break;
+        case MODULE_EVENT_IDENTITY_KEY_BOUND:
+            rc = tnt_module_append_identity_key_bound(
+                record, sizeof(record), &pos, event->msg.content,
+                event->msg.username, event->fingerprint, event->target);
+            break;
+        case MODULE_EVENT_IDENTITY_SIGNED_OUT:
+            rc = tnt_module_append_identity_signed_out(
+                record, sizeof(record), &pos, event->msg.content,
+                event->msg.username, event->fingerprint);
+            break;
+        default:
+            break;
+    }
+    if (rc < 0) {
+        disable_module(module, "event encoding failure");
+        return;
+    }
+    (void)write_module_record(module, record);
+}
+
 static void deliver_private_to_module(module_process_t *module,
                                       const module_event_t *event) {
     char record[TNT_MODULE_LINE_MAX] = "";
@@ -1354,6 +1393,11 @@ static void deliver_event_to_module(module_process_t *module,
         case MODULE_EVENT_IDENTITY_REQUESTED:
             deliver_identity_request_to_module(module, event);
             break;
+        case MODULE_EVENT_IDENTITY_RECOGNIZED:
+        case MODULE_EVENT_IDENTITY_KEY_BOUND:
+        case MODULE_EVENT_IDENTITY_SIGNED_OUT:
+            deliver_identity_notification_to_module(module, event);
+            break;
         case MODULE_EVENT_PRIVATE_CREATED:
             deliver_private_to_module(module, event);
             break;
@@ -1416,7 +1460,7 @@ static void *module_worker_main(void *arg) {
         if (popped == MODULE_POP_STOPPED) {
             return NULL;
         }
-        report_dropped_presence(module);
+        report_dropped_notifications(module);
         if (popped == MODULE_POP_EVENT) {
             deliver_event_to_module(module, &event);
         }
@@ -1693,12 +1737,23 @@ void tnt_module_runtime_publish_presence(const char *nickname, bool joined) {
     pthread_mutex_unlock(&g_dispatch_lock);
 }
 
+static bool push_identity_event(const module_event_t *event) {
+    module_queue_push_result_t pushed = MODULE_QUEUE_DROPPED;
+
+    pthread_mutex_lock(&g_dispatch_lock);
+    if (g_accepting && g_identity_module &&
+        !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+        pushed = module_queue_push(g_identity_module, event);
+    }
+    pthread_mutex_unlock(&g_dispatch_lock);
+    return pushed == MODULE_QUEUE_PUSHED;
+}
+
 bool tnt_module_runtime_request_identity(const char *session,
                                          const char *nickname) {
     module_event_t event = {
         .kind = MODULE_EVENT_IDENTITY_REQUESTED,
     };
-    module_queue_push_result_t pushed = MODULE_QUEUE_DROPPED;
 
     if (!session || session[0] == '\0' || !nickname) {
         return false;
@@ -1706,13 +1761,33 @@ bool tnt_module_runtime_request_identity(const char *session,
     snprintf(event.msg.username, sizeof(event.msg.username), "%s", nickname);
     snprintf(event.msg.content, sizeof(event.msg.content), "%s", session);
 
-    pthread_mutex_lock(&g_dispatch_lock);
-    if (g_accepting && g_identity_module &&
-        !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
-        pushed = module_queue_push(g_identity_module, &event);
+    return push_identity_event(&event);
+}
+
+void tnt_module_runtime_notify_identity(tnt_identity_notification_t kind,
+                                        const char *session,
+                                        const char *handle,
+                                        const char *fingerprint,
+                                        const char *previous_handle) {
+    static const module_event_kind_t kinds[] = {
+        [TNT_IDENTITY_RECOGNIZED] = MODULE_EVENT_IDENTITY_RECOGNIZED,
+        [TNT_IDENTITY_KEY_BOUND] = MODULE_EVENT_IDENTITY_KEY_BOUND,
+        [TNT_IDENTITY_SIGNED_OUT] = MODULE_EVENT_IDENTITY_SIGNED_OUT,
+    };
+    module_event_t event = {
+        .kind = kinds[kind],
+    };
+
+    if (!session || session[0] == '\0' || !handle) {
+        return;
     }
-    pthread_mutex_unlock(&g_dispatch_lock);
-    return pushed == MODULE_QUEUE_PUSHED;
+    snprintf(event.msg.username, sizeof(event.msg.username), "%s", handle);
+    snprintf(event.msg.content, sizeof(event.msg.content), "%s", session);
+    snprintf(event.fingerprint, sizeof(event.fingerprint), "%s",
+             fingerprint ? fingerprint : "");
+    snprintf(event.target, sizeof(event.target), "%s",
+             previous_handle ? previous_handle : "");
+    (void)push_identity_event(&event);
 }
 
 int tnt_module_runtime_copy_remote_users(char (*out)[MAX_USERNAME_LEN],

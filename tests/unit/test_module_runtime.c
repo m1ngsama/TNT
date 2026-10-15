@@ -604,7 +604,7 @@ TEST(presence_saturation_logs_outside_the_notifier) {
     read_file(log_path, log, sizeof(log));
     assert(log[0] == '\0');
 
-    for (int i = 0; i < 100 && !strstr(log, "dropped 72 presence"); i++) {
+    for (int i = 0; i < 100 && !strstr(log, "dropped 72 notifications"); i++) {
         sleep_millis(50);
         read_file(log_path, log, sizeof(log));
     }
@@ -614,7 +614,7 @@ TEST(presence_saturation_logs_outside_the_notifier) {
     close(saved_stderr);
     close(log_fd);
     assert(strstr(log, "module runtime: event queue full for stall, "
-                       "dropped 72 presence events") != NULL);
+                       "dropped 72 notifications") != NULL);
 
     for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
         snprintf(nickname, sizeof(nickname), "user%d", i);

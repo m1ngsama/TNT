@@ -72,6 +72,77 @@ TEST(appends_identity_requested_jsonl) {
                        "\"nickname\":\"al\\\"ice\"}\n") == 0);
 }
 
+#define FP "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"
+
+TEST(appends_identity_recognized_jsonl) {
+    char out[256] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_identity_recognized(out, sizeof(out), &pos,
+                                                 "s-3", "alice", FP) == 0);
+    assert(strcmp(out, "{\"type\":\"identity.recognized\",\"session\":"
+                       "\"s-3\",\"handle\":\"alice\",\"fingerprint\":\""
+                       FP "\"}\n") == 0);
+    pos = 0;
+    assert(tnt_module_append_identity_recognized(out, sizeof(out), &pos,
+                                                 "s-3", "alice", "") < 0);
+    assert(tnt_module_append_identity_recognized(out, sizeof(out), &pos,
+                                                 "s-3", "Alice", FP) < 0);
+    assert(tnt_module_append_identity_recognized(out, sizeof(out), &pos,
+                                                 "", "alice", FP) < 0);
+}
+
+TEST(appends_identity_key_bound_jsonl) {
+    char out[256] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_identity_key_bound(out, sizeof(out), &pos,
+                                                "s-4", "alice", FP, "") == 0);
+    assert(strcmp(out, "{\"type\":\"identity.key_bound\",\"session\":"
+                       "\"s-4\",\"handle\":\"alice\",\"fingerprint\":\""
+                       FP "\"}\n") == 0);
+    out[0] = '\0';
+    pos = 0;
+    assert(tnt_module_append_identity_key_bound(out, sizeof(out), &pos,
+                                                "s-4", "alice", FP,
+                                                "bob") == 0);
+    assert(strcmp(out, "{\"type\":\"identity.key_bound\",\"session\":"
+                       "\"s-4\",\"handle\":\"alice\",\"fingerprint\":\""
+                       FP "\",\"previous_handle\":\"bob\"}\n") == 0);
+    pos = 0;
+    assert(tnt_module_append_identity_key_bound(out, sizeof(out), &pos,
+                                                "s-4", "alice", NULL,
+                                                NULL) < 0);
+    assert(tnt_module_append_identity_key_bound(out, sizeof(out), &pos,
+                                                "s-4", "alice", FP,
+                                                "B\"ob") < 0);
+    assert(tnt_module_append_identity_key_bound(out, 40, &pos, "s-4",
+                                                "alice", FP, NULL) < 0);
+}
+
+TEST(appends_identity_signed_out_jsonl) {
+    char out[256] = "";
+    size_t pos = 0;
+
+    assert(tnt_module_append_identity_signed_out(out, sizeof(out), &pos,
+                                                 "s-5", "alice", NULL) == 0);
+    assert(strcmp(out, "{\"type\":\"identity.signed_out\",\"session\":"
+                       "\"s-5\",\"handle\":\"alice\","
+                       "\"forgot_key\":false}\n") == 0);
+    out[0] = '\0';
+    pos = 0;
+    assert(tnt_module_append_identity_signed_out(out, sizeof(out), &pos,
+                                                 "s-5", "alice", FP) == 0);
+    assert(strcmp(out, "{\"type\":\"identity.signed_out\",\"session\":"
+                       "\"s-5\",\"handle\":\"alice\","
+                       "\"forgot_key\":true,\"fingerprint\":\"" FP
+                       "\"}\n") == 0);
+    pos = 0;
+    assert(tnt_module_append_identity_signed_out(out, sizeof(out), &pos,
+                                                 "s-5", "alice",
+                                                 "SHA256:x") < 0);
+}
+
 TEST(parse_identity_records) {
     tnt_module_identity_record_t record;
 
@@ -392,6 +463,9 @@ int main(void) {
     RUN_TEST(appends_message_created_jsonl_with_escaping);
     RUN_TEST(appends_verified_metadata);
     RUN_TEST(appends_identity_requested_jsonl);
+    RUN_TEST(appends_identity_recognized_jsonl);
+    RUN_TEST(appends_identity_key_bound_jsonl);
+    RUN_TEST(appends_identity_signed_out_jsonl);
     RUN_TEST(parse_identity_records);
     RUN_TEST(parse_identity_records_rejects_invalid);
     RUN_TEST(parse_message_create_accepts_valid_plain_text);

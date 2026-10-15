@@ -12,6 +12,9 @@
 #define TNT_MODULE_EVENT_PRESENCE_LEFT "presence.left"
 #define TNT_MODULE_EVENT_PRESENCE_SNAPSHOT "presence.snapshot"
 #define TNT_MODULE_EVENT_IDENTITY_REQUESTED "identity.requested"
+#define TNT_MODULE_EVENT_IDENTITY_RECOGNIZED "identity.recognized"
+#define TNT_MODULE_EVENT_IDENTITY_KEY_BOUND "identity.key_bound"
+#define TNT_MODULE_EVENT_IDENTITY_SIGNED_OUT "identity.signed_out"
 #define TNT_MODULE_RECORD_IDENTITY_PREFIX "identity."
 #define TNT_MODULE_RECORD_PRESENCE_REMOTE "presence.remote"
 #define TNT_MODULE_RECORD_PRIVATE_POST "private.post"
@@ -71,6 +74,24 @@ int tnt_module_append_presence_snapshot(char *buffer, size_t buf_size,
 int tnt_module_append_identity_requested(char *buffer, size_t buf_size,
                                          size_t *pos, const char *session,
                                          const char *nickname);
+
+int tnt_module_append_identity_recognized(char *buffer, size_t buf_size,
+                                          size_t *pos, const char *session,
+                                          const char *handle,
+                                          const char *fingerprint);
+
+/* An empty or NULL `previous_handle` means the key was bound to no handle. */
+int tnt_module_append_identity_key_bound(char *buffer, size_t buf_size,
+                                         size_t *pos, const char *session,
+                                         const char *handle,
+                                         const char *fingerprint,
+                                         const char *previous_handle);
+
+/* An empty or NULL `forgotten_fingerprint` means no key was forgotten. */
+int tnt_module_append_identity_signed_out(char *buffer, size_t buf_size,
+                                          size_t *pos, const char *session,
+                                          const char *handle,
+                                          const char *forgotten_fingerprint);
 
 int tnt_module_append_private_created(char *buffer, size_t buf_size,
                                       size_t *pos, const char *from,

@@ -1,7 +1,8 @@
 #!/bin/sh
 # Verified identities: :login through an identity:write module, reserved
 # and look-alike names, :logout, SSH key sign-in, the verified mark, verified
-# metadata and log flags, and exec post.
+# metadata and log flags, exec post, and the identity notifications the
+# module receives.
 
 . ./lib.sh
 
@@ -25,9 +26,11 @@ export TNT_IDENT_EVENTS
 ssh-keygen -q -t ed25519 -N "" -C "" -f "$KEY"
 ssh-keygen -q -t ed25519 -N "" -C "" -f "$OTHER_KEY"
 FINGERPRINT=$(ssh-keygen -lf "$KEY.pub" | cut -d' ' -f2)
+OTHER_FINGERPRINT=$(ssh-keygen -lf "$OTHER_KEY.pub" | cut -d' ' -f2)
 
 SSH_KEYLESS="$(tnt_ssh_opts "$PORT") -o PubkeyAuthentication=no"
 SSH_KEY="$(tnt_ssh_opts "$PORT") -o IdentitiesOnly=yes -i $KEY"
+SSH_OTHER_KEY="$(tnt_ssh_opts "$PORT") -o IdentitiesOnly=yes -i $OTHER_KEY"
 SSH_EXEC="ssh -n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 -o BatchMode=yes -o LogLevel=ERROR -o IdentitiesOnly=yes -p $PORT"
 
@@ -43,6 +46,12 @@ $2
 close
 EOF
     expect -f "$_script" >"$STATE_DIR/$1.session.log" 2>&1
+}
+
+# Print the session id of the :login made under nickname $1.
+login_session() {
+    sed -n "s/.*\"identity.requested\",\"session\":\"\([^\"]*\)\",\"nickname\":\"$1\"}.*/\1/p" \
+        "$TNT_IDENT_EVENTS" | tail -n 1
 }
 
 # --- Without an identity module ------------------------------------------
@@ -123,8 +132,13 @@ while IFS= read -r line; do
       printf '{"type":"identity.reserve","handle":"webby"}\n' ;;
     *'"type":"identity.requested"'*)
       session=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+      case "$line" in
+        *'"nickname":"erin"'*) handle=erin ;;
+        *'"nickname":"gus"'*) handle=gus ;;
+        *) handle=alice ;;
+      esac
       printf '{"type":"identity.notice","session":"%s","plain_text":"Enter code TEST-CODE"}\n' "$session"
-      printf '{"type":"identity.verified","session":"%s","handle":"alice"}\n' "$session" ;;
+      printf '{"type":"identity.verified","session":"%s","handle":"%s"}\n' "$session" "$handle" ;;
     *'"type":"message.created"'*'"plain_text":"web hello"'*)
       printf '{"type":"event.ok"}\n' ;;
     *'"type":"message.created"'*'"plain_text":"reserve dora"'*)
@@ -272,6 +286,17 @@ else
     cat "$TNT_IDENT_EVENTS"
 fi
 
+BOB_SESSION=$(login_session bob)
+if [ -n "$BOB_SESSION" ] &&
+   tnt_wait_for_fixed "$TNT_IDENT_EVENTS" \
+        "{\"type\":\"identity.signed_out\",\"session\":\"$BOB_SESSION\",\"handle\":\"alice\",\"forgot_key\":false}" &&
+   ! grep -q '"identity.key_bound"' "$TNT_IDENT_EVENTS"; then
+    pass ":logout without a key sends identity.signed_out with forgot_key false"
+else
+    fail "identity.signed_out for a keyless session is wrong"
+    cat "$TNT_IDENT_EVENTS"
+fi
+
 if [ "$(head -n 1 "$LOG")" = "#tnt-message-log v3" ] &&
    grep -q '|alice|hello verified|v$' "$LOG" &&
    grep -q '|\*|alice waves|v$' "$LOG" &&
@@ -370,6 +395,16 @@ else
     cat "$IDENTITIES"
 fi
 
+CAROL_SESSION=$(login_session carol)
+if [ -n "$CAROL_SESSION" ] &&
+   tnt_wait_for_fixed "$TNT_IDENT_EVENTS" \
+        "{\"type\":\"identity.key_bound\",\"session\":\"$CAROL_SESSION\",\"handle\":\"alice\",\"fingerprint\":\"$FINGERPRINT\"}"; then
+    pass "binding a key sends identity.key_bound"
+else
+    fail "identity.key_bound is missing or wrong"
+    cat "$TNT_IDENT_EVENTS"
+fi
+
 if run_session otherlogin '
 expect {
     "): " {}
@@ -392,6 +427,15 @@ if [ "$POST_STATUS" -eq 0 ] && [ "$POST_OUTPUT" = "posted" ] &&
     pass "exec post under a reserved name works with its key and is verified"
 else
     fail "exec post with the bound key: $POST_STATUS $POST_OUTPUT"
+fi
+
+# Events reach the module in order, so everything queued before the post
+# above has arrived.
+if ! grep -q '"identity.recognized"' "$TNT_IDENT_EVENTS"; then
+    pass "exec recognition by key sends no identity.recognized"
+else
+    fail "exec recognition sent identity.recognized"
+    cat "$TNT_IDENT_EVENTS"
 fi
 
 POST_OUTPUT=$($SSH_EXEC -i "$OTHER_KEY" Alice@127.0.0.1 post "forged" 2>&1)
@@ -433,6 +477,72 @@ if tnt_poll_until 5 sh -c "! grep -qF '$FINGERPRINT' '$IDENTITIES'" &&
 else
     fail ":logout left the key bound"
     cat "$IDENTITIES"
+fi
+
+AUTO_SESSION=$(sed -n 's/.*"identity.recognized","session":"\([^"]*\)".*/\1/p' \
+    "$TNT_IDENT_EVENTS" | tail -n 1)
+if [ -n "$AUTO_SESSION" ] &&
+   grep -qF "{\"type\":\"identity.recognized\",\"session\":\"$AUTO_SESSION\",\"handle\":\"alice\",\"fingerprint\":\"$FINGERPRINT\"}" \
+        "$TNT_IDENT_EVENTS" &&
+   [ "$(grep -c '"identity.recognized"' "$TNT_IDENT_EVENTS")" -eq 1 ]; then
+    pass "automatic sign-in by key sends identity.recognized"
+else
+    fail "identity.recognized is missing or wrong"
+    cat "$TNT_IDENT_EVENTS"
+fi
+
+if [ -n "$AUTO_SESSION" ] &&
+   tnt_wait_for_fixed "$TNT_IDENT_EVENTS" \
+        "{\"type\":\"identity.signed_out\",\"session\":\"$AUTO_SESSION\",\"handle\":\"alice\",\"forgot_key\":true,\"fingerprint\":\"$FINGERPRINT\"}"; then
+    pass ":logout with a bound key sends identity.signed_out with the key"
+else
+    fail "identity.signed_out for a keyed session is wrong"
+    cat "$TNT_IDENT_EVENTS"
+fi
+
+# A key bound to a handle signs its session in at connect, so a session
+# signs in with an already-bound key only when another process sharing the
+# identities file binds it meanwhile.  A reserved login name makes the
+# client offer its key; see auth_none().
+if run_session samebind "
+expect \"): \"
+send -- \"gus\r\"
+expect \"/help\"
+exec sh -c {echo 'gus $OTHER_FINGERPRINT' >>'$IDENTITIES'}
+send -- \"/login\r\"
+expect {
+    \"Signed in as @gus.\" {}
+    timeout { exit 1 }
+}
+" "$SSH_OTHER_KEY" webby && run_session moveto "
+expect \"): \"
+send -- \"erin\r\"
+expect \"/help\"
+exec sh -c {echo 'zed $FINGERPRINT' >>'$IDENTITIES'}
+send -- \"/login\r\"
+expect {
+    \"Signed in as @erin.\" {}
+    timeout { exit 1 }
+}
+" "$SSH_KEY" webby &&
+   tnt_wait_for_fixed "$TNT_IDENT_EVENTS" \
+        "{\"type\":\"identity.key_bound\",\"session\":\"$(login_session erin)\",\"handle\":\"erin\",\"fingerprint\":\"$FINGERPRINT\",\"previous_handle\":\"zed\"}" &&
+   tnt_wait_for_fixed "$IDENTITIES" "erin $FINGERPRINT"; then
+    pass "moving a key from another handle sends identity.key_bound with previous_handle"
+else
+    fail "identity.key_bound for a moved key is wrong"
+    tnt_dump_session samebind
+    tnt_dump_session moveto
+    cat "$TNT_IDENT_EVENTS"
+fi
+
+# Events reach the module in order, so gus's sign-in has been reported.
+if [ "$(grep -c '"identity.key_bound"' "$TNT_IDENT_EVENTS")" -eq 2 ] &&
+   ! grep -q '"identity.key_bound".*"handle":"gus"' "$TNT_IDENT_EVENTS"; then
+    pass "signing in with a key already bound to the handle sends no identity.key_bound"
+else
+    fail "a key already bound to the handle sent identity.key_bound"
+    cat "$TNT_IDENT_EVENTS"
 fi
 
 if ! grep -q "disabling ident" "$STATE_DIR/server.log"; then

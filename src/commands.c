@@ -626,9 +626,12 @@ void commands_dispatch(client_t *client) {
                            i18n_text(client->ui_lang,
                                      I18N_LOGOUT_NOT_SIGNED_IN));
         } else {
-            if (client->key_fingerprint[0] != '\0') {
-                (void)identity_forget_key(client->key_fingerprint);
-            }
+            bool forgot = client->key_fingerprint[0] != '\0' &&
+                          identity_forget_key(client->key_fingerprint) == 1;
+
+            tnt_module_runtime_notify_identity(
+                TNT_IDENTITY_SIGNED_OUT, client->session_id, client->username,
+                forgot ? client->key_fingerprint : NULL, NULL);
             commands_become_anonymous(client);
             buffer_appendf(output, sizeof(output), &pos,
                            i18n_text(client->ui_lang,

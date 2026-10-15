@@ -147,6 +147,98 @@ int tnt_module_append_identity_requested(char *buffer, size_t buf_size,
     return append_result(before, *pos, buf_size);
 }
 
+static void append_identity_head(char *buffer, size_t buf_size, size_t *pos,
+                                 const char *type, const char *session,
+                                 const char *handle) {
+    buffer_appendf(buffer, buf_size, pos, "{\"type\":\"%s\",\"session\":",
+                   type);
+    tnt_json_append_string(buffer, buf_size, pos, session);
+    buffer_appendf(buffer, buf_size, pos, ",\"handle\":");
+    tnt_json_append_string(buffer, buf_size, pos, handle);
+}
+
+static bool identity_args_valid(const char *session, const char *handle) {
+    return session && session[0] != '\0' && identity_handle_valid(handle);
+}
+
+int tnt_module_append_identity_recognized(char *buffer, size_t buf_size,
+                                          size_t *pos, const char *session,
+                                          const char *handle,
+                                          const char *fingerprint) {
+    size_t before;
+
+    if (!buffer || !pos || buf_size == 0 ||
+        !identity_args_valid(session, handle) ||
+        !identity_fingerprint_valid(fingerprint)) {
+        return -1;
+    }
+
+    before = *pos;
+    append_identity_head(buffer, buf_size, pos,
+                         TNT_MODULE_EVENT_IDENTITY_RECOGNIZED, session, handle);
+    buffer_appendf(buffer, buf_size, pos, ",\"fingerprint\":");
+    tnt_json_append_string(buffer, buf_size, pos, fingerprint);
+    buffer_appendf(buffer, buf_size, pos, "}\n");
+
+    return append_result(before, *pos, buf_size);
+}
+
+int tnt_module_append_identity_key_bound(char *buffer, size_t buf_size,
+                                         size_t *pos, const char *session,
+                                         const char *handle,
+                                         const char *fingerprint,
+                                         const char *previous_handle) {
+    bool moved = previous_handle && previous_handle[0] != '\0';
+    size_t before;
+
+    if (!buffer || !pos || buf_size == 0 ||
+        !identity_args_valid(session, handle) ||
+        !identity_fingerprint_valid(fingerprint) ||
+        (moved && !identity_handle_valid(previous_handle))) {
+        return -1;
+    }
+
+    before = *pos;
+    append_identity_head(buffer, buf_size, pos,
+                         TNT_MODULE_EVENT_IDENTITY_KEY_BOUND, session, handle);
+    buffer_appendf(buffer, buf_size, pos, ",\"fingerprint\":");
+    tnt_json_append_string(buffer, buf_size, pos, fingerprint);
+    if (moved) {
+        buffer_appendf(buffer, buf_size, pos, ",\"previous_handle\":");
+        tnt_json_append_string(buffer, buf_size, pos, previous_handle);
+    }
+    buffer_appendf(buffer, buf_size, pos, "}\n");
+
+    return append_result(before, *pos, buf_size);
+}
+
+int tnt_module_append_identity_signed_out(char *buffer, size_t buf_size,
+                                          size_t *pos, const char *session,
+                                          const char *handle,
+                                          const char *forgotten_fingerprint) {
+    bool forgot = forgotten_fingerprint && forgotten_fingerprint[0] != '\0';
+    size_t before;
+
+    if (!buffer || !pos || buf_size == 0 ||
+        !identity_args_valid(session, handle) ||
+        (forgot && !identity_fingerprint_valid(forgotten_fingerprint))) {
+        return -1;
+    }
+
+    before = *pos;
+    append_identity_head(buffer, buf_size, pos,
+                         TNT_MODULE_EVENT_IDENTITY_SIGNED_OUT, session, handle);
+    buffer_appendf(buffer, buf_size, pos, ",\"forgot_key\":%s",
+                   forgot ? "true" : "false");
+    if (forgot) {
+        buffer_appendf(buffer, buf_size, pos, ",\"fingerprint\":");
+        tnt_json_append_string(buffer, buf_size, pos, forgotten_fingerprint);
+    }
+    buffer_appendf(buffer, buf_size, pos, "}\n");
+
+    return append_result(before, *pos, buf_size);
+}
+
 int tnt_module_append_private_created(char *buffer, size_t buf_size,
                                       size_t *pos, const char *from,
                                       const char *to, const char *plain_text,

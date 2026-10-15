@@ -300,13 +300,20 @@ bool input_identity_notice(const char *session, const char *plain_text) {
 
 bool input_identity_verified(const char *session, const char *handle) {
     client_t *client = input_find_session(session);
+    char previous[TNT_IDENTITY_HANDLE_MAX + 1];
 
     if (!client) {
         return false;
     }
-    (void)identity_reserve(handle, client->key_fingerprint[0] != '\0'
-                                       ? client->key_fingerprint
-                                       : NULL);
+    if (client->key_fingerprint[0] == '\0') {
+        (void)identity_reserve(handle, NULL, NULL, 0);
+    } else if (identity_reserve(handle, client->key_fingerprint, previous,
+                                sizeof(previous)) == 0 &&
+               strcasecmp(previous, handle) != 0) {
+        tnt_module_runtime_notify_identity(TNT_IDENTITY_KEY_BOUND, session,
+                                           handle, client->key_fingerprint,
+                                           previous);
+    }
     input_post_identity(client, NULL, handle, false);
     client_release(client);
     return true;
@@ -347,7 +354,7 @@ static void evict_unverified_holders(const client_t *self, const char *handle) {
 }
 
 int input_identity_reserve(const char *handle) {
-    int rc = identity_reserve(handle, NULL);
+    int rc = identity_reserve(handle, NULL, NULL, 0);
 
     if (rc == 0) {
         evict_unverified_holders(NULL, handle);
@@ -1697,6 +1704,10 @@ void input_run_session(client_t *client) {
     }
     joined_room = true;
     if (client->verified) {
+        tnt_module_runtime_notify_identity(TNT_IDENTITY_RECOGNIZED,
+                                           client->session_id,
+                                           client->username,
+                                           client->key_fingerprint, NULL);
         evict_unverified_holders(client, client->username);
     }
 

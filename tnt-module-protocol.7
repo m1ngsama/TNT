@@ -1,4 +1,4 @@
-.TH TNT-MODULE-PROTOCOL 7 "2026-10-14" "TNT 1.7.0"
+.TH TNT-MODULE-PROTOCOL 7 "2026-10-15" "TNT 1.8.0"
 .SH NAME
 tnt-module-protocol \- implement an external TNT message module
 .SH DESCRIPTION
@@ -379,8 +379,12 @@ the module, and once the queue has room again it reports how many were
 dropped on standard error:
 .P
 .EX
-module runtime: event queue full for NAME, dropped N presence events
+module runtime: event queue full for NAME, dropped N notifications
 .EE
+.P
+The identity notifications described under
+.B identity:write
+are dropped and counted the same way.
 .SS identity:write
 The module holding
 .B identity:write
@@ -407,6 +411,56 @@ names the interactive session.
 Like presence records, this notification opens no response window and must
 not be answered with
 .BR event.ok .
+.P
+TNT also tells the module about sign-in changes it makes itself, so the
+module can record them.
+These notifications open no response window either.
+.B fingerprint
+is formatted the way
+.B ssh\-keygen \-l
+prints it.
+.TP
+.B identity.recognized
+.EX
+{"type":"identity.recognized","session":"s-2","handle":"alice",\c
+"fingerprint":"SHA256:..."}
+.EE
+.IP
+An interactive session was signed in at connect because its SSH key is
+bound to
+.BR handle .
+An exec request such as
+.B post
+that is recognised by its key is not a sign-in and sends nothing.
+.TP
+.B identity.key_bound
+.EX
+{"type":"identity.key_bound","session":"s-1","handle":"alice",\c
+"fingerprint":"SHA256:...","previous_handle":"bob"}
+.EE
+.IP
+.B identity.verified
+bound the session's key to
+.BR handle .
+.B previous_handle
+is present only when the key moved from another handle.
+TNT sends nothing when the key was already bound to
+.BR handle ,
+or when the session has no key.
+.TP
+.B identity.signed_out
+.EX
+{"type":"identity.signed_out","session":"s-2","handle":"alice",\c
+"forgot_key":true,"fingerprint":"SHA256:..."}
+.EE
+.IP
+The user ran
+.BR :logout .
+.B forgot_key
+is true when TNT unbound the session's key from its handle, and only then
+is
+.B fingerprint
+present.
 .P
 The module may write these records at any time, as with
 .BR message.post :
