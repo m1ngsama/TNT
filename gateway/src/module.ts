@@ -2,11 +2,13 @@ export type TntEvent =
   | { type: "handshake"; version: string }
   | { type: "message.created"; message: { timestamp: string; sender: string; plain_text: string; verified: boolean } }
   | { type: "identity.requested"; session: string }
+  | { type: "identity.changed"; action: IdentityAction; handle: string; detail: Record<string, string | boolean> }
   | { type: "private.created"; from: string; to: string; plain_text: string; timestamp: string; verified: boolean }
   | { type: "presence.snapshot"; nicknames: string[] }
   | { type: "presence.joined" | "presence.left"; nickname: string };
 
-export type RoomEvent = Exclude<TntEvent, { type: "handshake" | "identity.requested" | "private.created" }>;
+export type IdentityAction = "key_recognized" | "key_bound" | "signed_out";
+export type RoomEvent = Exclude<TntEvent, { type: "handshake" | "identity.requested" | "identity.changed" | "private.created" }>;
 export type PrivateEvent = Extract<TntEvent, { type: "private.created" }>;
 
 export const HANDSHAKE_OK = `${JSON.stringify({
@@ -67,6 +69,17 @@ export function parseTntLine(line: string): { reply: string | null; event: TntEv
       return isString(from) && isString(to) && isString(plain_text) && isString(timestamp)
         ? { reply: null, event: { type: "private.created", from, to, plain_text, timestamp, verified: record.verified === true } }
         : NOTHING;
+    }
+    case "identity.recognized":
+    case "identity.key_bound":
+    case "identity.signed_out": {
+      if (!isString(record.handle)) return NOTHING;
+      const action = ({ "identity.recognized": "key_recognized", "identity.key_bound": "key_bound", "identity.signed_out": "signed_out" } as const)[record.type];
+      const detail: Record<string, string | boolean> = {};
+      if (isString(record.fingerprint)) detail.fingerprint = record.fingerprint;
+      if (isString(record.previous_handle)) detail.previous_handle = record.previous_handle;
+      if (typeof record.forgot_key === "boolean") detail.forgot_key = record.forgot_key;
+      return { reply: null, event: { type: "identity.changed", action, handle: record.handle, detail } };
     }
     case "identity.requested":
       return isString(record.session) ? { reply: null, event: { type: "identity.requested", session: record.session } } : NOTHING;

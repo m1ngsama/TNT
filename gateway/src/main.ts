@@ -1,5 +1,6 @@
 import { createVerifier, remoteKeys } from "./auth";
 import { createGateway } from "./gateway";
+import { createReporter } from "./events";
 import { createGuard } from "./guard";
 import { Ledger, readHistory } from "./history";
 import { signIn } from "./identity";
@@ -22,6 +23,12 @@ const verify = createVerifier(issuer, remoteKeys(env.TNT_GATEWAY_JWKS_URL || `${
 let identity = false;
 let direct = false;
 const signingIn = new Set<string>();
+const eventsSecret = env.TNT_GATEWAY_EVENTS_SECRET;
+const reporter = eventsSecret ? createReporter({ issuer, secret: eventsSecret, file: `${stateDir}/gateway-events.json` }) : null;
+if (reporter) {
+  await reporter.load();
+  reporter.start();
+}
 const guard = createGuard({
   issuer,
   reserve: (handle) => {
@@ -62,6 +69,8 @@ for await (const line of console) {
     direct = supportsPrivate(event.version);
   } else if (event.type === "private.created") {
     gateway.handlePrivate(event);
+  } else if (event.type === "identity.changed") {
+    void reporter?.report({ handle: event.handle, type: `tnt.${event.action}`, detail: event.detail });
   } else if (event.type === "identity.requested") {
     const { session } = event;
     if (!identity || signingIn.has(session)) continue;
@@ -70,7 +79,10 @@ for await (const line of console) {
       issuer,
       verify,
       notice: (plain_text) => write(encodeRecord({ type: "identity.notice", session, plain_text })),
-      verified: (handle) => write(encodeRecord({ type: "identity.verified", session, handle })),
+      verified: (handle) => {
+        write(encodeRecord({ type: "identity.verified", session, handle }));
+        void reporter?.report({ handle, type: "tnt.signed_in", detail: { method: "device_code" } });
+      },
     }).finally(() => signingIn.delete(session));
   } else {
     if (identity && event.type === "presence.joined") void guard.check(event.nickname);
