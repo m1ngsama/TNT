@@ -49,6 +49,19 @@ describe("parseTntLine", () => {
     expect(supportsPrivate("1.6.0")).toBe(true);
   });
 
+  test("turns TNT's identity notifications into events", () => {
+    expect(parseTntLine('{"type":"identity.recognized","session":"s-8","handle":"lune","fingerprint":"SHA256:a"}').event).toEqual({
+      type: "identity.changed", action: "key_recognized", handle: "lune", detail: { fingerprint: "SHA256:a" },
+    });
+    expect(parseTntLine('{"type":"identity.key_bound","session":"s-9","handle":"lune","fingerprint":"SHA256:a","previous_handle":"zed"}').event).toEqual({
+      type: "identity.changed", action: "key_bound", handle: "lune", detail: { fingerprint: "SHA256:a", previous_handle: "zed" },
+    });
+    expect(parseTntLine('{"type":"identity.signed_out","session":"s-2","handle":"lune","forgot_key":false}')).toEqual({
+      reply: null, event: { type: "identity.changed", action: "signed_out", handle: "lune", detail: { forgot_key: false } },
+    });
+    expect(parseTntLine('{"type":"identity.signed_out","session":"s-2"}')).toEqual({ reply: null, event: null });
+  });
+
   test("parses presence records without answering them", () => {
     expect(parseTntLine('{"type":"presence.snapshot","nicknames":["a",1,"b"]}')).toEqual({
       reply: null,
