@@ -33,6 +33,8 @@ module_private 18
 client_lang 19
 cite 20
 read_marker 21"
+SUITES="$SUITES
+moderation 22"
 
 WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-suites.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT

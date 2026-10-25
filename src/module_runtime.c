@@ -7,6 +7,7 @@
 #include "json_text.h"
 #include "module_protocol.h"
 #include "utf8.h"
+#include "security.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -132,6 +133,9 @@ static pthread_mutex_t g_dispatch_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_module_publish_lock = PTHREAD_MUTEX_INITIALIZER;
 static module_process_t *g_identity_module = NULL;
 static module_process_t *g_private_module = NULL;
+static module_process_t *g_moderation_module = NULL;
+static pthread_mutex_t g_moderation_lock = PTHREAD_MUTEX_INITIALIZER;
+static unsigned long long g_next_moderation_id;
 static pthread_mutex_t g_remote_lock = PTHREAD_MUTEX_INITIALIZER;
 static char g_remote[TNT_MODULE_REMOTE_USERS_MAX][MAX_USERNAME_LEN];
 static int g_remote_count = 0;
@@ -287,6 +291,16 @@ int tnt_module_manifest_load(const char *module_dir,
         manifest, "permissions", "identity:write");
     out->can_message_private = json_array_contains_string(
         manifest, "permissions", "message:private");
+    out->can_moderate = json_array_contains_string(
+        manifest, "permissions", "moderation:write");
+
+    if (out->can_moderate) {
+        return json_array_contains_string(manifest, "events", "moderation.check") &&
+               !out->wants_message_created && !out->can_write_identity &&
+               !out->can_message_private && !out->can_post_messages &&
+               !out->can_read_presence && !out->can_create_messages &&
+               !out->can_read_messages ? 0 : -1;
+    }
 
     if (!out->wants_message_created || !out->can_read_messages ||
         !out->can_create_messages) {
@@ -957,7 +971,7 @@ static int queue_event_locked(module_event_kind_t kind, const message_t *msg,
     for (int i = 0; i < g_module_count; i++) {
         module_process_t *module = &g_modules[i];
 
-        if (module == origin ||
+        if (module == origin || module->manifest.can_moderate ||
             (kind != MODULE_EVENT_MESSAGE_CREATED &&
              !module->manifest.can_read_presence)) {
             continue;
@@ -1496,7 +1510,12 @@ static bool module_permissions_allowed(module_process_t *module) {
     module->privileged = manifest->can_post_messages ||
                          manifest->can_read_presence ||
                          manifest->can_write_identity ||
-                         manifest->can_message_private;
+                         manifest->can_message_private || manifest->can_moderate;
+    if (manifest->can_moderate && !module_is_granted(manifest->name)) {
+        fprintf(stderr, "module runtime: %s requests moderation:write but is not listed in TNT_MODULE_GRANTS\n",
+                manifest->name);
+        return false;
+    }
     if (module->privileged && !module_is_granted(manifest->name)) {
         fprintf(stderr,
                 "module runtime: %s requests message:post, presence:read, "
@@ -1517,6 +1536,10 @@ static bool module_permissions_allowed(module_process_t *module) {
                 "module runtime: %s requests message:private, which %s "
                 "already holds\n",
                 manifest->name, g_private_module->manifest.name);
+        return false;
+    }
+    if (manifest->can_moderate && g_moderation_module) {
+        fprintf(stderr, "module runtime: only one moderation:write module may be enabled\n");
         return false;
     }
     return true;
@@ -1558,6 +1581,7 @@ static int load_modules_from_env(void) {
             if (module->manifest.can_message_private) {
                 g_private_module = module;
             }
+            if (module->manifest.can_moderate) g_moderation_module = module;
             g_module_count++;
         } else {
             fprintf(stderr, "module runtime: failed to enable module at %s\n",
@@ -1614,6 +1638,7 @@ static int start_module_workers(int count) {
     }
 
     for (int i = 0; i < count; i++) {
+        if (g_modules[i].manifest.can_moderate) continue;
         if (pthread_create(&g_modules[i].worker, &attr, module_worker_main,
                            &g_modules[i]) != 0) {
             goto fail;
@@ -1633,9 +1658,12 @@ fail:
 }
 
 static void close_module_processes(int count) {
+    pthread_mutex_lock(&g_moderation_lock);
     for (int i = 0; i < count; i++) {
         close_module_process(&g_modules[i]);
     }
+    g_moderation_module = NULL;
+    pthread_mutex_unlock(&g_moderation_lock);
 }
 
 int tnt_module_runtime_init(void) {
@@ -1715,6 +1743,82 @@ void tnt_module_runtime_publish_message_created(const message_t *msg) {
     if (msg) {
         dispatch_event(MODULE_EVENT_MESSAGE_CREATED, msg, NULL);
     }
+}
+
+void tnt_module_runtime_moderate(const tnt_moderation_context_t *context,
+                                tnt_moderation_result_t *result) {
+    char request[8192] = "";
+    char reply[TNT_MODULE_LINE_MAX];
+    char id[32];
+    char reply_id[32];
+    char action[32];
+    size_t pos = 0;
+    int seconds = 0;
+    int delay = 0;
+
+    memset(result, 0, sizeof(*result));
+    result->allowed = true;
+    if (atomic_load_explicit(&g_stop_requested, memory_order_acquire)) return;
+    pthread_mutex_lock(&g_moderation_lock);
+    module_process_t *module = g_moderation_module;
+    if (!module || !atomic_load_explicit(&module->active, memory_order_acquire) ||
+        atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
+        pthread_mutex_unlock(&g_moderation_lock);
+        return;
+    }
+    snprintf(id, sizeof(id), "check-%llu", ++g_next_moderation_id);
+    buffer_appendf(request, sizeof(request), &pos,
+                   "{\"type\":\"moderation.check\",\"id\":\"%s\",\"timestamp\":%lld,"
+                   "\"elapsed_ms\":%lld,\"accepted\":%u,\"rejected\":%u,\"scope\":\"%s\"",
+                   id, (long long)time(NULL), (long long)context->elapsed_ms,
+                   context->accepted, context->rejected,
+                   context->private_message ? "private" : "public");
+    const char *keys[] = {"event", "ip", "session", "nickname", "language", "plain_text"};
+    const char *values[] = {context->event, context->ip, context->session,
+                            context->nickname, context->language, context->plain_text};
+    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+        if (!values[i] || (context->private_message && strcmp(keys[i], "plain_text") == 0)) continue;
+        buffer_appendf(request, sizeof(request), &pos, ",\"%s\":", keys[i]);
+        tnt_json_append_string(request, sizeof(request), &pos, values[i]);
+    }
+    buffer_appendf(request, sizeof(request), &pos, "}\n");
+    int64_t deadline = monotonic_millis() + g_module_response_timeout_ms;
+    bool valid = write_module_input(module->stdin_fd, request, pos,
+                                    g_module_response_timeout_ms, true) == MODULE_WRITE_OK &&
+                 read_line_deadline(module->stdout_fd, &module->output, reply,
+                                    sizeof(reply), deadline, true) > 0 &&
+                 record_has_type(reply, "moderation.result") &&
+                 tnt_json_get_string_field(reply, "id", reply_id, sizeof(reply_id)) &&
+                 strcmp(id, reply_id) == 0 &&
+                 tnt_json_get_string_field(reply, "action", action, sizeof(action)) &&
+                 tnt_json_get_string_field(reply, "reason", result->reason, sizeof(result->reason)) &&
+                 tnt_json_get_string_field(reply, "notice", result->notice, sizeof(result->notice)) &&
+                 tnt_json_get_int_field(reply, "notice_delay_ms", &delay) &&
+                 delay >= 0 && delay <= 30000 &&
+                 utf8_is_valid_string(result->notice) && !utf8_contains_control(result->notice) &&
+                 utf8_is_valid_string(result->reason) && !utf8_contains_control(result->reason);
+    if (valid && strcmp(action, "ban") == 0) {
+        valid = tnt_json_get_int_field(reply, "ban_seconds", &seconds) && seconds > 0 && seconds <= 86400;
+    } else if (valid && strcmp(action, "allow") != 0 && strcmp(action, "reject") != 0) {
+        valid = false;
+    }
+    if (!valid) {
+        disable_module(module, "invalid or timed-out moderation response; policy inactive");
+        security_audit("policy_unavailable", context->ip, context->session,
+                       context->nickname, module->manifest.name);
+        memset(result, 0, sizeof(*result));
+        result->allowed = true;
+    } else {
+        result->allowed = strcmp(action, "allow") == 0;
+        result->banned = strcmp(action, "ban") == 0;
+        result->notice_delay_ms = delay;
+        if (result->banned && security_ban(context->ip, seconds, result->reason) < 0) {
+            security_audit("ban_failed", context->ip, context->session,
+                           context->nickname, result->reason);
+            fprintf(stderr, "module runtime: could not persist policy ban for %s\n", context->ip);
+        }
+    }
+    pthread_mutex_unlock(&g_moderation_lock);
 }
 
 void tnt_module_runtime_publish_presence(const char *nickname, bool joined) {
