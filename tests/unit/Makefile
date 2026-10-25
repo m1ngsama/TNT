@@ -81,7 +81,7 @@ test_module_protocol: test_module_protocol.c $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_
 test_identity: test_identity.c $(IDENTITY_SRC) $(COMMON_SRC) $(UTF8_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) $(PROJECT_LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) -lssh $(LDLIBS)
 
-test_module_runtime: test_module_runtime.c $(MODULE_RUNTIME_SRC) $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC) $(IDENTITY_SRC)
+test_module_runtime: test_module_runtime.c $(MODULE_RUNTIME_SRC) $(MODULE_PROTOCOL_SRC) $(JSON_TEXT_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC) $(IDENTITY_SRC) ../../src/security.c
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) -DTNT_TESTING $(LDFLAGS) $(PROJECT_LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) -lssh $(LDLIBS)
 
 test_message: test_message.c $(MESSAGE_SRC) $(MESSAGE_LOG_SRC) $(UTF8_SRC) $(COMMON_SRC)
@@ -117,7 +117,7 @@ test_cli_text: test_cli_text.c $(CLI_TEXT_SRC) $(COMMON_SRC)
 test_tntctl_text: test_tntctl_text.c $(TNTCTL_TEXT_SRC) $(EXEC_CATALOG_SRC) $(COMMON_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
-test_ratelimit: test_ratelimit.c $(RATELIMIT_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC)
+test_ratelimit: test_ratelimit.c $(RATELIMIT_SRC) $(COMMON_SRC) $(CONFIG_DEFAULTS_SRC) ../../src/security.c $(JSON_TEXT_SRC)
 	$(CC) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(CFLAGS) -DTNT_TESTING $(LDFLAGS) -o $@ $^ $(PROJECT_LDLIBS) $(LDLIBS)
 
 test_common: test_common.c $(COMMON_SRC)

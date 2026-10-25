@@ -1061,8 +1061,8 @@ def matching_persisted_messages(log_path: pathlib.Path, prefix: str) -> list[str
         return []
     messages: list[str] = []
     for line in lines:
-        fields = line.split("|", 2)
-        if len(fields) == 3 and fields[2].startswith(prefix):
+        fields = line.split("|")
+        if len(fields) in (3, 4) and fields[2].startswith(prefix):
             messages.append(fields[2])
     return messages
 
@@ -1738,6 +1738,14 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def self_test() -> int:
+    with tempfile.TemporaryDirectory(prefix="tnt-perf-log-test-") as directory:
+        log = pathlib.Path(directory) / "messages.log"
+        log.write_text("#tnt-message-log v3\n"
+                       "2026-01-01T00:00:00Z|a|probe-one|v\n"
+                       "2026-01-01T00:00:01Z|b|probe-two|\n"
+                       "2026-01-01T00:00:02Z|c|legacy-marker\n")
+        assert matching_persisted_messages(log, "probe-") == ["probe-one", "probe-two"]
+        assert matching_persisted_messages(log, "legacy-") == ["legacy-marker"]
     summary = summarize([5, 1, 4, 2, 3])
     assert summary["p50"] == 3
     assert summary["p95"] == 5

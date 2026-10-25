@@ -7,6 +7,7 @@
 #include "message_log_tool.h"
 #include "module_runtime.h"
 #include "ssh_server.h"
+#include "security.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -146,6 +147,11 @@ int main(int argc, char **argv) {
     ui_lang_t lang = i18n_default_ui_lang();
     const char *log_check_path = NULL;
     const char *log_recover_path = NULL;
+    const char *ban_ip = NULL;
+    const char *unban_ip = NULL;
+    bool list_bans = false;
+    bool ban_seconds_set = false;
+    int ban_seconds = 86400;
     int shutdown_pipe[2] = {-1, -1};
 
     /* Parse command line arguments */
@@ -273,6 +279,21 @@ int main(int argc, char **argv) {
                 return rc;
             }
             i++;
+        } else if (strcmp(argv[i], "--ban") == 0 || strcmp(argv[i], "--unban") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) return TNT_EXIT_USAGE;
+            if (strcmp(argv[i], "--ban") == 0) ban_ip = argv[++i];
+            else unban_ip = argv[++i];
+        } else if (strcmp(argv[i], "--ban-seconds") == 0) {
+            if (!require_option_arg(argc, argv, i, lang)) return TNT_EXIT_USAGE;
+            const tnt_int_config_spec_t spec = {"", 86400, 0, 31536000};
+            if (!tnt_config_parse_int(argv[i + 1], &spec, &ban_seconds)) {
+                fprintf(stderr, cli_text_invalid_value_format(lang), argv[i], argv[i + 1]);
+                return TNT_EXIT_USAGE;
+            }
+            ban_seconds_set = true;
+            i++;
+        } else if (strcmp(argv[i], "--list-bans") == 0) {
+            list_bans = true;
         } else if (strcmp(argv[i], "--log-check") == 0) {
             if (i + 1 >= argc || argv[i + 1][0] == '\0') {
                 fprintf(stderr, cli_text_option_requires_arg_format(lang),
@@ -291,7 +312,7 @@ int main(int argc, char **argv) {
             printf("tnt %s\n", TNT_VERSION);
             return TNT_EXIT_OK;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            char output[2048] = {0};
+            char output[4096] = {0};
             size_t pos = 0;
 
             cli_text_append_help(output, sizeof(output), &pos, argv[0], lang);
@@ -305,9 +326,23 @@ int main(int argc, char **argv) {
     }
 
     if (log_check_path && log_recover_path) {
-        fprintf(stderr, cli_text_invalid_value_format(lang),
-                "--log-check", "--log-recover");
+        fprintf(stderr, cli_text_invalid_value_format(lang), "--log-check", "--log-recover");
         return TNT_EXIT_USAGE;
+    }
+    if ((!!ban_ip + !!unban_ip + list_bans + !!log_check_path + !!log_recover_path > 1) ||
+        (ban_seconds_set && !ban_ip)) {
+        fprintf(stderr, cli_text_invalid_value_format(lang),
+                "maintenance options", "conflicting modes");
+        return TNT_EXIT_USAGE;
+    }
+    if (ban_ip || unban_ip || list_bans) {
+        int rc = ban_ip ? security_ban(ban_ip, ban_seconds, "manual") :
+                 unban_ip ? security_unban(unban_ip) : security_list_bans(stdout);
+        if (rc < 0) {
+            fprintf(stderr, "security: %s\n", strerror(errno));
+            return errno == EINVAL ? TNT_EXIT_USAGE : TNT_EXIT_ERROR;
+        }
+        return TNT_EXIT_OK;
     }
     if (log_check_path) {
         return message_log_tool_check(log_check_path);

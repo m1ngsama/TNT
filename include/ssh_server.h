@@ -69,6 +69,11 @@ typedef struct client {
     ui_lang_t client_lang;
     time_t connect_time;
     time_t last_active;
+    int64_t joined_at_ms;
+    bool join_announced;
+    int join_notice_delay_ms;
+    unsigned accepted_messages;
+    unsigned rejected_messages;
     atomic_bool redraw_pending;
     _Atomic int pending_bells;       /* Bell nudges for this client's loop */
     _Atomic int unread_mentions;     /* @-mentions received since last reset */

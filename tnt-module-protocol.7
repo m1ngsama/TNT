@@ -32,8 +32,9 @@ A module whose manifest requests
 .BR message:post ,
 .BR presence:read ,
 .BR identity:write ,
+.BR message:private ,
 or
-.B message:private
+.B moderation:write
 is enabled only when its name appears in
 .BR TNT_MODULE_GRANTS ,
 a colon-separated list of module names.
@@ -84,6 +85,15 @@ see
 .B events
 Array containing
 .BR message.created .
+.P
+A policy module instead declares only
+.B moderation:write
+in permissions and
+.B moderation.check
+in events.
+It cannot combine policy checks with other protocol permissions.
+At most one policy module may be enabled, and its name must appear in
+.BR TNT_MODULE_GRANTS .
 .P
 Unknown manifest fields are ignored by the runtime.
 The
@@ -678,6 +688,85 @@ record.
 .B 64 files
 Open file limit for a module process.
 A granted module may open 4096.
+.SH MODERATION CHECKS
+A module holding only the granted
+.B moderation:write
+permission receives synchronous
+.B moderation.check
+records instead of asynchronous message events.
+The core implements no spam classifier or content thresholds.
+.P
+Each check has a unique string
+.B id
+and an
+.B event
+of
+.BR session.join ,
+.BR message ,
+or
+.BR session.leave .
+Source metadata includes
+.BR ip ,
+.BR session ,
+.BR nickname ,
+and UI
+.BR language .
+Numeric fields are Unix-seconds
+.BR timestamp ,
+.B elapsed_ms
+since room admission, and session message counts
+.B accepted
+and
+.BR rejected .
+The
+.B scope
+is
+.B public
+or
+.BR private .
+Public attempts include
+.BR plain_text ;
+private-message bodies are omitted.
+.P
+Return exactly one
+.B moderation.result
+with the same
+.BR id ,
+an
+.B action
+of
+.BR allow ,
+.BR reject ,
+or
+.BR ban ,
+a short
+.B reason
+string, a user-facing
+.B notice
+string, and integer
+.B notice_delay_ms
+between 0 and 30000.
+An empty notice is allowed.
+Both strings must be valid UTF-8 without control characters.
+A ban also requires integer
+.B ban_seconds
+between 1 and 86400.
+It can affect only the current request's IP.
+.P
+Messages are checked before public persistence or private delivery.
+An admission delay defers the public join notice; an accepted message may
+announce it sooner.
+Leaving before announcement adds no public leave notice.
+The core reports departure metadata without classifying the session.
+.P
+Checks share the configured module deadline, normally 100 ms.
+A malformed or mismatched reply, timeout, or I/O failure disables the policy
+and writes
+.B policy_unavailable
+to private audit.
+Basic chat remains available and persisted source bans remain enforced.
+The operator must review the failure before restarting or replacing the
+policy.
 .SH COMPATIBILITY
 The protocol identifier, required manifest capabilities, event and response
 types, and documented member meanings form the

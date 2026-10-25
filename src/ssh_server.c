@@ -5,6 +5,7 @@
 #include "exec.h"
 #include "input.h"
 #include "ratelimit.h"
+#include "security.h"
 #include "tui.h"
 #include "utf8.h"
 #include <libssh/libssh.h>
@@ -483,6 +484,7 @@ int ssh_server_start(int shutdown_fd,
         }
 
         accepted->session = session;
+        security_audit("connection", client_ip, "", "", "ssh");
         snprintf(accepted->client_ip, sizeof(accepted->client_ip), "%s",
                  client_ip);
 

@@ -5,6 +5,7 @@
 
 void tnt_json_append_string(char *buffer, size_t buf_size, size_t *pos,
                             const char *text);
+bool tnt_json_get_int_field(const char *json, const char *key, int *out);
 
 /* Extract a top-level JSON string field from a single JSON object.
  * Returns false for malformed JSON, missing key, non-string value, or output

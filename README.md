@@ -57,7 +57,8 @@ ssh -p 2222 chat.example.com
 ```
 
 Any username and any password are accepted, including an empty one. The room
-is anonymous and unrestricted by design.
+is anonymous by default. Message limits protect it from spam without
+requiring an account.
 
 ## Operate
 
@@ -66,6 +67,18 @@ tntctl -p 2222 localhost health
 tntctl -p 2222 localhost stats
 tntctl -p 2222 localhost tail 20
 ```
+
+The server keeps private, bounded abuse audit logs in its state directory.
+Source bans survive restarts. Local operators can list, add, and remove them
+without exposing an administration command to anonymous SSH clients:
+
+```sh
+sudo -u tnt tnt -d /var/lib/tnt --list-bans
+sudo -u tnt tnt -d /var/lib/tnt --ban 203.0.113.7 --ban-seconds 3600
+sudo -u tnt tnt -d /var/lib/tnt --unban 203.0.113.7
+```
+
+See `tnt(8)` for thresholds, audit retention, and shared-IP considerations.
 
 `tntctl` accepts only the commands defined by `tnt-exec(7)` and launches `ssh`
 without a shell. Every exec command also works over a plain

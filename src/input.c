@@ -21,6 +21,7 @@
 #include "module_protocol.h"
 #include "module_runtime.h"
 #include "ratelimit.h"
+#include "security.h"
 #include "system_message.h"
 #include "theme.h"
 #include "tui.h"
@@ -369,6 +370,50 @@ static void show_session_notice(client_t *client, const char *text) {
     client->command_output_kind = TNT_COMMAND_OUTPUT_NOTICE;
     client->show_motd = false;
     client->redraw_pending = true;
+}
+
+static void announce_join(client_t *client) {
+    if (!client->joined_at_ms || client->join_announced) return;
+    message_t msg;
+    system_message_make_join(&msg, client->username, client->ui_lang);
+    client->join_announced = true;
+    room_broadcast(g_room, &msg);
+    message_save(&msg);
+    tnt_module_runtime_publish_message_created(&msg);
+}
+
+static tnt_moderation_result_t moderate(client_t *client, const char *event,
+                                       const char *content, bool private_message) {
+    tnt_moderation_context_t context = {
+        .event = event, .ip = client->client_ip, .session = client->session_id,
+        .nickname = client->username, .language = i18n_ui_lang_code(client->ui_lang),
+        .plain_text = content, .private_message = private_message,
+        .accepted = client->accepted_messages, .rejected = client->rejected_messages,
+        .elapsed_ms = client->joined_at_ms ? input_monotonic_millis() - client->joined_at_ms : 0,
+    };
+    tnt_moderation_result_t result;
+    tnt_module_runtime_moderate(&context, &result);
+    return result;
+}
+
+bool input_accept_message(client_t *client, const char *content, bool private_message) {
+    tnt_moderation_result_t result = moderate(client, "message", content, private_message);
+    if (result.allowed) {
+        client->accepted_messages++;
+        announce_join(client);
+        return true;
+    }
+    client->rejected_messages++;
+    security_audit("message_rejected", client->client_ip, client->session_id,
+                   client->username, result.reason);
+    const char *notice = result.notice[0] ? result.notice : "Message rejected by server policy.";
+    if (client->exec_command[0]) {
+        client_printf(client, "%s\n", notice);
+    } else {
+        show_session_notice(client, notice);
+    }
+    if (result.banned) client->connected = false;
+    return false;
 }
 
 static void apply_identity_mailbox(client_t *client) {
@@ -1190,6 +1235,10 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                     }
                 }
                 if (input[0] != '\0') {
+                    if (!input_accept_message(client, input, false)) {
+                        editor_clear(ed);
+                        return true;
+                    }
                     bool is_action = editor_len(ed) > 4 &&
                                      strncmp(input, "/me ", 4) == 0;
                     size_t action_len = is_action ? editor_len(ed) - 4 : 0;
@@ -1236,6 +1285,8 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                         snprintf(msg.content, sizeof(msg.content), "%s", input);
                     }
                     if (message_save(&msg) == 0) {
+                        security_audit("public_message", client->client_ip, client->session_id,
+                                       client->username, "interactive");
                         room_broadcast(g_room, &msg);
                         notify_mentions(msg.content, client);
                         tnt_module_runtime_publish_message_created(&msg);
@@ -1651,6 +1702,8 @@ void input_run_session(client_t *client) {
     client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
     client->connect_time = time(NULL);
     client->last_active = time(NULL);
+    snprintf(client->session_id, sizeof(client->session_id), "s-%llu",
+             atomic_fetch_add(&g_next_session_id, 1) + 1);
 
     /* Check for exec command */
     if (client->exec_command[0] != '\0' || client->exec_command_too_long) {
@@ -1678,9 +1731,6 @@ void input_run_session(client_t *client) {
                      "anonymous");
         }
     }
-    snprintf(client->session_id, sizeof(client->session_id), "s-%llu",
-             atomic_fetch_add(&g_next_session_id, 1) + 1);
-
     /* Add to room.  Nobody asked for a particular anonymous name, so a
      * taken one moves on to the next free anonymousN. */
     bool anonymous_name = strcmp(client->username, "anonymous") == 0;
@@ -1703,6 +1753,16 @@ void input_run_session(client_t *client) {
         goto cleanup;
     }
     joined_room = true;
+    client->joined_at_ms = input_monotonic_millis();
+    security_audit("session_join", client->client_ip, client->session_id,
+                   client->username, client->verified ? "verified" : "anonymous");
+    tnt_moderation_result_t admission = moderate(client, "session.join", NULL, false);
+    client->join_notice_delay_ms = admission.notice_delay_ms;
+    if (!admission.allowed) {
+        security_audit("session_rejected", client->client_ip, client->session_id,
+                       client->username, admission.reason);
+        goto cleanup;
+    }
     if (client->verified) {
         tnt_module_runtime_notify_identity(TNT_IDENTITY_RECOGNIZED,
                                            client->session_id,
@@ -1717,12 +1777,7 @@ void input_run_session(client_t *client) {
     client_send(client, "\033[?2004h", 8);
     bracketed_paste_enabled = true;
 
-    /* Broadcast join message */
-    message_t join_msg;
-    system_message_make_join(&join_msg, client->username, client->ui_lang);
-    room_broadcast(g_room, &join_msg);
-    message_save(&join_msg);
-    tnt_module_runtime_publish_message_created(&join_msg);
+    if (!client->join_notice_delay_ms) announce_join(client);
 
     /* Show MOTD if motd.txt exists in state directory */
     {
@@ -1776,6 +1831,10 @@ main_loop:
         bool input_buffered = ready > 0;
         uint64_t current_update_seq = room_get_update_seq(g_room);
         int64_t loop_now_ms = input_monotonic_millis();
+
+        if (ratelimit_ip_blocked(client->client_ip)) break;
+        if (!client->join_announced &&
+            loop_now_ms - client->joined_at_ms >= client->join_notice_delay_ms) announce_join(client);
 
         if (client_flush_pending_bells(client) != 0) {
             break;
@@ -1890,6 +1949,7 @@ main_loop:
             int timeout_ms = input_poll_timeout_ms(
                 now_ms, last_keepalive_ms, last_activity_ms,
                 g_idle_timeout > 0 && joined_room);
+            if (timeout_ms > 1000) timeout_ms = 1000;
             bool defer_room_wake = false;
             if (room_updated && room_view_visible && !room_render_due) {
                 int64_t room_wait_ms = last_room_render_ms +
@@ -2113,15 +2173,18 @@ cleanup:
 
     /* Broadcast leave message */
     if (joined_room) {
-        message_t leave_msg;
-        system_message_make_leave(&leave_msg, client->username,
-                                  client->ui_lang);
-
+        security_audit("session_leave", client->client_ip, client->session_id,
+                       client->username, "closed");
+        (void)moderate(client, "session.leave", NULL, false);
         client->connected = false;
         room_remove_client(g_room, client);
-        room_broadcast(g_room, &leave_msg);
-        message_save(&leave_msg);
-        tnt_module_runtime_publish_message_created(&leave_msg);
+        if (client->join_announced) {
+            message_t leave_msg;
+            system_message_make_leave(&leave_msg, client->username, client->ui_lang);
+            room_broadcast(g_room, &leave_msg);
+            message_save(&leave_msg);
+            tnt_module_runtime_publish_message_created(&leave_msg);
+        }
     }
 
     /* Interactive shells otherwise look like a transport reset to OpenSSH
