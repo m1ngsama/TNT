@@ -6,6 +6,7 @@
 /* Read TNT_IDLE_TIMEOUT from the environment.  Idempotent.  Call once at
  * startup before any session can run. */
 void input_init(void);
+bool input_accept_message(client_t *client, const char *content, bool private_message);
 
 /* Run the interactive session for an already-bootstrapped client_t.
  *

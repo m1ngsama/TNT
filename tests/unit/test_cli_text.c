@@ -16,7 +16,7 @@
 static int tests_passed = 0;
 
 TEST(help_matches_language) {
-    char output[2048] = {0};
+    char output[4096] = {0};
     size_t pos = 0;
 
     cli_text_append_help(output, sizeof(output), &pos, "tnt", UI_LANG_EN);

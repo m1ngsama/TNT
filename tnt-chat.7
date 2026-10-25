@@ -426,6 +426,13 @@ Rendering adds no control character that the message itself may not
 contain: the accepted input is unchanged.
 .P
 The room keeps the 100 most recent public messages in memory.
+.P
+The server owner may enable a moderation policy that rejects spam or
+requests temporary source bans.
+Anonymous and signed-in SSH sessions use the same policy interface.
+See
+.BR tnt (8)
+for owner controls and private audit details.
 Use
 .B :last
 or

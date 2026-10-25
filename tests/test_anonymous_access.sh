@@ -23,7 +23,7 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-SSH_BASE="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
+SSH_BASE="-F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o ConnectionAttempts=3 -o ConnectTimeout=15 -p $PORT"
 
 wait_for_health() {
     local out

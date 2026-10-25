@@ -12,6 +12,7 @@
 #include "history_view.h"
 #include "i18n.h"
 #include "identity.h"
+#include "input.h"
 #include "keymap.h"
 #include "manual.h"
 #include "message.h"
@@ -142,6 +143,10 @@ static void client_append_whisper(client_t *owner, const char *from,
 static void send_private_message(client_t *client, const char *target_name,
                                  const char *content, char *output,
                                  size_t buf_size, size_t *pos) {
+    if (!input_accept_message(client, content, true)) {
+        buffer_appendf(output, buf_size, pos, "%s", client->command_output);
+        return;
+    }
     bool found = false;
     bool verified;
     client_t *target = NULL;

@@ -19,6 +19,7 @@ void ratelimit_record_auth_failure(const char *ip);
 
 /* Clear the consecutive-auth-failure ledger after a successful login. */
 void ratelimit_record_auth_success(const char *ip);
+bool ratelimit_ip_blocked(const char *ip);
 
 /* Global active-connection cap (separate from per-IP).  Pair them. */
 bool ratelimit_check_and_increment_total(void);

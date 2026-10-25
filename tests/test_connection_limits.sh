@@ -61,7 +61,7 @@ fi
 WATCHER_READY="$STATE_DIR/watcher.ready"
 cat >"$STATE_DIR/watcher.expect" <<EOF
 set timeout 10
-spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT watcher@localhost
+spawn ssh -F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT watcher@localhost
 expect "请输入用户名"
 send "watcher\r"
 exec touch "$WATCHER_READY"

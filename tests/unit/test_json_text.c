@@ -118,6 +118,17 @@ TEST(get_string_array_field_rejects_bad_arrays) {
     }
 }
 
+TEST(integer_fields_reject_non_integer_and_overflow_values) {
+    int value = 0;
+    assert(tnt_json_get_int_field("{\"delay\":3000}", "delay", &value) && value == 3000);
+    assert(tnt_json_get_int_field("{\"delay\":-1}", "delay", &value) && value == -1);
+    assert(!tnt_json_get_int_field("{\"delay\":1.5}", "delay", &value));
+    assert(!tnt_json_get_int_field("{\"delay\":01}", "delay", &value));
+    assert(!tnt_json_get_int_field("{\"delay\":\"3000\"}", "delay", &value));
+    assert(!tnt_json_get_int_field("{\"delay\":2147483648}", "delay", &value));
+    assert(!tnt_json_get_int_field("{\"delay\":1e2}", "delay", &value));
+}
+
 int main(void) {
     printf("Running JSON text unit tests...\n\n");
 
@@ -130,6 +141,7 @@ int main(void) {
     RUN_TEST(get_string_field_rejects_output_overflow);
     RUN_TEST(get_string_array_field_extracts_strings);
     RUN_TEST(get_string_array_field_rejects_bad_arrays);
+    RUN_TEST(integer_fields_reject_non_integer_and_overflow_values);
 
     printf("\nAll %d JSON text tests passed.\n", tests_passed);
     return 0;

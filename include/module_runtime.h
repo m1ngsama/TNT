@@ -19,7 +19,32 @@ typedef struct {
     bool can_read_presence;
     bool can_write_identity;
     bool can_message_private;
+    bool can_moderate;
 } tnt_module_manifest_t;
+
+typedef struct {
+    const char *event;
+    const char *ip;
+    const char *session;
+    const char *nickname;
+    const char *language;
+    const char *plain_text;
+    bool private_message;
+    unsigned accepted;
+    unsigned rejected;
+    int64_t elapsed_ms;
+} tnt_moderation_context_t;
+
+typedef struct {
+    bool allowed;
+    bool banned;
+    int notice_delay_ms;
+    char reason[64];
+    char notice[256];
+} tnt_moderation_result_t;
+
+void tnt_module_runtime_moderate(const tnt_moderation_context_t *context,
+                                tnt_moderation_result_t *result);
 
 int tnt_module_manifest_load(const char *module_dir,
                              tnt_module_manifest_t *out);

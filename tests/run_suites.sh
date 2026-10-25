@@ -5,6 +5,12 @@ BASE_PORT=${PORT:-2222}
 # ssh forwards these (SendEnv), and a session follows them over the server's
 # TNT_LANG, so a developer's locale would change what the suites see.
 unset LANG LC_ALL LC_MESSAGES
+# Expect still needs a UTF-8 driver locale to match Unicode output.
+case $(uname -s) in
+    Darwin) LC_CTYPE=UTF-8 ;;
+    *) LC_CTYPE=C.UTF-8 ;;
+esac
+export LC_CTYPE
 JOBS=${INTEGRATION_JOBS:-4}
 
 # Slowest first, so the last job slot never waits on a long suite.
@@ -28,6 +34,8 @@ module_privileged 16
 identity 17
 module_private 18
 client_lang 19"
+SUITES="$SUITES
+moderation 20"
 
 WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-suites.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT
