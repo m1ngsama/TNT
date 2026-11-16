@@ -165,22 +165,27 @@ export class Ledger {
     return this.#messages.slice(-RECENT);
   }
 
-  /** Newest first, matching sender or text without regard to case, like :search. */
+  /** Newest first, matching sender or text without regard to case, like :search. Line breaks match spaces, as in a quoted reply. */
   search(query: string, limit: number): Message[] {
     const wanted = query.toLowerCase();
     const found: Message[] = [];
     for (let i = this.#messages.length - 1; i >= 0 && found.length < limit; i--) {
       const message = this.#messages[i]!;
       if (message.kind === "system") continue;
-      if (message.sender.toLowerCase().includes(wanted) || message.text.toLowerCase().includes(wanted)) found.push(message);
+      if (message.sender.toLowerCase().includes(wanted) || message.text.replaceAll("\n", " ").toLowerCase().includes(wanted)) found.push(message);
     }
     return found;
   }
 
-  before(id: string, limit: number): { messages: Message[]; more: boolean } | null {
+  /** With `until`, the page reaches back to that message, so a client can jump to it; null if it lies further than `limit`. */
+  before(id: string, limit: number, until?: string): { messages: Message[]; more: boolean } | null {
     const index = this.#messages.findIndex((m) => m.id === id);
     if (index < 0) return null;
-    const start = Math.max(0, index - limit);
+    let start = Math.max(0, index - limit);
+    if (until !== undefined) {
+      start = this.#messages.findLastIndex((m, i) => i < index && m.id === until);
+      if (start < 0 || index - start > limit) return null;
+    }
     return { messages: this.#messages.slice(start, index), more: start > 0 };
   }
 }
