@@ -155,8 +155,12 @@ EOF
 
 # Dump what a session actually saw.  Discarding it hides the case where ssh
 # never connected at all, which reads identically to a failed assertion.
+# The reason a session failed is printed last, so show the end as well as the start.
 tnt_dump_session() {
-    [ -f "$STATE_DIR/$1.session.log" ] && sed -n '1,60p' "$STATE_DIR/$1.session.log"
+    [ -f "$STATE_DIR/$1.session.log" ] || return 0
+    sed -n '1,60p' "$STATE_DIR/$1.session.log"
+    echo "..."
+    tail -n 20 "$STATE_DIR/$1.session.log"
 }
 
 tnt_summary() {
