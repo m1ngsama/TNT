@@ -90,7 +90,7 @@ for i in $(seq 1 "$CLIENTS"); do
 
     cat >"$script" <<EOF
 set timeout [expr {$DURATION + 15}]
-spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT stress$i@localhost
+spawn env -u LANG -u LC_ALL -u LC_MESSAGES ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT stress$i@localhost
 expect "请输入用户名"
 send -- "stress$i\r"
 expect "›"
