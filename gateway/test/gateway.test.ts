@@ -192,6 +192,19 @@ describe("history and typing", () => {
     expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "unknown_message" });
   });
 
+  test("reaches back to a message the client asks for", async () => {
+    const alice = connect(url, "alice");
+    const ready = await alice.next((f) => f.type === "ready");
+    for (let i = 0; i < 3; i++) alice.send({ type: "send", text: `m${i}`, nonce: `n${i}` });
+    const last = await alice.next((f) => f.type === "message" && f.nonce === "n2");
+    alice.send({ type: "history", before: last.id, until: ready.history[0].id });
+    const page = await alice.next((f) => f.type === "history");
+    expect(page.messages.map((m: { text: string }) => m.text)).toEqual(["earlier", "m0", "m1"]);
+    expect(page.more).toBe(false);
+    alice.send({ type: "history", before: last.id, until: "nope" });
+    expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "unknown_message" });
+  });
+
   test("limits history requests", async () => {
     const alice = connect(url, "alice");
     const ready = await alice.next((f) => f.type === "ready");

@@ -177,10 +177,15 @@ export class Ledger {
     return found;
   }
 
-  before(id: string, limit: number): { messages: Message[]; more: boolean } | null {
+  /** With `until`, the page reaches back to that message, so a client can jump to it; null if it lies further than `limit`. */
+  before(id: string, limit: number, until?: string): { messages: Message[]; more: boolean } | null {
     const index = this.#messages.findIndex((m) => m.id === id);
     if (index < 0) return null;
-    const start = Math.max(0, index - limit);
+    let start = Math.max(0, index - limit);
+    if (until !== undefined) {
+      start = this.#messages.findLastIndex((m, i) => i < index && m.id === until);
+      if (start < 0 || index - start > limit) return null;
+    }
     return { messages: this.#messages.slice(start, index), more: start > 0 };
   }
 }

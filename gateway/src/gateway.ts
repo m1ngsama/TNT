@@ -11,6 +11,7 @@ const AUTH_TIMEOUT_MS = 5_000;
 const TYPING_INTERVAL_MS = 2_000;
 const HISTORY_PAGE = 50;
 const HISTORY_PAGE_MAX = 100;
+const HISTORY_REACH_MAX = 1_000;
 const NONCE_TTL_MS = 10 * 60_000;
 const NONCE_MAX_LENGTH = 64;
 const SEARCH_LIMIT = 50;
@@ -109,8 +110,11 @@ export function createGateway(options: GatewayOptions) {
   function sendHistory(ws: Socket, frame: Record<string, unknown>) {
     if (typeof frame.before !== "string") return fail(ws, "invalid_frame");
     if (!historyLimiter.take(ws.data.handle)) return fail(ws, "rate_limited");
-    const limit = Math.min(HISTORY_PAGE_MAX, Math.max(1, Math.trunc(Number(frame.limit)) || HISTORY_PAGE));
-    const page = options.ledger.before(frame.before, limit);
+    if (frame.until !== undefined && typeof frame.until !== "string") return fail(ws, "invalid_frame");
+    const limit = frame.until === undefined
+      ? Math.min(HISTORY_PAGE_MAX, Math.max(1, Math.trunc(Number(frame.limit)) || HISTORY_PAGE))
+      : HISTORY_REACH_MAX;
+    const page = options.ledger.before(frame.before, limit, frame.until);
     if (page === null) return fail(ws, "unknown_message");
     ws.send(JSON.stringify({ type: "history", before: frame.before, ...page }));
   }

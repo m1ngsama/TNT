@@ -134,6 +134,10 @@ describe("Ledger paging", () => {
     expect(ledger.before(ids[4]!, 2)).toEqual({ messages: ledger.recent().slice(2, 4), more: true });
     expect(ledger.before(ids[2]!, 5)).toEqual({ messages: ledger.recent().slice(0, 2), more: false });
     expect(ledger.before("nope", 2)).toBeNull();
+    expect(ledger.before(ids[4]!, 2, ids[1]!)).toBeNull();
+    expect(ledger.before(ids[4]!, 10, ids[1]!)).toEqual({ messages: ledger.recent().slice(1, 4), more: true });
+    expect(ledger.before(ids[4]!, 10, ids[0]!)).toEqual({ messages: ledger.recent().slice(0, 4), more: false });
+    expect(ledger.before(ids[2]!, 10, ids[4]!)).toBeNull();
   });
 
   test("recent is capped at one hundred while the ledger keeps more", () => {
