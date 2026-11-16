@@ -5,6 +5,9 @@ BASE_PORT=${PORT:-2222}
 # ssh forwards these (SendEnv), and a session follows them over the server's
 # TNT_LANG, so a developer's locale would change what the suites see.
 unset LANG LC_ALL LC_MESSAGES
+# Without any locale expect reads the server's UTF-8 as ASCII and never matches
+# marks like ✓; LC_CTYPE sets only the encoding, which TNT ignores.
+export LC_CTYPE=C.UTF-8
 JOBS=${INTEGRATION_JOBS:-4}
 
 # Slowest first, so the last job slot never waits on a long suite.

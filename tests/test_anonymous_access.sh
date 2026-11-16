@@ -47,9 +47,10 @@ run_password_test() {
     local script="$STATE_DIR/$name.expect"
     local log="$STATE_DIR/$name.log"
 
+    # Without the client's locale the session keeps the server's TNT_LANG=zh, which the prompt below expects.
     cat >"$script" <<EOF
 set timeout 10
-spawn ssh $SSH_BASE -o PreferredAuthentications=password $user@localhost
+spawn env -u LANG -u LC_ALL -u LC_MESSAGES ssh $SSH_BASE -o PreferredAuthentications=password $user@localhost
 expect {
     -re "(?i)password:" {
         send -- "$password\r"
