@@ -126,6 +126,14 @@ describe("readHistory", () => {
   });
 });
 
+describe("Ledger search", () => {
+  test("matches across line breaks", () => {
+    const ledger = new Ledger(10);
+    ledger.add({ ...HELLO, text: "first line\nsecond line" });
+    expect(ledger.search("line second", 5).map((m) => m.text)).toEqual(["first line\nsecond line"]);
+  });
+});
+
 describe("Ledger paging", () => {
   test("pages backwards from an id", () => {
     const ledger = new Ledger(10);

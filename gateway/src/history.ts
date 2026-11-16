@@ -165,14 +165,14 @@ export class Ledger {
     return this.#messages.slice(-RECENT);
   }
 
-  /** Newest first, matching sender or text without regard to case, like :search. */
+  /** Newest first, matching sender or text without regard to case, like :search. Line breaks match spaces, as in a quoted reply. */
   search(query: string, limit: number): Message[] {
     const wanted = query.toLowerCase();
     const found: Message[] = [];
     for (let i = this.#messages.length - 1; i >= 0 && found.length < limit; i--) {
       const message = this.#messages[i]!;
       if (message.kind === "system") continue;
-      if (message.sender.toLowerCase().includes(wanted) || message.text.toLowerCase().includes(wanted)) found.push(message);
+      if (message.sender.toLowerCase().includes(wanted) || message.text.replaceAll("\n", " ").toLowerCase().includes(wanted)) found.push(message);
     }
     return found;
   }
