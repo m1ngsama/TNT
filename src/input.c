@@ -494,6 +494,28 @@ static void take_draft(client_t *client, editor_t *ed) {
     tui_render_input(client, ed);
 }
 
+/* A member's last "left the room" line marks where they stopped reading.
+ * Handles are bound to keys, so nobody else can leave one under that name.
+ * Only chat after it is worth a divider, not other people's comings and
+ * goings. */
+static time_t member_read_marker(const char *handle) {
+    message_t *recent = calloc(MAX_MESSAGES, sizeof(*recent));
+    time_t marker = 0;
+    bool news = false;
+
+    if (!recent) return 0;
+    int count = room_copy_recent_messages(g_room, recent, MAX_MESSAGES, NULL);
+    for (int i = count - 1; i >= 0; i--) {
+        if (system_message_is_leave_of(&recent[i], handle)) {
+            marker = recent[i].timestamp;
+            break;
+        }
+        news = news || !system_message_is_system(&recent[i]);
+    }
+    free(recent);
+    return news ? marker : 0;
+}
+
 static void dismiss_command_output(client_t *client) {
     bool was_motd;
 
@@ -1731,6 +1753,10 @@ void input_run_session(client_t *client) {
      * as a stream of Enters.  Terminals that don't recognise it ignore it. */
     client_send(client, "\033[?2004h", 8);
     bracketed_paste_enabled = true;
+
+    if (client->verified) {
+        client->read_marker = member_read_marker(client->username);
+    }
 
     /* Broadcast join message */
     message_t join_msg;

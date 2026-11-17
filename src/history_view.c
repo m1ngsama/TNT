@@ -140,8 +140,14 @@ void history_view_scroll_by(int *scroll_pos, bool *follow_tail,
     *follow_tail = *scroll_pos >= max_scroll;
 }
 
+bool history_view_marker_between(const message_t *prev, const message_t *msg,
+                                 time_t marker) {
+    return marker > 0 && prev && msg && prev->timestamp <= marker &&
+           msg->timestamp > marker;
+}
+
 int history_view_latest_start_for_height(const message_t *messages, int count,
-                                         int height, int width) {
+                                         int height, int width, time_t marker) {
     int start = count;
     int rows = 0;
     char next_date[11] = "";
@@ -157,6 +163,13 @@ int history_view_latest_start_for_height(const message_t *messages, int count,
          * suffix for every candidate. */
         rows += history_view_message_lines(&messages[candidate], width);
         if (next_date[0] == '\0' || strcmp(this_date, next_date) != 0) {
+            rows++;
+        }
+        /* The renderer draws the divider only between two messages it
+         * shows, so it costs a row only once both sides are in the slice. */
+        if (candidate + 1 < count &&
+            history_view_marker_between(&messages[candidate],
+                                        &messages[candidate + 1], marker)) {
             rows++;
         }
         if (rows > height) {

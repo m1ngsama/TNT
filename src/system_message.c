@@ -60,6 +60,23 @@ bool system_message_is_system(const message_t *msg) {
            strcmp(msg->username, "system") == 0;
 }
 
+bool system_message_is_leave_of(const message_t *msg, const char *username) {
+    char expected[MAX_MESSAGE_LEN];
+
+    if (!system_message_is_system(msg) || !username) {
+        return false;
+    }
+    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+        snprintf(expected, sizeof(expected),
+                 i18n_text((ui_lang_t)lang, I18N_SYSTEM_LEAVE_FORMAT),
+                 username);
+        if (strcmp(msg->content, expected) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool system_message_is_join_leave(const message_t *msg) {
     if (!system_message_is_system(msg)) {
         return false;
