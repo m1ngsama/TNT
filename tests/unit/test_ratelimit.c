@@ -4,6 +4,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "security.h"
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <string.h>
 
 #define TEST(name) static void test_##name()
 #define RUN_TEST(name) do { \
@@ -126,7 +131,57 @@ TEST(success_resets_consecutive_auth_failures) {
     ratelimit_release_ip(ip);
 }
 
+TEST(manual_bans_support_ipv6_expiry_and_disabled_rate_limits) {
+    const char *ip = "2001:db8::1";
+    assert(security_ban("2001:db8:0:0:0:0:0:1", 0, "manual") == 0);
+    time_t until = 123;
+    assert(security_is_banned(ip, &until) == 1 && until == 0);
+    setenv("TNT_RATE_LIMIT", "0", 1);
+    ratelimit_init();
+    assert(!ratelimit_check_ip(ip));
+    assert(security_unban(ip) == 0);
+    assert(ratelimit_check_ip(ip));
+    ratelimit_release_ip(ip);
+    assert(!ratelimit_ip_blocked(ip));
+    assert(security_ban(ip, 60, "manual") == 0);
+    assert(ratelimit_ip_blocked(ip));
+    assert(security_unban(ip) == 0);
+    assert(!ratelimit_ip_blocked(ip));
+    char path[PATH_MAX];
+    assert(tnt_state_path(path, sizeof(path), "bans/2001:db8::1") == 0);
+    FILE *fp = fopen(path, "w");
+    assert(fp);
+    fprintf(fp, "%lld expired\n", (long long)time(NULL) - 1);
+    fclose(fp);
+    assert(security_is_banned(ip, &until) == 0);
+    assert(security_ban("../bad", 60, "manual") == -1);
+    assert(security_unban(ip) == 0);
+}
+
+TEST(audit_is_private_escaped_and_bounded) {
+    char path[PATH_MAX];
+    assert(tnt_state_path(path, sizeof(path), "security.log") == 0);
+    security_audit("test", "203.0.113.44", "s-1", "quote\"\n", "test");
+    struct stat st;
+    assert(stat(path, &st) == 0 && (st.st_mode & 0777) == 0600);
+    FILE *fp = fopen(path, "r+");
+    assert(fp);
+    assert(fseek(fp, 1024 * 1024, SEEK_SET) == 0);
+    assert(fputc('\n', fp) != EOF);
+    fclose(fp);
+    security_audit("rotated", "203.0.113.44", "s-2", "匿名", "test");
+    assert(stat(path, &st) == 0 && st.st_size < 2048);
+    char line[2048];
+    fp = fopen(path, "r");
+    assert(fp && fgets(line, sizeof(line), fp));
+    assert(strstr(line, "\"event\":\"rotated\"") && strstr(line, "匿名"));
+    fclose(fp);
+}
+
 int main(void) {
+    char state[] = "/tmp/tnt-ratelimit-unit.XXXXXX";
+    assert(mkdtemp(state));
+    setenv("TNT_STATE_DIR", state, 1);
     printf("Running rate-limit unit tests...\n\n");
 
     RUN_TEST(per_ip_concurrent_limit_blocks_second_active_connection);
@@ -135,6 +190,27 @@ int main(void) {
     RUN_TEST(blocked_ip_survives_inactive_source_churn);
     RUN_TEST(table_scales_past_legacy_256_ip_limit);
     RUN_TEST(success_resets_consecutive_auth_failures);
+
+    RUN_TEST(manual_bans_support_ipv6_expiry_and_disabled_rate_limits);
+    RUN_TEST(audit_is_private_escaped_and_bounded);
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s/bans", state);
+    DIR *dir = opendir(path);
+    assert(dir);
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+        snprintf(path, sizeof(path), "%s/bans/%s", state, entry->d_name);
+        unlink(path);
+    }
+    closedir(dir);
+    snprintf(path, sizeof(path), "%s/bans", state);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/security.log", state);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/security.log.1", state);
+    unlink(path);
+    rmdir(state);
 
     printf("\n✓ All %d tests passed!\n", tests_passed);
     return 0;

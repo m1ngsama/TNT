@@ -10,6 +10,7 @@
 #include "message.h"
 #include "module_runtime.h"
 #include "ratelimit.h"
+#include "security.h"
 #include "utf8.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -411,6 +412,8 @@ static int exec_command_post(client_t *client, const char *args) {
     }
 
     resolve_exec_username(client, username, sizeof(username));
+    snprintf(client->username, sizeof(client->username), "%s", username);
+    if (!input_accept_message(client, content, false)) return TNT_EXIT_ERROR;
     if (identity_is_reserved(username)) {
         if (!identity_handle_for_key(client->key_fingerprint, handle,
                                      sizeof(handle)) ||
@@ -457,6 +460,8 @@ static int exec_command_post(client_t *client, const char *args) {
     }
 
     room_broadcast(g_room, &msg);
+    security_audit("public_message", client->client_ip, client->session_id,
+                   username, "exec");
     notify_mentions(msg.content, client);
     tnt_module_runtime_publish_message_created(&msg);
 

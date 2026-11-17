@@ -1,6 +1,7 @@
 #include "ratelimit.h"
 #include "config_defaults.h"
 #include "common.h"
+#include "security.h"
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -21,6 +22,9 @@ typedef struct {
     int auth_failure_count;
     bool is_blocked;
     time_t block_until;
+    bool persistent_block;
+    time_t ban_checked;
+    uint64_t ban_generation;
 } ip_rate_limit_t;
 
 static ip_rate_limit_t *g_rate_limits = NULL;
@@ -33,6 +37,40 @@ static int g_max_connections = TNT_DEFAULT_MAX_CONNECTIONS;
 static int g_max_conn_per_ip = TNT_DEFAULT_MAX_CONN_PER_IP;
 static int g_max_conn_rate_per_ip = TNT_DEFAULT_MAX_CONN_RATE_PER_IP;
 static int g_rate_limit_enabled = TNT_DEFAULT_RATE_LIMIT_ENABLED;
+
+static bool block_active(const ip_rate_limit_t *entry, time_t now) {
+    return entry->is_blocked && (!entry->block_until || now < entry->block_until);
+}
+
+static bool refresh_block(ip_rate_limit_t *entry, time_t now, bool force) {
+    uint64_t generation = security_ban_generation();
+    if (!force && entry->ban_checked == now && entry->ban_generation == generation) return block_active(entry, now);
+    entry->ban_checked = now;
+    entry->ban_generation = generation;
+    time_t until = 0;
+    int banned = security_is_banned(entry->ip, &until);
+    if (banned != 0) {
+        entry->is_blocked = true;
+        entry->persistent_block = true;
+        entry->block_until = banned > 0 ? until : now + 5;
+    } else if (entry->persistent_block || !block_active(entry, now)) {
+        if (entry->is_blocked) {
+            entry->auth_failure_count = 0;
+            entry->recent_connection_count = 0;
+            entry->window_start = now;
+        }
+        entry->is_blocked = false;
+        entry->persistent_block = false;
+    }
+    return block_active(entry, now);
+}
+
+static void block_source(ip_rate_limit_t *entry, const char *reason) {
+    entry->is_blocked = true;
+    entry->block_until = time(NULL) + BLOCK_DURATION;
+    entry->persistent_block = security_ban(entry->ip, BLOCK_DURATION, reason) == 0;
+    if (!entry->persistent_block) fprintf(stderr, "security: could not persist ban for %s\n", entry->ip);
+}
 
 void ratelimit_init(void) {
     g_max_connections =
@@ -105,8 +143,7 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
     time_t now = time(NULL);
     for (int i = 0; i < g_rate_limit_capacity; i++) {
         if (g_rate_limits[i].active_connections != 0 ||
-            (g_rate_limits[i].is_blocked &&
-             now < g_rate_limits[i].block_until)) {
+            block_active(&g_rate_limits[i], now)) {
             continue;
         }
         if (oldest_idx < 0 || g_rate_limits[i].window_start < oldest_time) {
@@ -116,13 +153,21 @@ static ip_rate_limit_t* get_rate_limit_entry(const char *ip) {
     }
 
     if (oldest_idx < 0) {
-        /* Never evict active accounting or a live block.  Exhaustion under a
-         * distributed attack fails closed instead of silently forgiving a
-         * source that is still inside its block interval. */
+        for (int i = 0; i < g_rate_limit_capacity; i++) {
+            if (!g_rate_limits[i].active_connections &&
+                g_rate_limits[i].persistent_block) {
+                oldest_idx = i;
+                break;
+            }
+        }
+    }
+    if (oldest_idx < 0) {
+        /* Unpersisted live blocks must stay resident. */
         return NULL;
     }
 
     /* Reset and reuse */
+    memset(&g_rate_limits[oldest_idx], 0, sizeof(g_rate_limits[oldest_idx]));
     strncpy(g_rate_limits[oldest_idx].ip, ip, sizeof(g_rate_limits[oldest_idx].ip) - 1);
     g_rate_limits[oldest_idx].ip[sizeof(g_rate_limits[oldest_idx].ip) - 1] = '\0';
     g_rate_limits[oldest_idx].window_start = time(NULL);
@@ -152,15 +197,11 @@ bool ratelimit_check_ip(const char *ip) {
         return false;
     }
 
-    if (g_rate_limit_enabled && entry->is_blocked && now < entry->block_until) {
+    if (refresh_block(entry, now, true)) {
+        time_t until = entry->block_until;
         pthread_mutex_unlock(&g_rate_limit_lock);
-        fprintf(stderr, "Blocked IP %s (blocked until %ld)\n", ip, (long)entry->block_until);
+        fprintf(stderr, "Blocked IP %s (blocked until %ld)\n", ip, (long)until);
         return false;
-    }
-
-    if (g_rate_limit_enabled && entry->is_blocked && now >= entry->block_until) {
-        entry->is_blocked = false;
-        entry->auth_failure_count = 0;
     }
 
     if (g_rate_limit_enabled) {
@@ -171,8 +212,7 @@ bool ratelimit_check_ip(const char *ip) {
 
         entry->recent_connection_count++;
         if (entry->recent_connection_count > g_max_conn_rate_per_ip) {
-            entry->is_blocked = true;
-            entry->block_until = now + BLOCK_DURATION;
+            block_source(entry, "connection_rate");
             pthread_mutex_unlock(&g_rate_limit_lock);
             fprintf(stderr, "Rate limit exceeded for IP %s\n", ip);
             return false;
@@ -185,8 +225,6 @@ bool ratelimit_check_ip(const char *ip) {
 }
 
 void ratelimit_record_auth_failure(const char *ip) {
-    time_t now = time(NULL);
-
     if (!g_rate_limit_enabled) {
         return;
     }
@@ -200,8 +238,7 @@ void ratelimit_record_auth_failure(const char *ip) {
 
     entry->auth_failure_count++;
     if (entry->auth_failure_count >= MAX_AUTH_FAILURES) {
-        entry->is_blocked = true;
-        entry->block_until = now + BLOCK_DURATION;
+        block_source(entry, "auth_failures");
         fprintf(stderr, "IP %s blocked due to %d auth failures\n", ip, entry->auth_failure_count);
     }
 
@@ -237,6 +274,14 @@ void ratelimit_release_ip(const char *ip) {
         }
     }
     pthread_mutex_unlock(&g_rate_limit_lock);
+}
+
+bool ratelimit_ip_blocked(const char *ip) {
+    pthread_mutex_lock(&g_rate_limit_lock);
+    ip_rate_limit_t *entry = get_rate_limit_entry(ip);
+    bool blocked = !entry || refresh_block(entry, time(NULL), false);
+    pthread_mutex_unlock(&g_rate_limit_lock);
+    return blocked;
 }
 
 bool ratelimit_check_and_increment_total(void) {

@@ -1,6 +1,7 @@
 #include "json_text.h"
 
 #include <ctype.h>
+#include <errno.h>
 
 void tnt_json_append_string(char *buffer, size_t buf_size, size_t *pos,
                             const char *text) {
@@ -405,6 +406,24 @@ bool tnt_json_get_string_field(const char *json, const char *key,
 
     out[0] = '\0';
     return read_top_level_field(json, key, read_string_value, &target);
+}
+
+static bool read_int_value(const char **cursor, void *ctx) {
+    const char *p = *cursor;
+    char *end;
+    if (*p != '-' && !isdigit((unsigned char)*p)) return false;
+    if ((*p == '0' && isdigit((unsigned char)p[1])) ||
+        (*p == '-' && p[1] == '0' && isdigit((unsigned char)p[2]))) return false;
+    errno = 0;
+    long value = strtol(p, &end, 10);
+    if (errno || end == p || value < INT_MIN || value > INT_MAX) return false;
+    *(int *)ctx = (int)value;
+    *cursor = end;
+    return true;
+}
+
+bool tnt_json_get_int_field(const char *json, const char *key, int *out) {
+    return json && key && out && read_top_level_field(json, key, read_int_value, out);
 }
 
 bool tnt_json_get_string_array_field(const char *json, const char *key,

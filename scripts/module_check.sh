@@ -147,12 +147,16 @@ valid_module_name "$name" ||
 safe_entrypoint "$entrypoint" ||
     fail "unsafe entrypoint: ${entrypoint:-missing}"
 
+if grep -q '"moderation:write"' "$manifest"; then
+    grep -q '"moderation.check"' "$manifest" || fail "missing event: moderation.check"
+else
 grep -q '"message:read"' "$manifest" ||
     fail "missing permission: message:read"
 grep -q '"message:create"' "$manifest" ||
     fail "missing permission: message:create"
 grep -q '"message.created"' "$manifest" ||
     fail "missing event: message.created"
+fi
 
 entry_path="$module_dir/$entrypoint"
 [ -f "$entry_path" ] || fail "entrypoint does not exist: $entry_path"

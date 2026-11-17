@@ -52,7 +52,10 @@ for opt in \
     --idle-timeout \
     --ssh-log-level \
     --log-check \
-    --log-recover
+    --log-recover \
+    --ban \
+    --unban \
+    --ban-seconds
 do
     expect_missing_arg "$opt"
 done

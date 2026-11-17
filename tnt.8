@@ -279,8 +279,9 @@ Colon-separated module names allowed to use the
 .BR message:post ,
 .BR presence:read ,
 .BR identity:write ,
+.BR message:private ,
 and
-.B message:private
+.B moderation:write
 permissions.
 A granted module can post under any valid nickname.
 See
@@ -349,6 +350,88 @@ Optional environment file read by the supplied systemd service unit.
 .I tnt.service
 The supplied systemd service unit, when installed in a systemd unit search
 path.
+.SH OWNER CONTROLS
+Anonymous access remains enabled by default.
+The core provides private audit, persistent source bans, and enforcement of
+an explicitly granted moderation module's decisions.
+Spam detection, probe classification, content rules, and thresholds belong
+to the optional policy module, not the server core.
+Without a policy module, existing chat behavior is retained.
+.P
+The local maintenance options below use the selected state directory and
+do not start a listener.
+Run them as the service account, with access to its private state directory.
+They are never available as public SSH exec commands.
+.TP
+.BI "\-\-ban " IP
+Ban one IPv4 or IPv6 source for twenty-four hours.
+.TP
+.BI "\-\-ban\-seconds " SECONDS
+Set the duration for
+.BR \-\-ban .
+Use 0 for a permanent operator ban; the maximum is 31536000 seconds.
+.TP
+.BI "\-\-unban " IP
+Remove a source ban. Running sessions observe the change within one second.
+.TP
+.B \-\-list\-bans
+Write each active source IP and expiry Unix timestamp to standard output.
+An expiry of 0 denotes a permanent ban.
+.P
+All persisted bans survive restarts and apply even if rate limiting or the
+policy module is disabled.
+Existing interactive sessions check bans at least once per second.
+Existing connection-rate and authentication limits still operate as before;
+their five-minute bans are now persisted too.
+.P
+An IP can represent a shared network or an anonymity relay.
+The operator can review audit records and remove a mistaken ban.
+An IP is a source address, not proof of a person's identity.
+.SS Optional policy module
+A module declaring
+.B moderation:write
+must be explicitly named in
+.B TNT_MODULE_GRANTS
+and loaded through
+.BR TNT_MODULE_PATHS .
+At most one such module may run.
+It receives bounded synchronous checks for SSH session admission, public
+message attempts, private-message metadata, and session departure.
+It may allow or reject an operation, request delayed session notices, or
+request a source ban lasting at most twenty-four hours.
+Only the current request's IP may be banned through this hook.
+.P
+A policy does not receive private-message bodies.
+It runs under the same service account as other modules and must be trusted
+by the operator.
+A stalled, malformed, or exited policy is disabled and reported in the
+journal and private audit; basic chat remains available.
+The server does not substitute built-in spam rules when a policy fails.
+See
+.BR tnt-module-protocol (7)
+for the protocol and the optional
+.B guard-module
+in the separate tnt-modules repository for behavior-based protection.
+.SH PRIVATE AUDIT
+.I security.log
+contains JSON records for admitted SSH connections, room joins and leaves,
+public message metadata, rejected messages, bans, and operator unbans.
+Records associate a source IP, a session ID, and the nickname used at that
+time. Session IDs are local to one server process.
+Neither message bodies nor passwords nor private-message contents are
+copied to this log.
+.P
+The file is created with mode 0600 and rotates to
+.I security.log.1
+at 1 MiB, retaining one predecessor.
+These records are private operator data and are never replayed into the
+room or exported by public exec commands.
+The operator controls access and retention through the state directory.
+.P
+Active bans are files named by canonical IP address under
+.IR state-directory/bans/ .
+Each file contains an expiry Unix timestamp followed by a reason.
+Expired records do not block connections.
 .SH CAVEATS
 The default listener address exposes the service on every IPv4 interface.
 The default authentication mode admits anonymous clients.
