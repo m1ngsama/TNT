@@ -361,7 +361,8 @@ void tui_render_screen(client_t *client) {
             if (end > msg_count) end = msg_count;
             if (anchor_latest) {
                 start = history_view_latest_start_for_height(
-                    visible_messages, msg_count, msg_height, render_width);
+                    visible_messages, msg_count, msg_height, render_width,
+                    client->read_marker);
                 end = msg_count;
             }
             snapshot_count = end - start;
@@ -387,7 +388,8 @@ void tui_render_screen(client_t *client) {
                 int recent_count = room_copy_recent_messages(
                     g_room, msg_snapshot, snapshot_capacity, &actual_count);
                 int local_start = history_view_latest_start_for_height(
-                    msg_snapshot, recent_count, msg_height, render_width);
+                    msg_snapshot, recent_count, msg_height, render_width,
+                    client->read_marker);
                 snapshot_count = recent_count - local_start;
                 if (local_start > 0 && snapshot_count > 0) {
                     memmove(msg_snapshot, msg_snapshot + local_start,
@@ -610,6 +612,25 @@ void tui_render_screen(client_t *client) {
                 buffer_appendf(buffer, buf_size, &pos, "\033[0m\033[K\r\n");
 
                 memcpy(last_date, this_date, sizeof(last_date));
+                rows_written++;
+                if (rows_written >= msg_height) break;
+            }
+
+            if (i > 0 && history_view_marker_between(&msg_snapshot[i - 1],
+                                                     &msg_snapshot[i],
+                                                     client->read_marker)) {
+                const char *label = i18n_text(client->ui_lang,
+                                              I18N_READ_MARKER);
+                int dash_fill = render_width - 3 -
+                                utf8_string_width(label) - 1;
+
+                buffer_appendf(buffer, buf_size, &pos, "%s── %s ",
+                               theme->accent, label);
+                for (int j = 0; j < dash_fill; j++) {
+                    buffer_append_bytes(buffer, buf_size, &pos, "─",
+                                        strlen("─"));
+                }
+                buffer_appendf(buffer, buf_size, &pos, "\033[0m\033[K\r\n");
                 rows_written++;
                 if (rows_written >= msg_height) break;
             }

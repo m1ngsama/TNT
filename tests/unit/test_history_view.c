@@ -83,18 +83,43 @@ TEST(latest_start_counts_date_dividers) {
     messages[4] = make_msg(1704240000, "day3-1");  /* 2024-01-03 */
     messages[5] = make_msg(1704240060, "day3-2");
 
-    assert(history_view_latest_start_for_height(messages, 6, 3, 200) == 4);
-    assert(history_view_latest_start_for_height(messages, 6, 4, 200) == 4);
-    assert(history_view_latest_start_for_height(messages, 6, 5, 200) == 3);
-    assert(history_view_latest_start_for_height(messages, 6, 6, 200) == 2);
+    assert(history_view_latest_start_for_height(messages, 6, 3, 200, 0) == 4);
+    assert(history_view_latest_start_for_height(messages, 6, 4, 200, 0) == 4);
+    assert(history_view_latest_start_for_height(messages, 6, 5, 200, 0) == 3);
+    assert(history_view_latest_start_for_height(messages, 6, 6, 200, 0) == 2);
+}
+
+TEST(latest_start_counts_the_read_marker_between_shown_messages) {
+    message_t messages[4];
+    messages[0] = make_msg(1704067200, "seen");
+    messages[1] = make_msg(1704067210, "left");
+    messages[2] = make_msg(1704067220, "new-1");
+    messages[3] = make_msg(1704067230, "new-2");
+
+    assert(history_view_marker_between(&messages[1], &messages[2],
+                                       1704067210));
+    assert(!history_view_marker_between(&messages[2], &messages[3],
+                                        1704067210));
+    assert(!history_view_marker_between(&messages[1], &messages[2], 0));
+
+    /* Date divider plus four rows of messages fill five rows. */
+    assert(history_view_latest_start_for_height(messages, 4, 5, 200, 0) == 0);
+    /* The marker between "left" and "new-1" needs a sixth. */
+    assert(history_view_latest_start_for_height(messages, 4, 5, 200,
+                                                1704067210) == 1);
+    assert(history_view_latest_start_for_height(messages, 4, 6, 200,
+                                                1704067210) == 0);
+    /* With only the new messages shown there is nothing to divide. */
+    assert(history_view_latest_start_for_height(messages, 4, 3, 200,
+                                                1704067210) == 2);
 }
 
 TEST(latest_start_handles_empty_and_tiny_view) {
     message_t messages[1];
     messages[0] = make_msg(1704067200, "only");
 
-    assert(history_view_latest_start_for_height(messages, 0, 3, 200) == 0);
-    assert(history_view_latest_start_for_height(messages, 1, 1, 200) == 0);
+    assert(history_view_latest_start_for_height(messages, 0, 3, 200, 0) == 0);
+    assert(history_view_latest_start_for_height(messages, 1, 1, 200, 0) == 0);
 }
 
 TEST(latest_start_uses_prepared_date_cache) {
@@ -111,9 +136,9 @@ TEST(latest_start_uses_prepared_date_cache) {
     snprintf(messages[3].display_date, sizeof(messages[3].display_date),
              "2024-01-02");
 
-    assert(history_view_latest_start_for_height(messages, 4, 3, 200) == 2);
-    assert(history_view_latest_start_for_height(messages, 4, 4, 200) == 2);
-    assert(history_view_latest_start_for_height(messages, 4, 5, 200) == 1);
+    assert(history_view_latest_start_for_height(messages, 4, 3, 200, 0) == 2);
+    assert(history_view_latest_start_for_height(messages, 4, 4, 200, 0) == 2);
+    assert(history_view_latest_start_for_height(messages, 4, 5, 200, 0) == 1);
 }
 
 TEST(history_view_counts_wrapped_message_rows) {
@@ -147,12 +172,12 @@ TEST(latest_start_accounts_for_wrapped_rows) {
     }
 
     /* Wide: one row each, plus one divider row, so all three fit in five. */
-    assert(history_view_latest_start_for_height(messages, 3, 5, 200) == 0);
+    assert(history_view_latest_start_for_height(messages, 3, 5, 200, 0) == 0);
 
     /* Narrow: 24 columns less the 13-column " HH:MM user: " prefix leaves 11,
      * so two rows each.  Divider + newest (3) + one more (5) fills the
      * height, so the oldest message no longer fits. */
-    assert(history_view_latest_start_for_height(messages, 3, 5, 24) == 1);
+    assert(history_view_latest_start_for_height(messages, 3, 5, 24, 0) == 1);
 }
 
 TEST(wrapped_rows_account_for_the_sender_prefix) {
@@ -217,7 +242,7 @@ TEST(latest_slice_fits_the_screen_after_a_wrapped_message) {
     /* Divider + five one-row messages is 6 rows; the wrapped message needs 16
      * more, which overflows 20.  Including it costs the newest message its
      * row, so the slice has to start past it. */
-    assert(history_view_latest_start_for_height(messages, 6, 20, 80) == 1);
+    assert(history_view_latest_start_for_height(messages, 6, 20, 80, 0) == 1);
 }
 
 int main(void) {
@@ -229,6 +254,7 @@ int main(void) {
     RUN_TEST(scroll_to_oldest_disables_follow_tail);
     RUN_TEST(scroll_by_clamps_and_toggles_follow);
     RUN_TEST(latest_start_counts_date_dividers);
+    RUN_TEST(latest_start_counts_the_read_marker_between_shown_messages);
     RUN_TEST(latest_start_handles_empty_and_tiny_view);
     RUN_TEST(latest_start_uses_prepared_date_cache);
     RUN_TEST(history_view_counts_wrapped_message_rows);

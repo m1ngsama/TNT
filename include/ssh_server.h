@@ -54,6 +54,7 @@ typedef struct client {
     int insert_history_count;
     int insert_history_pos;
     char draft[MAX_MESSAGE_LEN];     /* Left by :quote for the input line */
+    time_t read_marker;              /* When a member last left; 0 for none */
     /* Cached by tui_render_input for tui_render_screen, which has no editor. */
     int input_rows;
     char command_output[MAX_COMMAND_OUTPUT_LEN];

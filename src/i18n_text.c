@@ -241,6 +241,10 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "No room message to quote\n",
         "没有可以引用的房间消息\n"
     ),
+    [I18N_READ_MARKER] = I18N_STRING(
+        "new since you left",
+        "你离开后的新消息"
+    ),
     [I18N_SEARCH_HEADER_FORMAT] = I18N_STRING(
         "--- Search: \"%s\" (showing last %d match(es)) ---\n",
         "--- 搜索: \"%s\" (显示最近 %d 条匹配) ---\n"

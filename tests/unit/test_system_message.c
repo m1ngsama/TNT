@@ -33,6 +33,25 @@ TEST(join_leave_follow_language) {
     assert(system_message_is_join_leave(&msg));
 }
 
+TEST(leave_of_matches_one_name_in_either_language) {
+    message_t msg;
+
+    system_message_make_leave(&msg, "alice", UI_LANG_ZH);
+    assert(system_message_is_leave_of(&msg, "alice"));
+    assert(!system_message_is_leave_of(&msg, "ali"));
+    assert(!system_message_is_leave_of(&msg, "alice2"));
+
+    system_message_make_leave(&msg, "alice", UI_LANG_EN);
+    assert(system_message_is_leave_of(&msg, "alice"));
+
+    system_message_make_join(&msg, "alice", UI_LANG_EN);
+    assert(!system_message_is_leave_of(&msg, "alice"));
+
+    snprintf(msg.username, sizeof(msg.username), "alice");
+    snprintf(msg.content, sizeof(msg.content), "alice left the room");
+    assert(!system_message_is_leave_of(&msg, "alice"));
+}
+
 TEST(nick_messages_are_system_events_not_join_leave) {
     message_t msg;
 
@@ -69,6 +88,7 @@ int main(void) {
     printf("Running system message unit tests...\n\n");
 
     RUN_TEST(join_leave_follow_language);
+    RUN_TEST(leave_of_matches_one_name_in_either_language);
     RUN_TEST(nick_messages_are_system_events_not_join_leave);
     RUN_TEST(legacy_system_names_are_recognized);
 
