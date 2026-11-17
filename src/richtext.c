@@ -257,7 +257,14 @@ size_t richtext_parse(const char *text, char *out, size_t out_size,
             }
         }
 
-        parse_inline(p, p + len, out, out_size, &oi, runs, max_runs, &rc);
+        if (len >= 2 && p[0] == '>' && p[1] == ' ') {
+            size_t start = oi;
+
+            emit(out, out_size, &oi, p, len);
+            add_run(runs, max_runs, &rc, start, oi - start, RICHTEXT_QUOTE);
+        } else {
+            parse_inline(p, p + len, out, out_size, &oi, runs, max_runs, &rc);
+        }
         p += len;
         if (*p == '\n') {
             emit(out, out_size, &oi, "\n", 1);
@@ -277,6 +284,7 @@ const char *richtext_style_on(richtext_style_t style) {
         case RICHTEXT_BOLD: return "\033[1m";
         case RICHTEXT_CODE: return "\033[36m";
         case RICHTEXT_URL:  return "\033[4m";
+        case RICHTEXT_QUOTE: return "\033[2m";
         default:            return "";
     }
 }
@@ -286,6 +294,7 @@ const char *richtext_style_off(richtext_style_t style) {
         case RICHTEXT_BOLD: return "\033[22m";
         case RICHTEXT_CODE: return "\033[39m";
         case RICHTEXT_URL:  return "\033[24m";
+        case RICHTEXT_QUOTE: return "\033[22m";
         default:            return "";
     }
 }

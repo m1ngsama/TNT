@@ -189,6 +189,27 @@ TEST(parse_highlights_a_bare_url) {
     assert(run_is(out, runs[0], RICHTEXT_URL, "https://tnt.example/x"));
 }
 
+TEST(parse_dims_a_quote_line_and_keeps_its_markers) {
+    char out[128];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse("> bob: **hi**\n@bob ok", out, sizeof(out), &len, runs,
+                 8) == 1);
+    assert(strcmp(out, "> bob: **hi**\n@bob ok") == 0);
+    assert(len == strlen(out));
+    assert(run_is(out, runs[0], RICHTEXT_QUOTE, "> bob: **hi**"));
+}
+
+TEST(parse_needs_a_space_after_the_quote_marker) {
+    char out[128];
+    size_t len;
+    richtext_run_t runs[8];
+
+    assert(parse(">not a quote", out, sizeof(out), &len, runs, 8) == 0);
+    assert(parse("a > b", out, sizeof(out), &len, runs, 8) == 0);
+}
+
 TEST(parse_does_not_highlight_a_url_inside_code) {
     char out[128];
     size_t len;
@@ -324,6 +345,8 @@ int main(void) {
     RUN_TEST(parse_marks_a_fenced_block_as_code);
     RUN_TEST(parse_leaves_an_unclosed_fence_literal);
     RUN_TEST(parse_highlights_a_bare_url);
+    RUN_TEST(parse_dims_a_quote_line_and_keeps_its_markers);
+    RUN_TEST(parse_needs_a_space_after_the_quote_marker);
     RUN_TEST(parse_does_not_highlight_a_url_inside_code);
     RUN_TEST(parse_keeps_runs_ordered_and_disjoint);
     RUN_TEST(parse_wrapping_measures_the_visible_text);

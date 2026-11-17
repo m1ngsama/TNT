@@ -30,7 +30,8 @@ wide_text_view 9
 module_privileged 16
 identity 17
 module_private 18
-client_lang 19"
+client_lang 19
+quote_reply 20"
 
 WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tnt-suites.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT

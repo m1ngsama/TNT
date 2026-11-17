@@ -106,6 +106,75 @@ static bool message_visible_for_client(const client_t *client,
            !system_message_is_join_leave(msg);
 }
 
+#define QUOTE_SNIPPET_WIDTH 60
+
+static void quote_author(const message_t *msg, char *author, size_t size) {
+    size_t actor_len = history_view_action_actor_len(msg);
+
+    if (actor_len > 0) {
+        snprintf(author, size, "%.*s", (int)actor_len, msg->content);
+    } else {
+        snprintf(author, size, "%s", msg->username);
+    }
+}
+
+/* The first line that is not itself a quote, so quoting a reply quotes what
+ * was said rather than what it answered. */
+static void quote_snippet(const message_t *msg, char *snippet, size_t size) {
+    const char *body = history_view_message_body(msg);
+    const char *line = body;
+
+    while (strncmp(line, "> ", 2) == 0 && strchr(line, '\n')) {
+        line = strchr(line, '\n') + 1;
+    }
+    if (strncmp(line, "> ", 2) == 0) {
+        line = body;
+    }
+    snprintf(snippet, size, "%.*s", (int)strcspn(line, "\n"), line);
+    if (utf8_string_width(snippet) > QUOTE_SNIPPET_WIDTH) {
+        utf8_truncate(snippet, QUOTE_SNIPPET_WIDTH - 1);
+        snprintf(snippet + strlen(snippet), size - strlen(snippet), "…");
+    }
+}
+
+/* With no argument the newest message someone else sent; with a number the
+ * nth newest of those; with a name the newest message from that name. */
+static bool build_quote_draft(const client_t *client, const char *arg,
+                              char *draft, size_t size) {
+    message_t *recent = calloc(MAX_MESSAGES, sizeof(*recent));
+    char *end = NULL;
+    long nth = arg[0] ? strtol(arg, &end, 10) : 1;
+    bool by_name = arg[0] && (*end != '\0' || nth < 1);
+    bool found = false;
+
+    if (!recent) {
+        return false;
+    }
+    int count = room_copy_recent_messages(g_room, recent, MAX_MESSAGES, NULL);
+    for (int i = count - 1; i >= 0 && !found; i--) {
+        char author[MAX_USERNAME_LEN];
+        char snippet[MAX_MESSAGE_LEN];
+
+        if (system_message_is_system(&recent[i])) {
+            continue;
+        }
+        quote_author(&recent[i], author, sizeof(author));
+        if (by_name ? strcmp(author, arg) != 0
+                    : strcmp(author, client->username) == 0 || --nth > 0) {
+            continue;
+        }
+        quote_snippet(&recent[i], snippet, sizeof(snippet));
+        if (strcmp(author, client->username) == 0) {
+            snprintf(draft, size, "> %s: %s\n", author, snippet);
+        } else {
+            snprintf(draft, size, "> %s: %s\n@%s ", author, snippet, author);
+        }
+        found = true;
+    }
+    free(recent);
+    return found;
+}
+
 static void client_append_whisper(client_t *owner, const char *from,
                                   const char *to, const char *content,
                                   bool outgoing, bool count_unread) {
@@ -638,6 +707,18 @@ void commands_dispatch(client_t *client) {
                                      I18N_LOGOUT_DONE_FORMAT),
                            client->username);
         }
+
+    } else if (command_id == TNT_COMMAND_QUOTE) {
+        while (*arg == ' ') arg++;
+        if (build_quote_draft(client, arg, client->draft,
+                              sizeof(client->draft))) {
+            client->command_input[0] = '\0';
+            client->command_output[0] = '\0';
+            client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
+            return;
+        }
+        buffer_appendf(output, sizeof(output), &pos, "%s",
+                       i18n_text(client->ui_lang, I18N_QUOTE_NONE));
 
     } else if (command_id == TNT_COMMAND_LAST) {
         while (*arg == ' ') arg++;
