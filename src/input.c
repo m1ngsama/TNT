@@ -481,7 +481,7 @@ static void normal_enter_insert(client_t *client) {
     tui_render_screen(client);
 }
 
-/* :quote cannot reach the editor, which lives in this loop, so it leaves
+/* :cite cannot reach the editor, which lives in this loop, so it leaves
  * its text on the client for the loop to pick up after dispatch. */
 static void take_draft(client_t *client, editor_t *ed) {
     if (!client || client->draft[0] == '\0') return;

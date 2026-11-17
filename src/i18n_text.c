@@ -237,8 +237,8 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "No messages to show\n",
         "没有可显示的消息\n"
     ),
-    [I18N_QUOTE_NONE] = I18N_STRING(
-        "No room message to quote\n",
+    [I18N_CITE_NONE] = I18N_STRING(
+        "No room message to cite\n",
         "没有可以引用的房间消息\n"
     ),
     [I18N_READ_MARKER] = I18N_STRING(
