@@ -50,6 +50,15 @@ static const command_catalog_entry_t entries[] = {
         2, false, true
     },
     {
+        {TNT_COMMAND_QUOTE, "quote", {"quote", NULL}},
+        I18N_STRING(":quote [user|n]", ":quote [user|n]"),
+        I18N_STRING("Quote a room message into the input line",
+                    "把一条房间消息引用到输入行"),
+        I18N_STRING(":quote [user|n]", ":quote [user|n]"),
+        I18N_STRING("Usage: quote [user|n]\n", "用法: quote [user|n]\n"),
+        2, false, false
+    },
+    {
         {TNT_COMMAND_INBOX, "inbox", {"inbox", NULL}},
         I18N_STRING(":inbox, :inbox clear", ":inbox, :inbox clear"),
         I18N_STRING("Show or clear private messages", "查看或清空私信"),

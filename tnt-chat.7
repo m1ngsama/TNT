@@ -419,6 +419,10 @@ An
 or
 .B https
 URL is underlined where it stands.
+.TP
+.BI "> " text
+At the start of a line, a quote.
+The whole line is dimmed and keeps its markers.
 .P
 Headings, lists, tables, italics, and nesting are not rendered.
 A marker that never closes stays literal, so ordinary text is never eaten.
@@ -466,6 +470,21 @@ The open inbox refreshes when a new private message arrives.
 .TP
 .B :inbox clear
 Clear the inbox and the current reply target.
+.TP
+.BI ":quote " "\fR[\fPuser\fR|\fPn\fR]\fP"
+Put a room message into the input line as a quote and enter INSERT mode.
+With no argument it quotes the newest message someone else sent;
+with a number
+.I n
+the
+.IR n th
+newest of those;
+with a name the newest message from that name.
+The draft is one
+.B "> "
+line holding the author and the first line of the message, shortened to 60
+columns, followed by a line that mentions the author.
+A quote of one's own message adds no mention.
 .TP
 .BI ":nick " name
 .TQ

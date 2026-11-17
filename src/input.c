@@ -481,6 +481,19 @@ static void normal_enter_insert(client_t *client) {
     tui_render_screen(client);
 }
 
+/* :quote cannot reach the editor, which lives in this loop, so it leaves
+ * its text on the client for the loop to pick up after dispatch. */
+static void take_draft(client_t *client, editor_t *ed) {
+    if (!client || client->draft[0] == '\0') return;
+    editor_set_text(ed, client->draft);
+    client->draft[0] = '\0';
+    client->mode = MODE_INSERT;
+    client->follow_tail = true;
+    client->input_rows = tui_input_rows(client, ed);
+    tui_render_screen(client);
+    tui_render_input(client, ed);
+}
+
 static void dismiss_command_output(client_t *client) {
     bool was_motd;
 
@@ -1183,6 +1196,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                             sizeof(client->command_input) - 1);
                         editor_clear(ed);
                         commands_dispatch(client);
+                        take_draft(client, ed);
                         client->command_input[0] = '\0';
                         *command_input_len = 0;
                         client->redraw_pending = true;
@@ -1486,6 +1500,7 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                 return true;
             } else if (key == '\r' || key == '\n') {
                 commands_dispatch(client);
+                take_draft(client, ed);
                 *command_input_len = 0;
                 return true;  /* Key consumed */
             } else if (key == 127 || key == 8) {  /* Backspace */

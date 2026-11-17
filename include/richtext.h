@@ -20,7 +20,8 @@ typedef enum {
     RICHTEXT_PLAIN,
     RICHTEXT_BOLD,
     RICHTEXT_CODE,
-    RICHTEXT_URL
+    RICHTEXT_URL,
+    RICHTEXT_QUOTE
 } richtext_style_t;
 
 /* One styled range of the visible text produced by richtext_parse. */
@@ -41,8 +42,9 @@ typedef struct {
  * plain.  Returns the number of runs written; `*out_len` receives the visible
  * length.  A marker that never closes stays literal.
  *
- * The subset is `**bold**`, `` `code` ``, ``` fences on their own line, and
- * bare http/https URLs.  Nesting is not parsed; code wins over bold. */
+ * The subset is `**bold**`, `` `code` ``, ``` fences on their own line,
+ * bare http/https URLs, and `> ` quote lines, which are dimmed whole, marker
+ * and markers inside included.  Nesting is not parsed; code wins over bold. */
 size_t richtext_parse(const char *text, char *out, size_t out_size,
                       size_t *out_len, richtext_run_t *runs, size_t max_runs);
 
