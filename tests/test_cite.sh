@@ -1,17 +1,18 @@
 #!/bin/sh
-# End-to-end test: :quote puts a room message into the input line as a quote
-# plus a mention, and a "> " line renders dimmed.
+# End-to-end test: :cite puts a room message into the input line as a quote
+# plus a mention, a "> " line renders dimmed, and /quote stays a chat message
+# for the proverb module that answers it.
 
 . ./lib.sh
 
 PORT=${PORT:-12364}
 trap tnt_cleanup EXIT
 
-tnt_skip_without_expect "quote reply test"
+tnt_skip_without_expect "cite test"
 tnt_require_binary
-tnt_state_dir quote-test
+tnt_state_dir cite-test
 
-echo "=== TNT Quote Reply Test ==="
+echo "=== TNT Cite Test ==="
 
 TNT_KEYMAP=default
 export TNT_KEYMAP
@@ -31,53 +32,63 @@ tnt_wait_for "$LOG" '|bob|nice' || {
 }
 
 tnt_expect_session "carol" '
-send_wait "/quote"
+send_wait "/cite"
 send -- "\r"
 expect "@bob"
 send_wait "ship it"
 send -- "\r"
-send_wait "/quote alice"
+send_wait "/cite alice"
 send -- "\r"
 expect "@alice"
 send_wait "agreed"
 send -- "\r"
-send_wait "/quote 2"
+send_wait "/cite 2"
 send -- "\r"
 expect "@alice"
 send_wait "again"
 send -- "\r"
-send_wait "/quote nobody"
+send_wait "/cite nobody"
 send -- "\r"
-expect "No room message to quote"
+expect "No room message to cite"
+send -- "q"
+send_wait "/quote"
+send_enter
 '
 
 if tnt_wait_for_fixed "$LOG" '|carol|> bob: nice\n@bob ship it'; then
-    pass ":quote with no argument quotes the newest message from someone else"
+    pass ":cite with no argument quotes the newest message from someone else"
 else
-    fail "bare :quote did not produce the expected record"
+    fail "bare :cite did not produce the expected record"
     cat "$LOG" 2>/dev/null
     tnt_dump_session carol
 fi
 
 if grep -qF '|carol|> alice: the release build is green on every target we ship, arm64 i…\n@alice agreed' "$LOG"; then
-    pass ":quote <user> quotes that user and shortens a long line to 60 columns"
+    pass ":cite <user> quotes that user and shortens a long line to 60 columns"
 else
-    fail ":quote alice did not produce the expected record"
+    fail ":cite alice did not produce the expected record"
     cat "$LOG" 2>/dev/null
 fi
 
 if grep -qF '|carol|> alice: ' "$LOG" &&
    [ "$(grep -c '|carol|> alice: ' "$LOG")" = "2" ]; then
-    pass ":quote <n> counts back over other people's messages"
+    pass ":cite <n> counts back over other people's messages"
 else
-    fail ":quote 2 did not quote alice"
+    fail ":cite 2 did not quote alice"
     cat "$LOG" 2>/dev/null
 fi
 
 if grep -q 'nobody' "$LOG"; then
-    fail ":quote of an unknown name posted something"
+    fail ":cite of an unknown name posted something"
 else
-    pass ":quote of an unknown name reports and posts nothing"
+    pass ":cite of an unknown name reports and posts nothing"
+fi
+
+if tnt_wait_for_fixed "$LOG" '|carol|/quote|'; then
+    pass "/quote is still sent as a chat message for modules to answer"
+else
+    fail "/quote did not reach the room"
+    cat "$LOG" 2>/dev/null
 fi
 
 VIEW_SCRIPT="$STATE_DIR/quote-view.expect"

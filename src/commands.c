@@ -708,7 +708,7 @@ void commands_dispatch(client_t *client) {
                            client->username);
         }
 
-    } else if (command_id == TNT_COMMAND_QUOTE) {
+    } else if (command_id == TNT_COMMAND_CITE) {
         while (*arg == ' ') arg++;
         if (build_quote_draft(client, arg, client->draft,
                               sizeof(client->draft))) {
@@ -718,7 +718,7 @@ void commands_dispatch(client_t *client) {
             return;
         }
         buffer_appendf(output, sizeof(output), &pos, "%s",
-                       i18n_text(client->ui_lang, I18N_QUOTE_NONE));
+                       i18n_text(client->ui_lang, I18N_CITE_NONE));
 
     } else if (command_id == TNT_COMMAND_LAST) {
         while (*arg == ' ') arg++;
