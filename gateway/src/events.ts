@@ -36,11 +36,13 @@ export function createReporter(options: ReporterOptions) {
   }
 
   const save = () => Bun.write(options.file, JSON.stringify(pending));
+  const authorization = `Basic ${btoa(`tnt:${options.secret}`)}`;
 
   async function subFor(handle: string): Promise<string | null> {
     const known = subs.get(handle);
     if (known) return known;
-    const res = await request(`${options.issuer}/people/${encodeURIComponent(handle)}`);
+    // An anonymous profile no longer carries `sub`; the events credential reads the full one.
+    const res = await request(`${options.issuer}/people/${encodeURIComponent(handle)}`, { headers: { authorization } });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`people lookup answered ${res.status}`);
     const { sub } = (await res.json()) as { sub?: unknown };
@@ -62,7 +64,7 @@ export function createReporter(options: ReporterOptions) {
       if (events.length > 0) {
         const res = await request(`${options.issuer}/internal/events`, {
           method: "POST",
-          headers: { authorization: `Basic ${btoa(`tnt:${options.secret}`)}`, "content-type": "application/json" },
+          headers: { authorization, "content-type": "application/json" },
           body: JSON.stringify({ events }),
         });
         if (res.status !== 202) throw new Error(`events answered ${res.status}`);

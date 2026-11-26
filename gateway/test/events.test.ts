@@ -15,6 +15,7 @@ function setup(eventsStatus: () => number) {
     const path = new URL(url).pathname;
     if (path.startsWith("/people/")) {
       lookups.push(path);
+      if (new Headers(init?.headers).get("authorization") !== `Basic ${btoa("tnt:s3cret")}`) return Response.json({ handle: "lune" });
       return path === "/people/lune" ? Response.json({ sub: "sub-lune" }) : Response.json({ error: "not_found" }, { status: 404 });
     }
     posted.push({ authorization: new Headers(init?.headers).get("authorization"), body: JSON.parse(String(init?.body)) });
