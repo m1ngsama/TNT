@@ -110,6 +110,31 @@ static const command_catalog_entry_t entries[] = {
         1, false, true
     },
     {
+        {TNT_COMMAND_JOIN, "join", {"join", NULL}},
+        I18N_STRING(":join <room>", ":join <room>"),
+        I18N_STRING("Enter a room, opening it if new", "进入房间，没有就新建"),
+        I18N_STRING(":join <room>", ":join <room>"),
+        I18N_STRING("Usage: join <room>  (1-20 of a-z, 0-9, -)\n",
+                    "用法: join <room>  (1-20 个 a-z、0-9、-)\n"),
+        1, false, true
+    },
+    {
+        {TNT_COMMAND_ROOMS, "rooms", {"rooms", NULL}},
+        I18N_STRING(":rooms", ":rooms"),
+        I18N_STRING("List rooms", "列出房间"),
+        I18N_STRING(":rooms", ":rooms"),
+        I18N_STRING("Usage: rooms\n", "用法: rooms\n"),
+        1, true, false
+    },
+    {
+        {TNT_COMMAND_LEAVE, "leave", {"leave", NULL}},
+        I18N_STRING(":leave", ":leave"),
+        I18N_STRING("Go back to the lobby", "回到大厅"),
+        I18N_STRING(":leave", ":leave"),
+        I18N_STRING("Usage: leave\n", "用法: leave\n"),
+        1, true, false
+    },
+    {
         {TNT_COMMAND_MUTE_JOINS, "mute-joins", {"mute-joins", "mute", NULL}},
         I18N_STRING(":mute-joins, :mute", ":mute-joins, :mute"),
         I18N_STRING("Toggle join/leave notices", "切换加入/离开提示"),

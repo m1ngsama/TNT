@@ -1,6 +1,6 @@
 import type { Server, ServerWebSocket } from "bun";
 import type { Verify } from "./auth";
-import { type Ledger, type Message, ROOM } from "./history";
+import { Ledger, type Message, ROOM, isRoomName } from "./history";
 import type { PrivateEvent, RoomEvent } from "./module";
 import { Presence } from "./presence";
 import { RateLimiter } from "./ratelimit";
@@ -17,20 +17,28 @@ const NONCE_MAX_LENGTH = 64;
 const SEARCH_LIMIT = 50;
 const QUERY_MAX_LENGTH = 64;
 const OPEN = 1;
+const ROOMS_MAX = 64;
 
 type Session = {
   id: string;
   state: "new" | "pending" | "ready";
   handle: string;
+  room: string;
   timer?: ReturnType<typeof setTimeout>;
 };
 type Socket = ServerWebSocket<Session>;
 type Frame = Record<string, unknown> | null;
 
 export type GatewayOptions = {
+  /** The lobby's history. */
   ledger: Ledger;
+  /** Other rooms' histories, by name. */
+  rooms?: Map<string, Ledger>;
+  /** True once TNT has agreed to rooms; until then every client stays in the lobby. */
+  roomsEnabled?: () => boolean;
+  ledgerLimit?: number;
   verify: Verify;
-  post: (sender: string, text: string) => void;
+  post: (sender: string, text: string, room: string) => void;
   signedIn?: (handle: string) => void;
   /** Hands a private message to TNT for an SSH user; false when TNT cannot take one. */
   privatePost?: (from: string, to: string, text: string) => boolean;
@@ -58,14 +66,31 @@ export function createGateway(options: GatewayOptions) {
   const now = options.now ?? (() => new Date());
   const typingAt = new Map<string, number>();
   const sent = new Map<string, { message: Message; at: number }>();
-  let online = "[]";
+  const ledgers = new Map<string, Ledger>([...(options.rooms ?? []), [ROOM, options.ledger]]);
+  const sshIn = new Map<string, Set<string>>();
+  const onlineKeys = new Map<string, string>();
   let remote = "[]";
 
-  const broadcast = (frame: object) => {
-    const data = JSON.stringify(frame);
-    for (const ws of clients) ws.send(data);
+  const ledgerFor = (room: string): Ledger | null => {
+    let ledger = ledgers.get(room);
+    if (!ledger && ledgers.size < ROOMS_MAX) {
+      ledger = new Ledger(options.ledgerLimit ?? 5000, room);
+      ledgers.set(room, ledger);
+    }
+    return ledger ?? null;
   };
-  const deliver = (message: Message, nonce?: string) => broadcast(nonce ? { type: "message", ...message, nonce } : { type: "message", ...message });
+  const broadcast = (room: string, frame: object) => {
+    const data = JSON.stringify(frame);
+    for (const ws of clients) if (ws.data.room === room) ws.send(data);
+  };
+  const deliver = (message: Message, nonce?: string) =>
+    broadcast(message.room, nonce ? { type: "message", ...message, nonce } : { type: "message", ...message });
+  const onlineIn = (room: string): string[] => {
+    if (room === ROOM) return presence.online();
+    const names = new Set(sshIn.get(room));
+    for (const ws of clients) if (ws.data.room === room) names.add(ws.data.handle);
+    return [...names].sort();
+  };
   const syncRemote = () => {
     const list = presence.web();
     const key = JSON.stringify(list);
@@ -78,13 +103,15 @@ export function createGateway(options: GatewayOptions) {
     for (const ws of clients) if (ws.data.handle === handle) ws.send(data);
   };
   const stamp = () => now().toISOString().replace(/\.\d{3}Z$/, "Z");
-  const syncPresence = () => {
+  const syncPresence = (...rooms: string[]) => {
     syncRemote();
-    const list = presence.online();
-    const key = JSON.stringify(list);
-    if (key === online) return;
-    online = key;
-    broadcast({ type: "presence", room: ROOM, online: list });
+    for (const room of new Set([ROOM, ...rooms])) {
+      const list = onlineIn(room);
+      const key = JSON.stringify(list);
+      if (key === (onlineKeys.get(room) ?? "[]")) continue;
+      onlineKeys.set(room, key);
+      broadcast(room, { type: "presence", room, online: list });
+    }
   };
   const reject = (ws: Socket) => ws.close(CLOSE_UNAUTHORIZED, "unauthorized");
   const fail = (ws: Socket, code: string) => ws.send(JSON.stringify({ type: "error", code }));
@@ -114,7 +141,7 @@ export function createGateway(options: GatewayOptions) {
     const limit = frame.until === undefined
       ? Math.min(HISTORY_PAGE_MAX, Math.max(1, Math.trunc(Number(frame.limit)) || HISTORY_PAGE))
       : HISTORY_REACH_MAX;
-    const page = options.ledger.before(frame.before, limit, frame.until);
+    const page = ledgers.get(ws.data.room)!.before(frame.before, limit, frame.until);
     if (page === null) return fail(ws, "unknown_message");
     ws.send(JSON.stringify({ type: "history", before: frame.before, ...page }));
   }
@@ -125,7 +152,7 @@ export function createGateway(options: GatewayOptions) {
     if (at - (typingAt.get(handle) ?? 0) < TYPING_INTERVAL_MS) return;
     typingAt.set(handle, at);
     const data = JSON.stringify({ type: "typing", handle });
-    for (const client of clients) if (client.data.handle !== handle) client.send(data);
+    for (const client of clients) if (client.data.handle !== handle && client.data.room === ws.data.room) client.send(data);
   }
 
   function sendPrivate(ws: Socket, frame: Record<string, unknown>) {
@@ -148,7 +175,18 @@ export function createGateway(options: GatewayOptions) {
     const query = typeof frame.query === "string" ? frame.query.trim() : "";
     if (query === "" || query.length > QUERY_MAX_LENGTH) return fail(ws, "invalid_frame");
     if (!historyLimiter.take(ws.data.handle)) return fail(ws, "rate_limited");
-    ws.send(JSON.stringify({ type: "search", query, messages: options.ledger.search(query, SEARCH_LIMIT) }));
+    ws.send(JSON.stringify({ type: "search", query, messages: ledgers.get(ws.data.room)!.search(query, SEARCH_LIMIT) }));
+  }
+
+  function join(ws: Socket, frame: Record<string, unknown>) {
+    if (!isRoomName(frame.room)) return fail(ws, "invalid_frame");
+    if (frame.room !== ROOM && !options.roomsEnabled?.()) return fail(ws, "rooms_unavailable");
+    const ledger = ledgerFor(frame.room);
+    if (!ledger) return fail(ws, "room_limit");
+    const from = ws.data.room;
+    ws.data.room = frame.room;
+    syncPresence(from, frame.room);
+    ws.send(JSON.stringify({ type: "joined", room: frame.room, history: ledger.recent(), presence: onlineIn(frame.room) }));
   }
 
   function receive(ws: Socket, frame: Frame) {
@@ -157,6 +195,7 @@ export function createGateway(options: GatewayOptions) {
     if (frame?.type === "typing") return forwardTyping(ws);
     if (frame?.type === "private") return sendPrivate(ws, frame);
     if (frame?.type === "search") return search(ws, frame);
+    if (frame?.type === "join") return join(ws, frame);
     if (frame?.type !== "send") return fail(ws, "invalid_frame");
     const text = validateText(frame.text);
     if (text === null) return fail(ws, "invalid_text");
@@ -166,8 +205,8 @@ export function createGateway(options: GatewayOptions) {
     const earlier = key === undefined ? undefined : sent.get(key);
     if (earlier) return ws.send(JSON.stringify({ type: "message", ...earlier.message, nonce }));
     if (!limiter.take(sender)) return fail(ws, "rate_limited");
-    options.post(sender, text);
-    const message = options.ledger.add({ timestamp: stamp(), sender, text, verified: true });
+    options.post(sender, text, ws.data.room);
+    const message = ledgers.get(ws.data.room)!.add({ timestamp: stamp(), sender, text, verified: true });
     if (key !== undefined) sent.set(key, { message, at: Date.now() });
     deliver(message, nonce);
   }
@@ -175,7 +214,7 @@ export function createGateway(options: GatewayOptions) {
   return {
     fetch(request: Request, server: Server<Session>): Response | undefined {
       if (new URL(request.url).pathname !== "/ws") return new Response("Not Found", { status: 404 });
-      if (server.upgrade(request, { data: { id: crypto.randomUUID(), state: "new", handle: "" } })) return undefined;
+      if (server.upgrade(request, { data: { id: crypto.randomUUID(), state: "new", handle: "", room: ROOM } })) return undefined;
       return new Response("Upgrade Required", { status: 426 });
     },
     websocket: {
@@ -192,7 +231,7 @@ export function createGateway(options: GatewayOptions) {
         clearTimeout(ws.data.timer);
         if (!clients.delete(ws)) return;
         presence.webLeft(ws.data.handle, ws.data.id);
-        syncPresence();
+        syncPresence(ws.data.room);
       },
     },
     sweep(at?: number) {
@@ -215,15 +254,25 @@ export function createGateway(options: GatewayOptions) {
       });
     },
     handleEvent(event: RoomEvent) {
+      const room = event.room ?? ROOM;
       if (event.type === "message.created") {
         const { timestamp, sender, plain_text, verified } = event.message;
-        deliver(options.ledger.add({ timestamp, sender, text: normalizeText(plain_text), verified }));
+        const ledger = ledgerFor(room);
+        if (ledger) deliver(ledger.add({ timestamp, sender, text: normalizeText(plain_text), verified }));
         return;
       }
-      if (event.type === "presence.snapshot") presence.sshSnapshot(event.nicknames);
-      else if (event.type === "presence.joined") presence.sshJoined(event.nickname);
-      else presence.sshLeft(event.nickname);
-      syncPresence();
+      if (room === ROOM) {
+        if (event.type === "presence.snapshot") presence.sshSnapshot(event.nicknames);
+        else if (event.type === "presence.joined") presence.sshJoined(event.nickname);
+        else presence.sshLeft(event.nickname);
+      } else {
+        const names = sshIn.get(room) ?? new Set<string>();
+        sshIn.set(room, names);
+        if (event.type === "presence.snapshot") for (const name of event.nicknames) names.add(name);
+        else if (event.type === "presence.joined") names.add(event.nickname);
+        else names.delete(event.nickname);
+      }
+      syncPresence(room);
     },
   };
 }

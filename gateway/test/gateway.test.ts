@@ -4,18 +4,21 @@ import { Ledger } from "../src/history";
 import { connect } from "./client";
 
 let server: ReturnType<typeof Bun.serve>;
-let posts: [string, string][];
+let posts: [string, string, string][];
+let roomsOn: boolean;
 let gateway: ReturnType<typeof createGateway>;
 let url: string;
 
 beforeEach(() => {
   posts = [];
+  roomsOn = true;
   const ledger = new Ledger(100);
   ledger.add({ timestamp: "2026-09-22T09:59:00Z", sender: "carol", text: "earlier" });
   gateway = createGateway({
     ledger,
     verify: async (token) => (token === "alice" || token === "bob" ? token : null),
-    post: (sender, text) => posts.push([sender, text]),
+    post: (sender, text, room) => posts.push([sender, text, room]),
+    roomsEnabled: () => roomsOn,
     now: () => new Date("2026-09-22T10:00:00.900Z"),
     authTimeoutMs: 200,
   });
@@ -69,7 +72,7 @@ describe("session", () => {
       mentions: [],
       verified: true,
     });
-    expect(posts).toEqual([["alice", "hello"]]);
+    expect(posts).toEqual([["alice", "hello", "lobby"]]);
   });
 
   test("rejects invalid text and enforces the rate limit", async () => {
@@ -140,7 +143,7 @@ describe("idempotent sends", () => {
     alice.send({ type: "send", text: "hello", nonce: "n1" });
     const again = await alice.next((f) => f.type === "message");
     expect(again.id).toBe(first.id);
-    expect(posts).toEqual([["alice", "hello"]]);
+    expect(posts).toEqual([["alice", "hello", "lobby"]]);
     alice.send({ type: "send", text: "hello" });
     expect((await alice.next((f) => f.type === "message")).id).not.toBe(first.id);
   });
@@ -292,6 +295,66 @@ describe("private messages", () => {
     await bob.next((f) => f.type === "ready");
     direct.handlePrivate({ type: "private.created", from: "carol", to: "Bob", plain_text: "back at you", timestamp: "2026-09-22T10:00:00Z", verified: false });
     expect(await bob.next((f) => f.type === "private")).toMatchObject({ from: "carol", to: "bob", text: "back at you", verified: false });
+  });
+});
+
+describe("rooms", () => {
+  const event = (text: string, room?: string) =>
+    gateway.handleEvent({ type: "message.created", ...(room ? { room } : {}), message: { timestamp: "2026-09-22T10:00:05Z", sender: "carol", plain_text: text, verified: false } });
+
+  test("a client that never sends a room frame stays in the lobby", async () => {
+    const alice = connect(url, "alice");
+    expect(await alice.next((f) => f.type === "ready")).toMatchObject({ room: "lobby" });
+    event("in ops", "ops");
+    event("in lobby");
+    expect(await alice.next((f) => f.type === "message")).toMatchObject({ room: "lobby", text: "in lobby" });
+    alice.send({ type: "send", text: "hello" });
+    expect(await alice.next((f) => f.type === "message")).toMatchObject({ room: "lobby", text: "hello" });
+    expect(posts).toEqual([["alice", "hello", "lobby"]]);
+    alice.send({ type: "search", query: "in" });
+    expect((await alice.next((f) => f.type === "search")).messages.map((m: { text: string }) => m.text)).toEqual(["in lobby"]);
+  });
+
+  test("a client that joins a room sees that room and not the lobby", async () => {
+    event("ops before", "ops");
+    const bob = connect(url, "bob");
+    await bob.next((f) => f.type === "ready");
+    bob.send({ type: "join", room: "ops" });
+    expect(await bob.next((f) => f.type === "joined")).toMatchObject({
+      room: "ops",
+      history: [expect.objectContaining({ room: "ops", text: "ops before" })],
+      presence: ["bob"],
+    });
+    event("lobby chatter");
+    event("ops news", "ops");
+    expect(await bob.next((f) => f.type === "message")).toMatchObject({ room: "ops", text: "ops news" });
+    await expect(bob.next((f) => f.type === "message" && f.room === "lobby", 300)).rejects.toThrow();
+    bob.send({ type: "send", text: "deploying" });
+    expect(await bob.next((f) => f.type === "message")).toMatchObject({ room: "ops", text: "deploying" });
+    expect(posts).toEqual([["bob", "deploying", "ops"]]);
+  });
+
+  test("lobby presence lists everyone and a room lists its members", async () => {
+    const alice = connect(url, "alice");
+    await alice.next((f) => f.type === "ready");
+    const bob = connect(url, "bob");
+    await bob.next((f) => f.type === "ready");
+    bob.send({ type: "join", room: "ops" });
+    await bob.next((f) => f.type === "joined");
+    gateway.handleEvent({ type: "presence.joined", room: "ops", nickname: "dave" });
+    expect((await bob.next((f) => f.type === "presence" && f.online.includes("dave"))).online).toEqual(["bob", "dave"]);
+    bob.send({ type: "join", room: "lobby" });
+    expect(await bob.next((f) => f.type === "joined")).toMatchObject({ room: "lobby", presence: ["alice", "bob"] });
+  });
+
+  test("refuses bad names and rooms TNT has not agreed to", async () => {
+    const alice = connect(url, "alice");
+    await alice.next((f) => f.type === "ready");
+    alice.send({ type: "join", room: "Ops" });
+    expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "invalid_frame" });
+    roomsOn = false;
+    alice.send({ type: "join", room: "ops" });
+    expect(await alice.next((f) => f.type === "error")).toEqual({ type: "error", code: "rooms_unavailable" });
   });
 });
 

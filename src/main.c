@@ -369,8 +369,9 @@ int main(int argc, char **argv) {
 
     /* Create chat room */
     g_room = room_create();
-    if (!g_room) {
+    if (!g_room || room_registry_init(g_room) < 0) {
         fprintf(stderr, "Failed to create chat room\n");
+        room_destroy(g_room);
         close_signal_pipe(shutdown_pipe);
         return TNT_EXIT_ERROR;
     }
@@ -379,6 +380,7 @@ int main(int argc, char **argv) {
      * first. */
     if (tnt_module_runtime_init() < 0) {
         fprintf(stderr, "Failed to initialize module runtime\n");
+        room_registry_shutdown();
         room_destroy(g_room);
         g_room = NULL;
         close_signal_pipe(shutdown_pipe);
@@ -389,6 +391,7 @@ int main(int argc, char **argv) {
     if (ssh_server_init(port) < 0) {
         fprintf(stderr, "Failed to initialize server\n");
         tnt_module_runtime_shutdown();
+        room_registry_shutdown();
         room_destroy(g_room);
         close_signal_pipe(shutdown_pipe);
         return TNT_EXIT_ERROR;
@@ -402,6 +405,7 @@ int main(int argc, char **argv) {
     }
 
     tnt_module_runtime_shutdown();
+    room_registry_shutdown();
     room_destroy(g_room);
     g_room = NULL;
     close_signal_pipe(shutdown_pipe);

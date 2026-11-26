@@ -21,6 +21,7 @@
 #define TNT_MODULE_EVENT_PRIVATE_CREATED "private.created"
 #define TNT_MODULE_REMOTE_USERS_MAX 256
 #define TNT_MODULE_SESSION_ID_SIZE 32
+#define TNT_MODULE_FEATURE_ROOMS "rooms"
 
 typedef struct {
     char plain_text[MAX_MESSAGE_LEN];
@@ -29,6 +30,7 @@ typedef struct {
 typedef struct {
     char sender[MAX_USERNAME_LEN];
     char plain_text[MAX_MESSAGE_LEN];
+    char room[TNT_ROOM_NAME_MAX + 1];  /* Empty for the default room */
 } tnt_module_message_post_t;
 
 typedef enum {
@@ -58,18 +60,20 @@ typedef struct {
 int tnt_module_append_handshake(char *buffer, size_t buf_size, size_t *pos,
                                 const char *server_version);
 
+/* A non-NULL `room` adds a room member, the default room's name when it is
+ * empty.  Only modules that negotiated rooms receive one. */
 int tnt_module_append_message_created(char *buffer, size_t buf_size,
                                       size_t *pos, const char *message_id,
-                                      const message_t *msg);
+                                      const message_t *msg, const char *room);
 
 int tnt_module_append_presence(char *buffer, size_t buf_size, size_t *pos,
                                const char *type, const char *nickname,
-                               time_t timestamp);
+                               time_t timestamp, const char *room);
 
 int tnt_module_append_presence_snapshot(char *buffer, size_t buf_size,
                                         size_t *pos,
                                         const char *const *nicknames,
-                                        size_t count);
+                                        size_t count, const char *room);
 
 int tnt_module_append_identity_requested(char *buffer, size_t buf_size,
                                          size_t *pos, const char *session,

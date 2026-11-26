@@ -35,7 +35,8 @@
 #define TNT_MODULE_SNAPSHOT_CHUNK 56
 
 struct client;
-void notify_mentions(const char *content, const struct client *sender);
+void notify_mentions(const char *content, const struct client *sender,
+                     const chat_room_t *room);
 bool input_identity_notice(const char *session, const char *plain_text);
 bool input_identity_verified(const char *session, const char *handle);
 int input_identity_reserve(const char *handle);
@@ -80,6 +81,7 @@ typedef struct module_process {
     module_read_buffer_t output;
     int invalid_responses;
     bool privileged;
+    bool rooms;
     atomic_bool active;
     pthread_t worker;
     pthread_mutex_t queue_lock;
@@ -666,15 +668,20 @@ static void close_module_process(module_process_t *module) {
     }
 }
 
-static bool handshake_ok(const char *line) {
+static bool handshake_ok(module_process_t *module, const char *line) {
     char type[64];
     char protocol[64];
 
-    return tnt_json_get_string_field(line, "type", type, sizeof(type)) &&
-           strcmp(type, "handshake.ok") == 0 &&
-           tnt_json_get_string_field(line, "protocol", protocol,
-                                     sizeof(protocol)) &&
-           strcmp(protocol, TNT_MODULE_PROTOCOL_VERSION) == 0;
+    if (!tnt_json_get_string_field(line, "type", type, sizeof(type)) ||
+        strcmp(type, "handshake.ok") != 0 ||
+        !tnt_json_get_string_field(line, "protocol", protocol,
+                                   sizeof(protocol)) ||
+        strcmp(protocol, TNT_MODULE_PROTOCOL_VERSION) != 0) {
+        return false;
+    }
+    module->rooms = json_array_contains_string(line, "features",
+                                               TNT_MODULE_FEATURE_ROOMS);
+    return true;
 }
 
 static bool establish_child_process_group(pid_t pid) {
@@ -760,7 +767,7 @@ static int start_module_process(const char *module_dir,
                            monotonic_millis() +
                                TNT_MODULE_HANDSHAKE_TIMEOUT_MS,
                            false) <= 0 ||
-        !handshake_ok(line)) {
+        !handshake_ok(module, line)) {
         close_module_process(module);
         return -1;
     }
@@ -973,7 +980,8 @@ static int queue_event_locked(module_event_kind_t kind, const message_t *msg,
 
         if (module == origin || module->manifest.can_moderate ||
             (kind != MODULE_EVENT_MESSAGE_CREATED &&
-             !module->manifest.can_read_presence)) {
+             !module->manifest.can_read_presence) ||
+            (!module->rooms && !message_room_is_default(event.msg.room))) {
             continue;
         }
         if (module_queue_push(module, &event) == MODULE_QUEUE_SATURATED &&
@@ -1039,7 +1047,17 @@ static bool record_has_type(const char *line, const char *expected) {
            strcmp(type, expected) == 0;
 }
 
-static bool publish_message(const message_t *msg) {
+static bool publish_message(message_t *msg, const char *room_name) {
+    chat_room_t *room = message_room_is_default(room_name)
+                            ? g_room
+                            : room_find(room_name, true);
+
+    if (!room) {
+        fprintf(stderr, "module runtime: no room %s for module message\n",
+                room_name);
+        return false;
+    }
+    room_tag_message(room, msg);
     pthread_mutex_lock(&g_module_publish_lock);
     if (message_save(msg) < 0) {
         pthread_mutex_unlock(&g_module_publish_lock);
@@ -1047,14 +1065,15 @@ static bool publish_message(const message_t *msg) {
         return false;
     }
 
-    room_broadcast(g_room, msg);
-    notify_mentions(msg->content, NULL);
+    room_broadcast(room, msg);
+    notify_mentions(msg->content, NULL, room);
     pthread_mutex_unlock(&g_module_publish_lock);
     return true;
 }
 
 static void publish_module_message(const module_process_t *module,
-                                   const char *plain_text) {
+                                   const char *plain_text,
+                                   const char *room) {
     message_t msg = {
         .timestamp = time(NULL),
     };
@@ -1064,7 +1083,7 @@ static void publish_module_message(const module_process_t *module,
     snprintf(msg.username, sizeof(msg.username), "module:%.*s",
              TNT_MODULE_NAME_MAX, module->manifest.name);
     snprintf(msg.content, sizeof(msg.content), "%s", plain_text);
-    if (publish_message(&msg)) {
+    if (publish_message(&msg, room)) {
         dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
     }
 }
@@ -1084,7 +1103,7 @@ static void publish_posted_message(const module_process_t *module,
         snprintf(msg.username, sizeof(msg.username), "%s", post->sender);
         snprintf(msg.content, sizeof(msg.content), "%s", post->plain_text);
     }
-    if (publish_message(&msg)) {
+    if (publish_message(&msg, module->rooms ? post->room : NULL)) {
         dispatch_event(MODULE_EVENT_MESSAGE_CREATED, &msg, module);
     }
 }
@@ -1164,7 +1183,8 @@ static module_response_action_t handle_module_record(module_process_t *module,
 }
 
 static module_response_action_t handle_module_response(module_process_t *module,
-                                                       const char *line) {
+                                                       const char *line,
+                                                       const char *room) {
     tnt_module_message_create_t create;
 
     if (!module || !line || line[0] == '\0') {
@@ -1172,7 +1192,7 @@ static module_response_action_t handle_module_response(module_process_t *module,
     }
 
     if (tnt_module_parse_message_create(line, &create)) {
-        publish_module_message(module, create.plain_text);
+        publish_module_message(module, create.plain_text, room);
         return MODULE_RESPONSE_CONTINUE;
     }
     if (record_has_type(line, "event.ok")) {
@@ -1213,7 +1233,9 @@ static void deliver_message_to_module(module_process_t *module,
     snprintf(message_id, sizeof(message_id), "local-%llu",
              (unsigned long long)event_id);
     if (tnt_module_append_message_created(event, sizeof(event), &pos,
-                                          message_id, msg) < 0) {
+                                          message_id, msg,
+                                          module->rooms ? msg->room : NULL) <
+        0) {
         disable_module(module, "event encoding failure");
         return;
     }
@@ -1262,7 +1284,8 @@ static void deliver_message_to_module(module_process_t *module,
             return;
         }
 
-        module_response_action_t action = handle_module_response(module, line);
+        module_response_action_t action =
+            handle_module_response(module, line, msg->room);
         if (action == MODULE_RESPONSE_DONE) {
             module->invalid_responses = 0;
             return;
@@ -1285,7 +1308,8 @@ static void deliver_presence_to_module(module_process_t *module,
             event->kind == MODULE_EVENT_PRESENCE_JOINED
                 ? TNT_MODULE_EVENT_PRESENCE_JOINED
                 : TNT_MODULE_EVENT_PRESENCE_LEFT,
-            event->msg.username, event->msg.timestamp) < 0) {
+            event->msg.username, event->msg.timestamp,
+            module->rooms ? event->msg.room : NULL) < 0) {
         disable_module(module, "event encoding failure");
         return;
     }
@@ -1380,7 +1404,9 @@ static void deliver_snapshot_to_module(module_process_t *module) {
             names[i] = online[offset + i];
         }
         if (tnt_module_append_presence_snapshot(record, sizeof(record), &pos,
-                                                names, (size_t)chunk) < 0) {
+                                                names, (size_t)chunk,
+                                                module->rooms ? "" : NULL) <
+            0) {
             disable_module(module, "event encoding failure");
             break;
         }
@@ -1821,18 +1847,23 @@ void tnt_module_runtime_moderate(const tnt_moderation_context_t *context,
     pthread_mutex_unlock(&g_moderation_lock);
 }
 
-void tnt_module_runtime_publish_presence(const char *nickname, bool joined) {
+void tnt_module_runtime_publish_presence(const char *nickname,
+                                         const char *room, bool joined) {
     message_t msg = {
         .timestamp = time(NULL),
     };
+    bool lobby = message_room_is_default(room);
 
     if (!nickname || nickname[0] == '\0') {
         return;
     }
     snprintf(msg.username, sizeof(msg.username), "%s", nickname);
+    if (!lobby) {
+        snprintf(msg.room, sizeof(msg.room), "%s", room);
+    }
 
     pthread_mutex_lock(&g_dispatch_lock);
-    if (online_update_locked(msg.username, joined) && g_accepting &&
+    if ((!lobby || online_update_locked(msg.username, joined)) && g_accepting &&
         !atomic_load_explicit(&g_stop_requested, memory_order_acquire)) {
         (void)queue_event_locked(
             joined ? MODULE_EVENT_PRESENCE_JOINED : MODULE_EVENT_PRESENCE_LEFT,

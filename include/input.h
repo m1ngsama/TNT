@@ -14,7 +14,8 @@ bool input_accept_message(client_t *client, const char *content, bool private_me
  *   1. If client->exec_command is set, dispatch it via exec_dispatch and
  *      return (no chat-room join).
  *   2. Read the desired username from the channel.
- *   3. Add the client to g_room and broadcast a system join message.
+ *   3. Add the client to g_room (the lobby) and broadcast a system join
+ *      message.
  *   4. Optionally show the MOTD if state-dir/motd.txt exists.
  *   5. Drive the keyboard / room-update / keepalive / idle-timeout loop
  *      until the client disconnects.
@@ -24,10 +25,14 @@ bool input_accept_message(client_t *client, const char *content, bool private_me
  * returns.  Always returns regardless of how the session ended. */
 void input_run_session(client_t *client);
 
-/* Bell-notify any clients whose @username appears in the broadcast
+/* Bell-notify any clients in `room` whose @username appears in the broadcast
  * content, skipping the sender.  Used by the INSERT-mode send path
  * inside input_run_session and by exec_command_post. */
-void notify_mentions(const char *content, const client_t *sender);
+void notify_mentions(const char *content, const client_t *sender,
+                     const chat_room_t *room);
+
+/* Log a system notice to `room`, show it there, and hand it to modules. */
+void input_publish_system(chat_room_t *room, message_t *msg);
 
 /* Module-facing identity hooks, called from the identity module's worker.
  * Each returns false when no interactive session has that id. */

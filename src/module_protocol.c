@@ -41,14 +41,24 @@ int tnt_module_append_handshake(char *buffer, size_t buf_size, size_t *pos,
     buffer_appendf(buffer, buf_size, pos,
                    ",\"server\":{\"name\":\"tnt\",\"version\":");
     tnt_json_append_string(buffer, buf_size, pos, version);
-    buffer_appendf(buffer, buf_size, pos, "}}\n");
+    buffer_appendf(buffer, buf_size, pos,
+                   "},\"features\":[\"" TNT_MODULE_FEATURE_ROOMS "\"]}\n");
 
     return append_result(before, *pos, buf_size);
 }
 
+static void append_room_member(char *buffer, size_t buf_size, size_t *pos,
+                               const char *room) {
+    if (room) {
+        buffer_appendf(buffer, buf_size, pos, ",\"room\":");
+        tnt_json_append_string(buffer, buf_size, pos,
+                               room[0] ? room : TNT_DEFAULT_ROOM);
+    }
+}
+
 int tnt_module_append_message_created(char *buffer, size_t buf_size,
                                       size_t *pos, const char *message_id,
-                                      const message_t *msg) {
+                                      const message_t *msg, const char *room) {
     char timestamp[64];
     size_t before;
 
@@ -72,6 +82,7 @@ int tnt_module_append_message_created(char *buffer, size_t buf_size,
     buffer_appendf(buffer, buf_size, pos, ",\"kind\":\"text\","
                    "\"plain_text\":");
     tnt_json_append_string(buffer, buf_size, pos, msg->content);
+    append_room_member(buffer, buf_size, pos, room);
     buffer_appendf(buffer, buf_size, pos, ",\"metadata\":{%s}}}\n",
                    msg->verified ? "\"verified\":true" : "");
 
@@ -80,7 +91,7 @@ int tnt_module_append_message_created(char *buffer, size_t buf_size,
 
 int tnt_module_append_presence(char *buffer, size_t buf_size, size_t *pos,
                                const char *type, const char *nickname,
-                               time_t timestamp) {
+                               time_t timestamp, const char *room) {
     char formatted[64];
     size_t before;
 
@@ -97,6 +108,7 @@ int tnt_module_append_presence(char *buffer, size_t buf_size, size_t *pos,
     tnt_json_append_string(buffer, buf_size, pos, nickname);
     buffer_appendf(buffer, buf_size, pos, ",\"timestamp\":");
     tnt_json_append_string(buffer, buf_size, pos, formatted);
+    append_room_member(buffer, buf_size, pos, room);
     buffer_appendf(buffer, buf_size, pos, "}\n");
 
     return append_result(before, *pos, buf_size);
@@ -105,7 +117,7 @@ int tnt_module_append_presence(char *buffer, size_t buf_size, size_t *pos,
 int tnt_module_append_presence_snapshot(char *buffer, size_t buf_size,
                                         size_t *pos,
                                         const char *const *nicknames,
-                                        size_t count) {
+                                        size_t count, const char *room) {
     size_t before;
 
     if (!buffer || !pos || buf_size == 0 || (!nicknames && count > 0)) {
@@ -121,7 +133,9 @@ int tnt_module_append_presence_snapshot(char *buffer, size_t buf_size,
         }
         tnt_json_append_string(buffer, buf_size, pos, nicknames[i]);
     }
-    buffer_appendf(buffer, buf_size, pos, "]}\n");
+    buffer_appendf(buffer, buf_size, pos, "]");
+    append_room_member(buffer, buf_size, pos, room);
+    buffer_appendf(buffer, buf_size, pos, "}\n");
 
     return append_result(before, *pos, buf_size);
 }
@@ -303,14 +317,26 @@ bool tnt_module_parse_message_post(const char *line,
     }
 
     memset(out, 0, sizeof(*out));
-    return tnt_json_get_string_field(line, "type", type, sizeof(type)) &&
-           strcmp(type, TNT_MODULE_RECORD_MESSAGE_POST) == 0 &&
-           tnt_json_get_string_field(line, "sender", out->sender,
-                                     sizeof(out->sender)) &&
-           is_valid_nickname(out->sender) &&
-           tnt_json_get_string_field(line, "plain_text", out->plain_text,
-                                     sizeof(out->plain_text)) &&
-           is_valid_plain_text(out->plain_text);
+    if (!tnt_json_get_string_field(line, "type", type, sizeof(type)) ||
+        strcmp(type, TNT_MODULE_RECORD_MESSAGE_POST) != 0 ||
+        !tnt_json_get_string_field(line, "sender", out->sender,
+                                   sizeof(out->sender)) ||
+        !is_valid_nickname(out->sender) ||
+        !tnt_json_get_string_field(line, "plain_text", out->plain_text,
+                                   sizeof(out->plain_text)) ||
+        !is_valid_plain_text(out->plain_text)) {
+        return false;
+    }
+    if (tnt_json_has_field(line, "room") &&
+        (!tnt_json_get_string_field(line, "room", out->room,
+                                    sizeof(out->room)) ||
+         !tnt_room_name_is_valid(out->room))) {
+        return false;
+    }
+    if (strcmp(out->room, TNT_DEFAULT_ROOM) == 0) {
+        out->room[0] = '\0';
+    }
+    return true;
 }
 
 bool tnt_module_parse_identity_record(const char *line,

@@ -376,6 +376,45 @@ and
 it also completes the first argument; for
 .B msg
 that includes app users.
+.SH ROOMS
+Every session starts in the room
+.BR lobby .
+Other rooms are opened by name with
+.BR :join .
+A room name has 1 through 20 characters from
+.BR a-z ,
+.BR 0-9 ,
+and
+.BR - ,
+and does not start or end with
+.BR - .
+A server holds at most 64 rooms, the lobby included.
+.P
+A public message, action, mention, and
+.B :cite
+stay in the room they were sent in.
+.BR :last ,
+.BR :search ,
+and the message view read the current room's history.
+The lobby keeps its history in
+.IR messages.log ;
+any other room keeps it in
+.IR room-NAME.log
+in the state directory, and TNT opens every such room again when it starts.
+.P
+The lobby lists every SSH session, wherever it is, so its online count and
+.B :users
+are the same as on a server with one room.
+In another room the count and
+.B :users
+show that room's members.
+Joining and leaving a room other than the lobby posts a notice there.
+Private messages reach their recipient in any room.
+Exec commands such as
+.B post
+and
+.B tail
+use the lobby.
 .SH MESSAGES
 A public message must be valid UTF-8 and may contain at most 1023 bytes as
 stored, where a line break costs two.
@@ -528,6 +567,19 @@ Search persisted usernames and content without regard to ASCII letter case.
 The last 15 matches are displayed.
 Each occurrence of the keyword in the displayed text is highlighted, and
 the highlight takes the place of any formatting under it.
+.TP
+.BI ":join " room
+Move to
+.IR room ,
+opening it when it does not exist yet.
+See
+.BR ROOMS .
+.TP
+.B :rooms
+List the rooms with the number of members in each and mark the current one.
+.TP
+.B :leave
+Go back to the lobby.
 .TP
 .B :mute-joins, :mute
 Toggle display of join and leave notices for this session.

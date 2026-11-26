@@ -253,6 +253,31 @@ static const i18n_string_t text_catalog[I18N_TEXT_COUNT] = {
         "No matches\n",
         "没有匹配结果\n"
     ),
+    [I18N_ROOM_JOINED_FORMAT] = I18N_STRING(
+        "You are in %s.\n",
+        "你现在在 %s。\n"
+    ),
+    [I18N_ROOM_ALREADY_FORMAT] = I18N_STRING(
+        "You are already in %s.\n",
+        "你已经在 %s 了。\n"
+    ),
+    [I18N_ROOM_INVALID] = I18N_STRING(
+        "A room name is 1 to 20 of a-z, 0-9 and -, and cannot start or end "
+        "with -.\n",
+        "房间名由 1 到 20 个 a-z、0-9 和 - 组成，不能以 - 开头或结尾。\n"
+    ),
+    [I18N_ROOM_LIMIT_FORMAT] = I18N_STRING(
+        "No new room can be opened: the server already has %d.\n",
+        "无法新建房间，服务器已有 %d 个房间。\n"
+    ),
+    [I18N_ROOMS_TITLE] = I18N_STRING(
+        "Rooms",
+        "房间"
+    ),
+    [I18N_ROOMS_CURRENT] = I18N_STRING(
+        "you are here",
+        "你在这里"
+    ),
     [I18N_MUTE_JOINS_FORMAT] = I18N_STRING(
         "Join/leave notifications: %s\n",
         "加入/离开提示: %s\n"

@@ -422,6 +422,15 @@ static bool read_int_value(const char **cursor, void *ctx) {
     return true;
 }
 
+static bool skip_value(const char **cursor, void *ctx) {
+    (void)ctx;
+    return skip_json_value(cursor);
+}
+
+bool tnt_json_has_field(const char *json, const char *key) {
+    return json && key && read_top_level_field(json, key, skip_value, NULL);
+}
+
 bool tnt_json_get_int_field(const char *json, const char *key, int *out) {
     return json && key && out && read_top_level_field(json, key, read_int_value, out);
 }

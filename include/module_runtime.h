@@ -58,7 +58,8 @@ void tnt_module_runtime_publish_message_created(const message_t *msg);
 
 /* Track an interactive user joining or leaving and notify presence:read
  * modules.  Safe to call with the room lock held. */
-void tnt_module_runtime_publish_presence(const char *nickname, bool joined);
+void tnt_module_runtime_publish_presence(const char *nickname,
+                                         const char *room, bool joined);
 
 /* Ask the identity:write module to sign in an interactive session.  Returns
  * false when no such module can take the request. */

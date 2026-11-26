@@ -90,6 +90,11 @@ void message_prepare_display(message_t *msg) {
  * Holds g_message_file_lock for the duration of the read so concurrent
  * message_save() calls from chat threads cannot interleave a partial line. */
 int message_load(message_t **messages, int max_messages) {
+    return message_load_from(LOG_FILE, messages, max_messages);
+}
+
+int message_load_from(const char *log_file, message_t **messages,
+                      int max_messages) {
     char log_path[PATH_MAX];
 
     /* Always allocate the message array */
@@ -98,7 +103,7 @@ int message_load(message_t **messages, int max_messages) {
         return 0;
     }
 
-    if (tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+    if (tnt_state_path(log_path, sizeof(log_path), log_file) < 0) {
         *messages = msg_array;
         return 0;
     }
@@ -211,14 +216,24 @@ read_messages:;
 }
 
 /* Save a message to log file */
+void message_log_file_for(const char *room, char *out, size_t out_size) {
+    if (message_room_is_default(room)) {
+        snprintf(out, out_size, "%s", LOG_FILE);
+    } else {
+        snprintf(out, out_size, "room-%s.log", room);
+    }
+}
+
 int message_save(const message_t *msg) {
+    char log_file[TNT_ROOM_NAME_MAX + 16];
     char log_path[PATH_MAX];
     message_t safe_msg;
     char record[MAX_USERNAME_LEN + MAX_MESSAGE_LEN + 48];
     size_t record_len = 0;
     int rc = 0;
 
-    if (tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+    message_log_file_for(msg->room, log_file, sizeof(log_file));
+    if (tnt_state_path(log_path, sizeof(log_path), log_file) < 0) {
         return -1;
     }
 
@@ -293,6 +308,11 @@ static void message_reverse(message_t *messages, int first, int last) {
 /* Search log file for messages whose username or content contains query.
  * Case-insensitive. Returns the last max_results matches (most recent); caller frees *results. */
 int message_search(const char *query, message_t **results, int max_results) {
+    return message_search_in(LOG_FILE, query, results, max_results);
+}
+
+int message_search_in(const char *log_file, const char *query,
+                      message_t **results, int max_results) {
     char log_path[PATH_MAX];
     message_t *res;
 
@@ -304,7 +324,7 @@ int message_search(const char *query, message_t **results, int max_results) {
     if (!res) return 0;
 
     if (!query || query[0] == '\0' ||
-        tnt_state_path(log_path, sizeof(log_path), LOG_FILE) < 0) {
+        tnt_state_path(log_path, sizeof(log_path), log_file) < 0) {
         *results = res;
         return 0;
     }

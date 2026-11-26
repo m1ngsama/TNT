@@ -64,6 +64,10 @@ static bool input_client_owns_name(const struct client *client) {
     return client && ((const client_t *)client)->verified;
 }
 
+static const chat_room_t *input_client_room(const struct client *client) {
+    return client ? ((const client_t *)client)->room : NULL;
+}
+
 void input_init(void) {
     g_idle_timeout = tnt_config_env_int(&TNT_CONFIG_IDLE_TIMEOUT);
     g_default_ui_lang = i18n_default_ui_lang();
@@ -72,6 +76,7 @@ void input_init(void) {
     room_set_client_notifier(g_room, client_wake);
     room_set_client_name_accessor(g_room, input_client_name);
     room_set_client_name_owner(g_room, input_client_owns_name);
+    room_set_client_room_accessor(g_room, input_client_room);
     room_set_presence_notifier(g_room, tnt_module_runtime_publish_presence);
 }
 
@@ -218,7 +223,8 @@ static int read_username(client_t *client) {
     return 0;
 }
 
-void notify_mentions(const char *content, const client_t *sender) {
+void notify_mentions(const char *content, const client_t *sender,
+                     const chat_room_t *room) {
     pthread_rwlock_rdlock(&g_room->lock);
     int count = g_room->client_count;
     client_t **targets = NULL;
@@ -234,7 +240,7 @@ void notify_mentions(const char *content, const client_t *sender) {
 
     for (int i = 0; i < count; i++) {
         client_t *c = g_room->clients[i];
-        if (c == sender) continue;
+        if (c == sender || client_current_room(c) != room) continue;
         char mention[MAX_USERNAME_LEN + 2];
         snprintf(mention, sizeof(mention), "@%s", c->username);
         if (strstr(content, mention) != NULL) {
@@ -372,14 +378,19 @@ static void show_session_notice(client_t *client, const char *text) {
     client->redraw_pending = true;
 }
 
+void input_publish_system(chat_room_t *room, message_t *msg) {
+    room_tag_message(room, msg);
+    room_broadcast(room, msg);
+    message_save(msg);
+    tnt_module_runtime_publish_message_created(msg);
+}
+
 static void announce_join(client_t *client) {
     if (!client->joined_at_ms || client->join_announced) return;
     message_t msg;
     system_message_make_join(&msg, client->username, client->ui_lang);
     client->join_announced = true;
-    room_broadcast(g_room, &msg);
-    message_save(&msg);
-    tnt_module_runtime_publish_message_created(&msg);
+    input_publish_system(g_room, &msg);
 }
 
 static tnt_moderation_result_t moderate(client_t *client, const char *event,
@@ -478,11 +489,12 @@ static int read_channel_exact(client_t *client, char *buf, size_t len,
 
 static int normal_visible_message_count(const client_t *client) {
     if (!client || !client->mute_joins) {
-        return room_get_message_count(g_room);
+        return room_get_message_count(client_current_room(client));
     }
 
     message_t messages[MAX_MESSAGES];
-    int message_count = room_copy_messages(g_room, 0, messages, MAX_MESSAGES);
+    int message_count = room_copy_messages(client_current_room(client), 0,
+                                           messages, MAX_MESSAGES);
     int count = 0;
     for (int i = 0; i < message_count; i++) {
         if (!system_message_is_join_leave(&messages[i])) {
@@ -543,13 +555,14 @@ static void take_draft(client_t *client, editor_t *ed) {
  * Handles are bound to keys, so nobody else can leave one under that name.
  * Only chat after it is worth a divider, not other people's comings and
  * goings. */
-static time_t member_read_marker(const char *handle) {
+static time_t member_read_marker(const client_t *client, const char *handle) {
     message_t *recent = calloc(MAX_MESSAGES, sizeof(*recent));
     time_t marker = 0;
     bool news = false;
 
     if (!recent) return 0;
-    int count = room_copy_recent_messages(g_room, recent, MAX_MESSAGES, NULL);
+    int count = room_copy_recent_messages(client_current_room(client), recent,
+                                          MAX_MESSAGES, NULL);
     for (int i = count - 1; i >= 0; i--) {
         if (system_message_is_leave_of(&recent[i], handle)) {
             marker = recent[i].timestamp;
@@ -1320,11 +1333,13 @@ static bool handle_key(client_t *client, unsigned char key, editor_t *ed,
                         snprintf(msg.username, sizeof(msg.username), "%s", client->username);
                         snprintf(msg.content, sizeof(msg.content), "%s", input);
                     }
+                    chat_room_t *room = client_current_room(client);
+                    room_tag_message(room, &msg);
                     if (message_save(&msg) == 0) {
                         security_audit("public_message", client->client_ip, client->session_id,
                                        client->username, "interactive");
-                        room_broadcast(g_room, &msg);
-                        notify_mentions(msg.content, client);
+                        room_broadcast(room, &msg);
+                        notify_mentions(msg.content, client, room);
                         tnt_module_runtime_publish_message_created(&msg);
                     } else {
                         fprintf(stderr, "interactive: failed to persist message\n");
@@ -1815,7 +1830,7 @@ void input_run_session(client_t *client) {
     bracketed_paste_enabled = true;
 
     if (client->verified) {
-        client->read_marker = member_read_marker(client->username);
+        client->read_marker = member_read_marker(client, client->username);
     }
     if (!client->join_notice_delay_ms) announce_join(client);
 
@@ -1838,7 +1853,7 @@ void input_run_session(client_t *client) {
                     client->command_output_scroll = 0;
                     client->command_output_kind = TNT_COMMAND_OUTPUT_NONE;
                     client->show_motd = true;
-                    seen_update_seq = room_get_update_seq(g_room);
+                    seen_update_seq = room_get_update_seq(client_current_room(client));
                     tui_render_motd(client);
                     goto main_loop;
                 }
@@ -1847,7 +1862,7 @@ void input_run_session(client_t *client) {
     }
 
     /* Render initial screen */
-    seen_update_seq = room_get_update_seq(g_room);
+    seen_update_seq = room_get_update_seq(client_current_room(client));
     tui_render_screen(client);
     last_room_render_ms = input_monotonic_millis();
     if (entry_notice[0] != '\0') {
@@ -1869,7 +1884,7 @@ main_loop:
             break;
         }
         bool input_buffered = ready > 0;
-        uint64_t current_update_seq = room_get_update_seq(g_room);
+        uint64_t current_update_seq = room_get_update_seq(client_current_room(client));
         int64_t loop_now_ms = input_monotonic_millis();
 
         if (ratelimit_ip_blocked(client->client_ip)) break;
@@ -1973,7 +1988,7 @@ main_loop:
          * channel bytes from one packet and the kernel fd became empty. */
         if (ready == 0) {
             if (room_wake_cleared &&
-                room_get_update_seq(g_room) != seen_update_seq) {
+                room_get_update_seq(client_current_room(client)) != seen_update_seq) {
                 /* A broadcaster can observe wake_pending=true while this
                  * thread is rendering and intentionally skip its signal.
                  * Clear, recheck the generation, and loop before blocking to
@@ -2218,12 +2233,19 @@ cleanup:
         (void)moderate(client, "session.leave", NULL, false);
         client->connected = false;
         room_remove_client(g_room, client);
+        if (client->room) {
+            tnt_module_runtime_publish_presence(client->username,
+                                                client->room->name, false);
+        }
         if (client->join_announced) {
             message_t leave_msg;
             system_message_make_leave(&leave_msg, client->username, client->ui_lang);
-            room_broadcast(g_room, &leave_msg);
-            message_save(&leave_msg);
-            tnt_module_runtime_publish_message_created(&leave_msg);
+            input_publish_system(g_room, &leave_msg);
+            if (client->room) {
+                system_message_make_leave(&leave_msg, client->username,
+                                          client->ui_lang);
+                input_publish_system(client->room, &leave_msg);
+            }
         }
     }
 

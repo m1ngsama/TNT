@@ -151,7 +151,8 @@ static bool build_quote_draft(const client_t *client, const char *arg,
     if (!recent) {
         return false;
     }
-    int count = room_copy_recent_messages(g_room, recent, MAX_MESSAGES, NULL);
+    int count = room_copy_recent_messages(client_current_room(client), recent,
+                                          MAX_MESSAGES, NULL);
     for (int i = count - 1; i >= 0 && !found; i--) {
         char author[MAX_USERNAME_LEN];
         char snippet[MAX_MESSAGE_LEN];
@@ -375,8 +376,13 @@ int commands_rename(client_t *client, const char *new_name, bool verified) {
         client->verified = verified;
         snprintf(client->username, MAX_USERNAME_LEN, "%s", new_name);
         if (g_room->presence_notifier && renamed) {
-            g_room->presence_notifier(old_name, false);
-            g_room->presence_notifier(client->username, true);
+            g_room->presence_notifier(old_name, g_room->name, false);
+            g_room->presence_notifier(client->username, g_room->name, true);
+            if (client->room) {
+                g_room->presence_notifier(old_name, client->room->name, false);
+                g_room->presence_notifier(client->username,
+                                          client->room->name, true);
+            }
         }
     }
     pthread_rwlock_unlock(&g_room->lock);
@@ -391,10 +397,98 @@ int commands_rename(client_t *client, const char *new_name, bool verified) {
     message_t nick_msg;
     system_message_make_nick(&nick_msg, old_name, client->username,
                              client->ui_lang);
-    room_broadcast(g_room, &nick_msg);
-    message_save(&nick_msg);
-    tnt_module_runtime_publish_message_created(&nick_msg);
+    input_publish_system(g_room, &nick_msg);
+    if (client->room) {
+        system_message_make_nick(&nick_msg, old_name, client->username,
+                                 client->ui_lang);
+        input_publish_system(client->room, &nick_msg);
+    }
     return 0;
+}
+
+static void move_to_room(client_t *client, chat_room_t *target) {
+    chat_room_t *from = client_current_room(client);
+    message_t msg;
+
+    if (from != g_room) {
+        if (client->join_announced) {
+            system_message_make_leave(&msg, client->username, client->ui_lang);
+            input_publish_system(from, &msg);
+        }
+        tnt_module_runtime_publish_presence(client->username, from->name,
+                                            false);
+    }
+    pthread_rwlock_wrlock(&g_room->lock);
+    client->room = target == g_room ? NULL : target;
+    pthread_rwlock_unlock(&g_room->lock);
+    if (target != g_room) {
+        tnt_module_runtime_publish_presence(client->username, target->name,
+                                            true);
+        if (client->join_announced) {
+            system_message_make_join(&msg, client->username, client->ui_lang);
+            input_publish_system(target, &msg);
+        }
+    }
+    client->scroll_pos = 0;
+    client->follow_tail = true;
+    client->read_marker = 0;
+    client->unread_mentions = 0;
+}
+
+static void join_room(client_t *client, const char *name, char *output,
+                      size_t buf_size, size_t *pos) {
+    chat_room_t *target;
+
+    if (!tnt_room_name_is_valid(name)) {
+        buffer_appendf(output, buf_size, pos, "%s",
+                       i18n_text(client->ui_lang, I18N_ROOM_INVALID));
+        return;
+    }
+    target = room_find(name, true);
+    if (!target) {
+        buffer_appendf(output, buf_size, pos,
+                       i18n_text(client->ui_lang, I18N_ROOM_LIMIT_FORMAT),
+                       TNT_MAX_ROOMS);
+        return;
+    }
+    if (target == client_current_room(client)) {
+        buffer_appendf(output, buf_size, pos,
+                       i18n_text(client->ui_lang, I18N_ROOM_ALREADY_FORMAT),
+                       target->name);
+        return;
+    }
+    move_to_room(client, target);
+    buffer_appendf(output, buf_size, pos,
+                   i18n_text(client->ui_lang, I18N_ROOM_JOINED_FORMAT),
+                   target->name);
+}
+
+static void append_rooms(const client_t *client, char *output,
+                         size_t buf_size, size_t *pos) {
+    char (*names)[TNT_ROOM_NAME_MAX + 1] = calloc(TNT_MAX_ROOMS,
+                                                  sizeof(*names));
+    const theme_t *theme = theme_resolve(client->theme_index);
+    int count = names ? room_list(names, TNT_MAX_ROOMS) : 0;
+
+    buffer_appendf(output, buf_size, pos,
+                   "%s%s\033[0m  \033[2;37m· %d\033[0m\n",
+                   theme->accent_bold,
+                   i18n_text(client->ui_lang, I18N_ROOMS_TITLE), count);
+    for (int i = 0; i < count; i++) {
+        chat_room_t *room = room_find(names[i], false);
+        bool here = room == client_current_room(client);
+
+        buffer_appendf(output, buf_size, pos,
+                       "%s  \033[37m%s\033[0m  \033[2;37m· %d",
+                       here ? "\033[1m▎\033[0m" : " ", names[i],
+                       room_get_client_count(room));
+        if (here) {
+            buffer_appendf(output, buf_size, pos, " · %s",
+                           i18n_text(client->ui_lang, I18N_ROOMS_CURRENT));
+        }
+        buffer_appendf(output, buf_size, pos, "\033[0m\n");
+    }
+    free(names);
 }
 
 void commands_become_anonymous(client_t *client) {
@@ -497,21 +591,30 @@ void commands_dispatch(client_t *client) {
         snprintf(self_gutter, sizeof(self_gutter), "%s▎\033[0m", theme->accent);
 
         char (*remote)[MAX_USERNAME_LEN] =
-            calloc(TNT_MODULE_REMOTE_USERS_MAX, sizeof(*remote));
+            client->room ? NULL
+                         : calloc(TNT_MODULE_REMOTE_USERS_MAX, sizeof(*remote));
         int remote_count = remote ? tnt_module_runtime_copy_remote_users(
                                         remote, TNT_MODULE_REMOTE_USERS_MAX)
                                   : 0;
 
         pthread_rwlock_rdlock(&g_room->lock);
         int total = g_room->client_count;
+        int members = 0;
+        for (int i = 0; i < total; i++) {
+            members += !client->room ||
+                       g_room->clients[i]->room == client->room;
+        }
         buffer_appendf(output, sizeof(output), &pos,
                        "%s%s\033[0m  \033[2;37m· %d\033[0m\n",
                        theme->accent_bold,
                        i18n_text(client->ui_lang, I18N_USERS_TITLE),
-                       total + remote_count);
+                       members + remote_count);
 
         time_t now = time(NULL);
         for (int i = 0; i < total; i++) {
+            if (client->room && g_room->clients[i]->room != client->room) {
+                continue;
+            }
             bool is_self = (g_room->clients[i] == client);
             int dur = (int)(now - g_room->clients[i]->connect_time);
             char dur_str[32];
@@ -740,8 +843,9 @@ void commands_dispatch(client_t *client) {
         }
 
         message_t *last_msgs = NULL;
-        int load_count = message_load(&last_msgs,
-                                      client->mute_joins ? MAX_MESSAGES : n);
+        int load_count = message_load_from(
+            client_current_room(client)->log_file, &last_msgs,
+            client->mute_joins ? MAX_MESSAGES : n);
         int visible_count = 0;
         for (int i = 0; i < load_count; i++) {
             if (message_visible_for_client(client, &last_msgs[i])) {
@@ -775,7 +879,9 @@ void commands_dispatch(client_t *client) {
         } else {
             message_t *found = NULL;
             int search_limit = client->mute_joins ? MAX_MESSAGES : 15;
-            int found_count = message_search(query, &found, search_limit);
+            int found_count = message_search_in(
+                client_current_room(client)->log_file, query, &found,
+                search_limit);
             int visible_count = 0;
             for (int i = 0; i < found_count; i++) {
                 if (message_visible_for_client(client, &found[i])) {
@@ -802,6 +908,15 @@ void commands_dispatch(client_t *client) {
             }
             free(found);
         }
+
+    } else if (command_id == TNT_COMMAND_JOIN) {
+        join_room(client, arg, output, sizeof(output), &pos);
+
+    } else if (command_id == TNT_COMMAND_LEAVE) {
+        join_room(client, TNT_DEFAULT_ROOM, output, sizeof(output), &pos);
+
+    } else if (command_id == TNT_COMMAND_ROOMS) {
+        append_rooms(client, output, sizeof(output), &pos);
 
     } else if (command_id == TNT_COMMAND_MUTE_JOINS) {
         client->mute_joins = !client->mute_joins;
