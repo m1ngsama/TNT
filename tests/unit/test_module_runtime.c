@@ -609,7 +609,12 @@ TEST(presence_saturation_logs_outside_the_notifier) {
     assert(dup2(log_fd, STDERR_FILENO) >= 0);
 
     tnt_module_runtime_publish_message_created(&msg);
-    sleep_millis(200);
+    /* The count below assumes the worker already took the message and is
+     * blocked on the reply; a fixed sleep lost that race under load. */
+    for (int i = 0; i < 200 && tnt_module_runtime_test_queued("stall") > 0; i++) {
+        sleep_millis(10);
+    }
+    assert(tnt_module_runtime_test_queued("stall") == 0);
     for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
         snprintf(nickname, sizeof(nickname), "user%d", i);
         tnt_module_runtime_publish_presence(nickname, "lobby", true);

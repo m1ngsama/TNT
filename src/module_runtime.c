@@ -2028,4 +2028,21 @@ int tnt_module_runtime_test_read_pair_fd(int fd, char *first,
 void tnt_module_runtime_test_reset_stop(void) {
     atomic_store_explicit(&g_stop_requested, false, memory_order_release);
 }
+
+size_t tnt_module_runtime_test_queued(const char *name) {
+    size_t queued = 0;
+
+    for (int i = 0; i < g_module_count; i++) {
+        module_process_t *module = &g_modules[i];
+
+        if (!module->queue_initialized ||
+            strcmp(module->manifest.name, name) != 0) {
+            continue;
+        }
+        pthread_mutex_lock(&module->queue_lock);
+        queued = module->queued_event_count;
+        pthread_mutex_unlock(&module->queue_lock);
+    }
+    return queued;
+}
 #endif
