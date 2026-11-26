@@ -21,7 +21,8 @@ TEST(appends_handshake_jsonl) {
     assert(tnt_module_append_handshake(out, sizeof(out), &pos, "9.9.9") == 0);
     assert(strcmp(out,
                   "{\"type\":\"handshake\",\"protocol\":\"tnt.module.v1\","
-                  "\"server\":{\"name\":\"tnt\",\"version\":\"9.9.9\"}}\n") ==
+                  "\"server\":{\"name\":\"tnt\",\"version\":\"9.9.9\"},"
+                  "\"features\":[\"rooms\"]}\n") ==
            0);
 }
 
@@ -36,7 +37,7 @@ TEST(appends_message_created_jsonl_with_escaping) {
     snprintf(msg.content, sizeof(msg.content), "%s", "hello \"core\"");
 
     assert(tnt_module_append_message_created(out, sizeof(out), &pos,
-                                             "local-1", &msg) == 0);
+                                             "local-1", &msg, NULL) == 0);
     assert(strstr(out, "\"type\":\"message.created\"") != NULL);
     assert(strstr(out, "\"id\":\"local-1\"") != NULL);
     assert(strstr(out, "\"timestamp\":\"1970-01-01T00:00:00Z\"") != NULL);
@@ -44,7 +45,35 @@ TEST(appends_message_created_jsonl_with_escaping) {
     assert(strstr(out, "\"kind\":\"text\"") != NULL);
     assert(strstr(out, "\"plain_text\":\"hello \\\"core\\\"\"") != NULL);
     assert(strstr(out, "\"metadata\":{}}}\n") != NULL);
+    assert(strstr(out, "\"room\"") == NULL);
     assert(out[strlen(out) - 1] == '\n');
+}
+
+TEST(appends_room_only_when_asked) {
+    char out[512] = "";
+    size_t pos = 0;
+    message_t msg = {.timestamp = 0};
+
+    snprintf(msg.username, sizeof(msg.username), "%s", "alice");
+    snprintf(msg.content, sizeof(msg.content), "%s", "hi");
+    assert(tnt_module_append_message_created(out, sizeof(out), &pos,
+                                             "local-3", &msg, "") == 0);
+    assert(strstr(out, "\"plain_text\":\"hi\",\"room\":\"lobby\",") != NULL);
+
+    out[0] = '\0';
+    pos = 0;
+    assert(tnt_module_append_message_created(out, sizeof(out), &pos,
+                                             "local-4", &msg, "ops") == 0);
+    assert(strstr(out, "\"room\":\"ops\"") != NULL);
+
+    out[0] = '\0';
+    pos = 0;
+    assert(tnt_module_append_presence(out, sizeof(out), &pos,
+                                      TNT_MODULE_EVENT_PRESENCE_LEFT, "bob", 0,
+                                      "ops") == 0);
+    assert(strcmp(out, "{\"type\":\"presence.left\",\"nickname\":\"bob\","
+                       "\"timestamp\":\"1970-01-01T00:00:00Z\","
+                       "\"room\":\"ops\"}\n") == 0);
 }
 
 TEST(appends_verified_metadata) {
@@ -58,7 +87,7 @@ TEST(appends_verified_metadata) {
     snprintf(msg.content, sizeof(msg.content), "%s", "hi");
     msg.verified = true;
     assert(tnt_module_append_message_created(out, sizeof(out), &pos,
-                                             "local-2", &msg) == 0);
+                                             "local-2", &msg, NULL) == 0);
     assert(strstr(out, "\"metadata\":{\"verified\":true}}}\n") != NULL);
 }
 
@@ -291,6 +320,32 @@ TEST(parse_message_post_rejects_invalid_sender) {
         "{\"type\":\"message.post\",\"plain_text\":\"hi\"}", &post));
 }
 
+TEST(parse_message_post_reads_room) {
+    tnt_module_message_post_t post;
+
+    assert(tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\"}", &post));
+    assert(post.room[0] == '\0');
+    assert(tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\",\"room\":\"ops-2\"}", &post));
+    assert(strcmp(post.room, "ops-2") == 0);
+    assert(tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\",\"room\":\"lobby\"}", &post));
+    assert(post.room[0] == '\0');
+    assert(!tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\",\"room\":\"Ops\"}", &post));
+    assert(!tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\",\"room\":\"\"}", &post));
+    assert(!tnt_module_parse_message_post(
+        "{\"type\":\"message.post\",\"sender\":\"alice\","
+        "\"plain_text\":\"hi\",\"room\":7}", &post));
+}
+
 TEST(parse_message_post_rejects_bad_text_or_type) {
     tnt_module_message_post_t post;
 
@@ -311,7 +366,7 @@ TEST(appends_presence_jsonl) {
 
     assert(tnt_module_append_presence(out, sizeof(out), &pos,
                                       TNT_MODULE_EVENT_PRESENCE_JOINED,
-                                      "carol", 0) == 0);
+                                      "carol", 0, NULL) == 0);
     assert(strcmp(out,
                   "{\"type\":\"presence.joined\",\"nickname\":\"carol\","
                   "\"timestamp\":\"1970-01-01T00:00:00Z\"}\n") == 0);
@@ -323,7 +378,7 @@ TEST(appends_presence_snapshot_jsonl) {
     size_t pos = 0;
 
     assert(tnt_module_append_presence_snapshot(out, sizeof(out), &pos,
-                                               names, 2) == 0);
+                                               names, 2, NULL) == 0);
     assert(strcmp(out,
                   "{\"type\":\"presence.snapshot\","
                   "\"nicknames\":[\"alice\",\"bob\"]}\n") == 0);
@@ -331,7 +386,7 @@ TEST(appends_presence_snapshot_jsonl) {
     out[0] = '\0';
     pos = 0;
     assert(tnt_module_append_presence_snapshot(out, sizeof(out), &pos,
-                                               NULL, 0) == 0);
+                                               NULL, 0, NULL) == 0);
     assert(strcmp(out, "{\"type\":\"presence.snapshot\",\"nicknames\":[]}\n") ==
            0);
 }
@@ -342,7 +397,7 @@ TEST(presence_snapshot_reports_overflow) {
     size_t pos = 0;
 
     assert(tnt_module_append_presence_snapshot(out, sizeof(out), &pos,
-                                               names, 2) < 0);
+                                               names, 2, NULL) < 0);
 }
 
 TEST(appends_private_created_jsonl) {
@@ -461,6 +516,7 @@ int main(void) {
 
     RUN_TEST(appends_handshake_jsonl);
     RUN_TEST(appends_message_created_jsonl_with_escaping);
+    RUN_TEST(appends_room_only_when_asked);
     RUN_TEST(appends_verified_metadata);
     RUN_TEST(appends_identity_requested_jsonl);
     RUN_TEST(appends_identity_recognized_jsonl);
@@ -477,6 +533,7 @@ int main(void) {
     RUN_TEST(parse_message_create_rejects_overlong_text);
     RUN_TEST(parse_message_post_accepts_valid_sender);
     RUN_TEST(parse_message_post_rejects_invalid_sender);
+    RUN_TEST(parse_message_post_reads_room);
     RUN_TEST(parse_message_post_rejects_bad_text_or_type);
     RUN_TEST(appends_presence_jsonl);
     RUN_TEST(appends_presence_snapshot_jsonl);

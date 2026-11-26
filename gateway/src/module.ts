@@ -1,11 +1,13 @@
+import { ROOM, isRoomName } from "./history";
+
 export type TntEvent =
-  | { type: "handshake"; version: string }
-  | { type: "message.created"; message: { timestamp: string; sender: string; plain_text: string; verified: boolean } }
+  | { type: "handshake"; version: string; rooms: boolean }
+  | { type: "message.created"; room?: string; message: { timestamp: string; sender: string; plain_text: string; verified: boolean } }
   | { type: "identity.requested"; session: string }
   | { type: "identity.changed"; action: IdentityAction; handle: string; detail: Record<string, string | boolean> }
   | { type: "private.created"; from: string; to: string; plain_text: string; timestamp: string; verified: boolean }
-  | { type: "presence.snapshot"; nicknames: string[] }
-  | { type: "presence.joined" | "presence.left"; nickname: string };
+  | { type: "presence.snapshot"; room?: string; nicknames: string[] }
+  | { type: "presence.joined" | "presence.left"; room?: string; nickname: string };
 
 export type IdentityAction = "key_recognized" | "key_bound" | "signed_out";
 export type RoomEvent = Exclude<TntEvent, { type: "handshake" | "identity.requested" | "identity.changed" | "private.created" }>;
@@ -15,13 +17,21 @@ export const HANDSHAKE_OK = `${JSON.stringify({
   type: "handshake.ok",
   protocol: "tnt.module.v1",
 })}\n`;
+export const HANDSHAKE_OK_ROOMS = `${JSON.stringify({
+  type: "handshake.ok",
+  protocol: "tnt.module.v1",
+  features: ["rooms"],
+})}\n`;
 export const EVENT_OK = '{"type":"event.ok"}\n';
 
 const NOTHING = { reply: null, event: null };
 const isString = (value: unknown): value is string => typeof value === "string";
+/** A record for the lobby, or from a server without rooms, carries no room. */
+const roomOf = (value: unknown): { room?: string } => (isRoomName(value) && value !== ROOM ? { room: value } : {});
 
-export function encodePost(sender: string, text: string): string {
-  return `${JSON.stringify({ type: "message.post", sender, plain_text: text })}\n`;
+export function encodePost(sender: string, text: string, room: string = ROOM): string {
+  const record = room === ROOM ? { type: "message.post", sender, plain_text: text } : { type: "message.post", sender, plain_text: text, room };
+  return `${JSON.stringify(record)}\n`;
 }
 
 export function encodeRecord(record: Record<string, string | string[]>): string {
@@ -53,15 +63,19 @@ export function parseTntLine(line: string): { reply: string | null; event: TntEv
   switch (record.type) {
     case "handshake": {
       const version = (record.server as Record<string, unknown> | undefined)?.version;
-      return { reply: HANDSHAKE_OK, event: { type: "handshake", version: isString(version) ? version : "" } };
+      const rooms = Array.isArray(record.features) && record.features.includes("rooms");
+      return {
+        reply: rooms ? HANDSHAKE_OK_ROOMS : HANDSHAKE_OK,
+        event: { type: "handshake", version: isString(version) ? version : "", rooms },
+      };
     }
     case "message.created": {
-      const { timestamp, sender, plain_text, metadata } = (record.message ?? {}) as Record<string, unknown>;
+      const { timestamp, sender, plain_text, metadata, room } = (record.message ?? {}) as Record<string, unknown>;
       const valid = isString(timestamp) && isString(sender) && isString(plain_text);
       const verified = (metadata as Record<string, unknown> | undefined)?.verified === true;
       return {
         reply: EVENT_OK,
-        event: valid ? { type: "message.created", message: { timestamp, sender, plain_text, verified } } : null,
+        event: valid ? { type: "message.created", ...roomOf(room), message: { timestamp, sender, plain_text, verified } } : null,
       };
     }
     case "private.created": {
@@ -85,12 +99,12 @@ export function parseTntLine(line: string): { reply: string | null; event: TntEv
       return isString(record.session) ? { reply: null, event: { type: "identity.requested", session: record.session } } : NOTHING;
     case "presence.snapshot":
       return Array.isArray(record.nicknames)
-        ? { reply: null, event: { type: "presence.snapshot", nicknames: record.nicknames.filter(isString) } }
+        ? { reply: null, event: { type: "presence.snapshot", ...roomOf(record.room), nicknames: record.nicknames.filter(isString) } }
         : NOTHING;
     case "presence.joined":
     case "presence.left":
       return isString(record.nickname)
-        ? { reply: null, event: { type: record.type, nickname: record.nickname } }
+        ? { reply: null, event: { type: record.type, ...roomOf(record.room), nickname: record.nickname } }
         : NOTHING;
     default:
       return NOTHING;

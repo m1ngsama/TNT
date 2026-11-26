@@ -5,16 +5,20 @@
  * declaration resolves without pulling in ssh_server.h / libssh. */
 #include "../../include/common.h"
 
+struct chat_room;
 struct client {
     char username[MAX_USERNAME_LEN];
     int wake_count;
+    const struct chat_room *room;
 };
 typedef struct client client_t;
 
 #include "../../include/chat_room.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 
 #define TEST(name) static void test_##name()
 #define RUN_TEST(name) do { \
@@ -412,11 +416,12 @@ TEST(room_rejects_duplicate_names_case_insensitively) {
 
 static char presence_log[256];
 
-static void record_presence(const char *nickname, bool joined) {
+static void record_presence(const char *nickname, const char *room,
+                            bool joined) {
     size_t len = strlen(presence_log);
 
-    snprintf(presence_log + len, sizeof(presence_log) - len, "%s%s;",
-             joined ? "+" : "-", nickname);
+    snprintf(presence_log + len, sizeof(presence_log) - len, "%s%s@%s;",
+             joined ? "+" : "-", nickname, room);
 }
 
 TEST(room_reports_presence_changes) {
@@ -437,7 +442,7 @@ TEST(room_reports_presence_changes) {
     assert(room_add_client(room, &bob) == 0);
     room_remove_client(room, &alice);
     room_remove_client(room, &alice);
-    assert(strcmp(presence_log, "+alice;+bob;-alice;") == 0);
+    assert(strcmp(presence_log, "+alice@lobby;+bob@lobby;-alice@lobby;") == 0);
 
     room_destroy(room);
 }
@@ -456,6 +461,153 @@ TEST(room_message_count_threadsafe) {
     assert(room_get_message_count(room) == 3);
 
     room_destroy(room);
+}
+
+static const chat_room_t *test_client_room(const struct client *client) {
+    return client->room;
+}
+
+static char state_dir[] = "/tmp/tnt-room-test.XXXXXX";
+
+static void write_state_file(const char *name, const char *text) {
+    char path[PATH_MAX];
+    FILE *fp;
+
+    snprintf(path, sizeof(path), "%s/%s", state_dir, name);
+    fp = fopen(path, "w");
+    assert(fp != NULL);
+    fputs(text, fp);
+    fclose(fp);
+}
+
+static void remove_state_file(const char *name) {
+    char path[PATH_MAX];
+
+    snprintf(path, sizeof(path), "%s/%s", state_dir, name);
+    unlink(path);
+}
+
+TEST(room_names_are_validated) {
+    assert(tnt_room_name_is_valid("lobby"));
+    assert(tnt_room_name_is_valid("ops-2"));
+    assert(tnt_room_name_is_valid("abcdefghijklmnopqrst"));
+    assert(!tnt_room_name_is_valid("abcdefghijklmnopqrstu"));
+    assert(!tnt_room_name_is_valid(""));
+    assert(!tnt_room_name_is_valid(NULL));
+    assert(!tnt_room_name_is_valid("Ops"));
+    assert(!tnt_room_name_is_valid("-ops"));
+    assert(!tnt_room_name_is_valid("ops-"));
+    assert(!tnt_room_name_is_valid("a_b"));
+    assert(!tnt_room_name_is_valid("../x"));
+}
+
+TEST(room_registry_reloads_logs_and_creates_rooms) {
+    char names[TNT_MAX_ROOMS][TNT_ROOM_NAME_MAX + 1];
+    message_t msg;
+
+    assert(mkdtemp(state_dir) != NULL);
+    setenv("TNT_STATE_DIR", state_dir, 1);
+    write_state_file("messages.log",
+                     "#tnt-message-log v3\n2026-01-01T00:00:00Z|alice|lobby line|\n");
+    write_state_file("room-ops.log",
+                     "#tnt-message-log v3\n2026-01-01T00:00:00Z|bob|ops line|\n"
+                     "2026-01-01T00:00:01Z|bob|second|\n");
+    write_state_file("room-Bad.log", "");
+    write_state_file("room-.log", "");
+
+    chat_room_t *lobby = room_create();
+    assert(room_registry_init(lobby) == 0);
+    assert(room_get_message_count(lobby) == 1);
+
+    chat_room_t *ops = room_find("ops", false);
+    assert(ops != NULL);
+    assert(room_get_message_count(ops) == 2);
+    assert(room_get_message(ops, 0, &msg));
+    assert(strcmp(msg.content, "ops line") == 0);
+    assert(strcmp(msg.room, "ops") == 0);
+
+    assert(room_find("lobby", false) == lobby);
+    assert(room_find("Bad", true) == NULL);
+    assert(room_find("dev", false) == NULL);
+    chat_room_t *dev = room_find("dev", true);
+    assert(dev != NULL && dev != ops);
+    assert(room_find("dev", true) == dev);
+    assert(room_list(names, TNT_MAX_ROOMS) == 3);
+    assert(strcmp(names[0], "lobby") == 0);
+    assert(strcmp(names[1], "dev") == 0);
+    assert(strcmp(names[2], "ops") == 0);
+
+    msg = make_msg("carol", "in dev");
+    room_tag_message(dev, &msg);
+    assert(message_save(&msg) == 0);
+    room_broadcast(dev, &msg);
+    assert(room_get_message_count(dev) == 1);
+    assert(room_get_message_count(lobby) == 1);
+
+    for (int i = 3; i < TNT_MAX_ROOMS; i++) {
+        char name[16];
+        snprintf(name, sizeof(name), "r%d", i);
+        assert(room_find(name, true) != NULL);
+    }
+    assert(room_find("one-too-many", true) == NULL);
+
+    room_registry_shutdown();
+    room_destroy(lobby);
+
+    lobby = room_create();
+    assert(room_registry_init(lobby) == 0);
+    dev = room_find("dev", false);
+    assert(dev != NULL);
+    assert(room_get_message_count(dev) == 1);
+    assert(room_get_message(dev, 0, &msg));
+    assert(strcmp(msg.content, "in dev") == 0);
+    assert(room_find("r3", false) == NULL);
+    room_registry_shutdown();
+    room_destroy(lobby);
+
+    remove_state_file("messages.log");
+    remove_state_file("room-ops.log");
+    remove_state_file("room-dev.log");
+    remove_state_file("room-Bad.log");
+    remove_state_file("room-.log");
+    rmdir(state_dir);
+    unsetenv("TNT_STATE_DIR");
+}
+
+TEST(room_members_are_counted_and_woken_per_room) {
+    chat_room_t *lobby = room_create();
+    client_t alice = {0};
+    client_t bob = {0};
+
+    assert(room_registry_init(lobby) == 0);
+    chat_room_t *ops = room_find("ops", true);
+    assert(ops != NULL);
+    snprintf(alice.username, sizeof(alice.username), "alice");
+    snprintf(bob.username, sizeof(bob.username), "bob");
+    room_set_client_notifier(lobby, count_client_wake);
+    room_set_client_room_accessor(lobby, test_client_room);
+    assert(room_add_client(lobby, &alice) == 0);
+    assert(room_add_client(lobby, &bob) == 0);
+    bob.room = ops;
+
+    assert(room_get_client_count(lobby) == 2);
+    assert(room_get_client_count(ops) == 1);
+
+    message_t msg = make_msg("bob", "ops only");
+    room_broadcast(ops, &msg);
+    assert(alice.wake_count == 0);
+    assert(bob.wake_count == 1);
+    assert(room_get_message_count(lobby) == 0);
+
+    msg = make_msg("alice", "lobby only");
+    room_broadcast(lobby, &msg);
+    assert(alice.wake_count == 1);
+    assert(bob.wake_count == 1);
+
+    room_remove_client(lobby, &alice);
+    room_remove_client(lobby, &bob);
+    room_registry_shutdown();
+    room_destroy(lobby);
 }
 
 int main(void) {
@@ -481,6 +633,9 @@ int main(void) {
     RUN_TEST(room_rejects_duplicate_names_case_insensitively);
     RUN_TEST(room_reports_presence_changes);
     RUN_TEST(room_message_count_threadsafe);
+    RUN_TEST(room_names_are_validated);
+    RUN_TEST(room_registry_reloads_logs_and_creates_rooms);
+    RUN_TEST(room_members_are_counted_and_woken_per_room);
 
     printf("\nAll %d tests passed!\n", tests_passed);
     return 0;

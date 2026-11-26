@@ -181,6 +181,22 @@ bool is_valid_username(const char *username) {
     return true;
 }
 
+bool tnt_room_name_is_valid(const char *name) {
+    size_t len = name ? strlen(name) : 0;
+
+    if (len == 0 || len > TNT_ROOM_NAME_MAX || name[0] == '-' ||
+        name[len - 1] == '-') {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        char c = name[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void sanitize_terminal_size(int *width, int *height) {
     if (!width || !height) {
         return;

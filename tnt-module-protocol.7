@@ -148,6 +148,12 @@ String
 .TP
 .B server.version
 The running TNT version string.
+.TP
+.B features
+An array of the optional features this server offers.
+A server with named rooms lists
+.BR rooms .
+Older servers omit the member.
 .P
 For TNT 1.3.3, the record is:
 .P
@@ -156,17 +162,66 @@ For TNT 1.3.3, the record is:
 "server":{"name":"tnt","version":"1.3.3"}}
 .EE
 .P
+A server with rooms adds
+.B \(dqfeatures\(dq:[\(dqrooms\(dq]
+after
+.BR server .
+.P
 The module must answer within two seconds with:
 .P
 .EX
 {"type":"handshake.ok","protocol":"tnt.module.v1"}
 .EE
 .P
-Additional members in
+A module turns on an offered feature by listing it in a
+.B features
+array of its answer:
+.P
+.EX
+{"type":"handshake.ok","protocol":"tnt.module.v1","features":["rooms"]}
+.EE
+.P
+Other additional members in
 .B handshake.ok
-are ignored.
+are ignored, and so is a feature the server did not offer.
 Any other response, timeout, or I/O failure prevents that module from being
 enabled.
+.SS rooms
+A module that does not turn on
+.B rooms
+sees only the lobby, exactly as on a server with one room: it receives no
+.B message.created
+or presence record for any other room, its records carry no
+.B room
+member, and everything it creates or posts goes to the lobby.
+.P
+A module that turns it on receives a
+.B room
+member holding the room name in the
+.B message
+object of every
+.B message.created
+event and in every presence record, the lobby's included.
+A presence record for the lobby covers every interactive session;
+one for another room covers that room's members, so a session in room
+.B ops
+is listed in both.
+Its
+.B message.create
+responses go to the room of the event they answer.
+A
+.B message.post
+record may carry a
+.B room
+member naming the target room, which TNT opens when it does not exist yet;
+without one, or with
+.BR lobby ,
+the message goes to the lobby.
+An invalid room name makes the record invalid, and a new room past the
+64-room limit drops the message.
+See
+.BR tnt-chat (7)
+for room names and logs.
 .SH EVENTS
 For each public message, TNT sends an object with
 .B type
@@ -304,6 +359,13 @@ event:
 {"type":"message.post","sender":"alice","plain_text":"hello"}
 .EE
 .P
+A module that turned on
+.B rooms
+may add a
+.B room
+member; see
+.BR HANDSHAKE .
+.P
 .B sender
 must be a valid interactive nickname: at most 20 characters, no leading
 space, dot, or hyphen, no control characters, no colon, none of
@@ -365,6 +427,13 @@ for the new one:
 {"type":"presence.left","nickname":"carol",\c
 "timestamp":"2026-06-04T12:05:00Z"}
 .EE
+.P
+A module that turned on
+.B rooms
+also receives a
+.B room
+member in these records; see
+.BR HANDSHAKE .
 .P
 Presence records are notifications and must not be answered.
 They open no response window.

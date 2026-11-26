@@ -42,9 +42,22 @@ int message_save(const message_t *msg) {
     return 0;
 }
 
-void notify_mentions(const char *content, const void *sender) {
+void notify_mentions(const char *content, const void *sender,
+                     const chat_room_t *room) {
     (void)content;
     (void)sender;
+    (void)room;
+}
+
+chat_room_t *room_find(const char *name, bool create) {
+    (void)name;
+    (void)create;
+    return NULL;
+}
+
+void room_tag_message(const chat_room_t *room, message_t *msg) {
+    (void)room;
+    (void)msg;
 }
 
 bool input_identity_notice(const char *session, const char *plain_text) {
@@ -599,7 +612,7 @@ TEST(presence_saturation_logs_outside_the_notifier) {
     sleep_millis(200);
     for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
         snprintf(nickname, sizeof(nickname), "user%d", i);
-        tnt_module_runtime_publish_presence(nickname, true);
+        tnt_module_runtime_publish_presence(nickname, "lobby", true);
     }
     read_file(log_path, log, sizeof(log));
     assert(log[0] == '\0');
@@ -618,7 +631,7 @@ TEST(presence_saturation_logs_outside_the_notifier) {
 
     for (int i = 0; i < TNT_MODULE_QUEUE_LIMIT + 72; i++) {
         snprintf(nickname, sizeof(nickname), "user%d", i);
-        tnt_module_runtime_publish_presence(nickname, false);
+        tnt_module_runtime_publish_presence(nickname, "lobby", false);
     }
     unsetenv("TNT_MODULE_PATHS");
     unsetenv("TNT_MODULE_GRANTS");

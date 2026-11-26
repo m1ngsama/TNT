@@ -295,9 +295,9 @@ void tui_render_screen(client_t *client) {
     buffer[0] = '\0';
 
     /* First pass: compute indices and counts. */
-    int online = room_get_client_count(g_room) +
+    int online = room_get_client_count(client_current_room(client)) +
                  tnt_module_runtime_remote_user_count();
-    int msg_count = room_get_message_count(g_room);
+    int msg_count = room_get_message_count(client_current_room(client));
     int raw_msg_count = msg_count;
 
     /* Calculate which messages to show.  The initial slice is capped by
@@ -334,8 +334,9 @@ void tui_render_screen(client_t *client) {
             int visible_count = 0;
 
             raw_msg_count = room_copy_messages(
-                g_room, 0, visible_messages, MAX_MESSAGES);
-            online = room_get_client_count(g_room) +
+                client_current_room(client), 0, visible_messages,
+                MAX_MESSAGES);
+            online = room_get_client_count(client_current_room(client)) +
                      tnt_module_runtime_remote_user_count();
             for (int i = 0; i < raw_msg_count; i++) {
                 if (!system_message_is_join_leave(&visible_messages[i])) {
@@ -386,7 +387,8 @@ void tui_render_screen(client_t *client) {
             if (anchor_latest) {
                 int actual_count = 0;
                 int recent_count = room_copy_recent_messages(
-                    g_room, msg_snapshot, snapshot_capacity, &actual_count);
+                    client_current_room(client), msg_snapshot,
+                    snapshot_capacity, &actual_count);
                 int local_start = history_view_latest_start_for_height(
                     msg_snapshot, recent_count, msg_height, render_width,
                     client->read_marker);
@@ -400,14 +402,14 @@ void tui_render_screen(client_t *client) {
                 msg_count = actual_count;
                 raw_msg_count = actual_count;
             } else {
-                int actual_count = room_get_message_count(g_room);
+                int actual_count = room_get_message_count(client_current_room(client));
                 int actual_start = start;
                 int actual_end = end <= actual_count ? end : actual_count;
                 actual_start = actual_start < actual_end
                                    ? actual_start
                                    : actual_end;
                 snapshot_count = room_copy_messages(
-                    g_room, actual_start, msg_snapshot,
+                    client_current_room(client), actual_start, msg_snapshot,
                     actual_end - actual_start);
                 start = actual_start;
                 end = actual_start + snapshot_count;
@@ -453,10 +455,15 @@ void tui_render_screen(client_t *client) {
     chips[chip_count].value_color = "\033[1;37m";
     chip_count++;
 
-    char online_buf[32];
-    snprintf(online_buf, sizeof(online_buf),
-             i18n_text(client->ui_lang, I18N_TITLE_ONLINE_FORMAT),
-             online);
+    char online_buf[64];
+    size_t online_pos = 0;
+    if (client->room) {
+        buffer_appendf(online_buf, sizeof(online_buf), &online_pos, "#%s ",
+                       client->room->name);
+    }
+    buffer_appendf(online_buf, sizeof(online_buf), &online_pos,
+                   i18n_text(client->ui_lang, I18N_TITLE_ONLINE_FORMAT),
+                   online);
     chips[chip_count].value = online_buf;
     chips[chip_count].value_color = "\033[37m";
     chip_count++;

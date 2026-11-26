@@ -324,7 +324,8 @@ static int exec_command_tail(client_t *client, const char *args) {
         client_printf(client, "tail: out of memory\n");
         return TNT_EXIT_ERROR;
     }
-    count = room_copy_recent_messages(g_room, snapshot, requested, NULL);
+    count = room_copy_recent_messages(client_current_room(client), snapshot,
+                                      requested, NULL);
 
     output_size = (size_t)(count > 0 ? count : 1) *
                   (MAX_USERNAME_LEN + MAX_MESSAGE_LEN + 48);
@@ -451,6 +452,7 @@ static int exec_command_post(client_t *client, const char *args) {
         msg.content[sizeof(msg.content) - 1] = '\0';
     }
 
+    room_tag_message(client_current_room(client), &msg);
     if (message_save(&msg) < 0) {
         fprintf(stderr, "post: failed to persist message\n");
         client_printf(client, "%s",
@@ -459,10 +461,10 @@ static int exec_command_post(client_t *client, const char *args) {
         return TNT_EXIT_ERROR;
     }
 
-    room_broadcast(g_room, &msg);
+    room_broadcast(client_current_room(client), &msg);
     security_audit("public_message", client->client_ip, client->session_id,
                    username, "exec");
-    notify_mentions(msg.content, client);
+    notify_mentions(msg.content, client, client_current_room(client));
     tnt_module_runtime_publish_message_created(&msg);
 
     if (client_send(client, "posted\n", 7) != 0) {

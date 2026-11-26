@@ -1,6 +1,16 @@
 import { byteLength } from "./text";
 
 export const ROOM = "lobby";
+const ROOM_NAME = /^[a-z0-9](?:[a-z0-9-]{0,18}[a-z0-9])?$/;
+
+export function isRoomName(name: unknown): name is string {
+  return typeof name === "string" && ROOM_NAME.test(name);
+}
+
+/** The lobby keeps TNT's original log; every other room has its own. */
+export function logFile(room: string): string {
+  return room === ROOM ? "messages.log" : `room-${room}.log`;
+}
 
 export type Entry = { timestamp: string; sender: string; text: string; verified?: boolean };
 export type Kind = "text" | "action" | "system" | "module";
@@ -113,28 +123,32 @@ async function readEntries(path: string, now: number): Promise<Entry[]> {
     .filter((entry): entry is Entry => entry !== null);
 }
 
-export async function readHistory(stateDir: string, limit: number, now: number = Date.now()): Promise<Entry[]> {
-  let entries = await readEntries(`${stateDir}/messages.log`, now);
+export async function readHistory(stateDir: string, limit: number, now: number = Date.now(), room: string = ROOM): Promise<Entry[]> {
+  const file = `${stateDir}/${logFile(room)}`;
+  let entries = await readEntries(file, now);
   if (entries.length < limit) {
-    entries = [...(await readEntries(`${stateDir}/messages.log.1`, now)), ...entries];
+    entries = [...(await readEntries(`${file}.1`, now)), ...entries];
   }
   return entries.slice(-limit);
 }
 
-export function messageId(entry: Entry, occurrence: number): string {
+export function messageId(entry: Entry, occurrence: number, room: string = ROOM): string {
+  const prefix = room === ROOM ? "" : `${room}|`;
   return new Bun.CryptoHasher("sha256")
-    .update(`${entry.timestamp}|${entry.sender}|${entry.text}|${occurrence}`)
+    .update(`${prefix}${entry.timestamp}|${entry.sender}|${entry.text}|${occurrence}`)
     .digest("hex")
     .slice(0, 16);
 }
 
 export class Ledger {
   readonly #limit: number;
+  readonly #room: string;
   #messages: Message[] = [];
   #entries: Entry[] = [];
 
-  constructor(limit: number) {
+  constructor(limit: number, room: string = ROOM) {
     this.#limit = limit;
+    this.#room = room;
   }
 
   add(entry: Entry): Message {
@@ -143,8 +157,8 @@ export class Ledger {
     ).length;
     const shown = classify(entry);
     const message: Message = {
-      id: messageId(entry, occurrence),
-      room: ROOM,
+      id: messageId(entry, occurrence, this.#room),
+      room: this.#room,
       sender: shown.sender,
       text: shown.text,
       timestamp: entry.timestamp,

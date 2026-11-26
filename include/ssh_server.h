@@ -64,6 +64,7 @@ typedef struct client {
     char exec_command[MAX_EXEC_COMMAND_LEN];
     bool exec_command_too_long;
     bool verified;                   /* Name is a signed-in handle; room lock */
+    chat_room_t *room;               /* NULL for the default room; g_room lock */
     char ssh_login[MAX_USERNAME_LEN];
     char session_id[32];             /* Opaque id an identity module sees */
     char key_fingerprint[TNT_IDENTITY_FINGERPRINT_SIZE];  /* Signed SSH key */
@@ -117,6 +118,10 @@ typedef struct client {
     bool channel_callback_ref;       /* client.c owns one ref while callbacks are installed */
     struct ssh_channel_callbacks_struct *channel_cb;
 } client_t;
+
+static inline chat_room_t *client_current_room(const client_t *client) {
+    return client->room ? client->room : g_room;
+}
 
 /* Initialize SSH server */
 int ssh_server_init(int port);

@@ -36,6 +36,9 @@
 #define MAX_LOG_SIZE (10 * 1024 * 1024)  /* 10 MiB */
 #define HOST_KEY_FILE "host_key"
 #define TNT_DEFAULT_STATE_DIR "."
+#define TNT_DEFAULT_ROOM "lobby"
+#define TNT_ROOM_NAME_MAX 20
+#define TNT_MAX_ROOMS 64
 
 /* Backward-compatible names for older modules while config_defaults owns the
  * actual runtime defaults and accepted ranges. */
@@ -88,6 +91,10 @@ int env_int(const char *name, int fallback, int min_val, int max_val);
  * check mark (the verified sign), or a leading space/dot/dash.  Used by username read, exec post (SSH login as
  * author), and the :nick command. */
 bool is_valid_username(const char *username);
+
+/* 1 through TNT_ROOM_NAME_MAX lowercase ASCII letters, digits and hyphens,
+ * starting and ending with a letter or digit. */
+bool tnt_room_name_is_valid(const char *name);
 
 /* Clamp a terminal size to sensible bounds (1..500 cols, 1..200 rows).
  * Replaces zero/negative/oversize values with 80x24.  Used by the PTY

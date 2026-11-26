@@ -16,8 +16,15 @@ typedef const char *(*room_client_name_fn)(const struct client *client);
  * sessions may share. */
 typedef bool (*room_client_owns_name_fn)(const struct client *client);
 
+struct chat_room;
+/* The room a session is in, for a room whose members are listed in another
+ * room's client array.  NULL means that room itself. */
+typedef const struct chat_room *(*room_client_room_fn)(
+    const struct client *client);
+
 /* Runs with the room lock held, so it must not call back into chat_room. */
-typedef void (*room_presence_fn)(const char *nickname, bool joined);
+typedef void (*room_presence_fn)(const char *nickname, const char *room,
+                                 bool joined);
 
 /* Fixed-capacity message history.  Entries may wrap physically; callers must
  * use the room message accessors below to observe chronological order. */
@@ -27,9 +34,14 @@ typedef struct {
     int count;
 } message_ring_t;
 
-/* Chat room structure */
-typedef struct {
+/* Chat room structure.  The default room's client array lists every
+ * interactive session; other rooms keep only history and find their members
+ * there through client_room. */
+typedef struct chat_room {
     pthread_rwlock_t lock;
+    char name[TNT_ROOM_NAME_MAX + 1];
+    char log_file[TNT_ROOM_NAME_MAX + 16];
+    struct chat_room *sessions;
     struct client **clients;
     int client_count;
     int client_capacity;
@@ -39,13 +51,27 @@ typedef struct {
     room_client_name_fn client_name;
     room_client_owns_name_fn client_owns_name;
     room_presence_fn presence_notifier;
+    room_client_room_fn client_room;
 } chat_room_t;
 
 /* Global chat room instance */
 extern chat_room_t *g_room;
 
-/* Initialize chat room */
+/* Create the default room, whose history is messages.log. */
 chat_room_t* room_create(void);
+
+/* Register `lobby` as the default room and every room-NAME.log in the state
+ * directory as a room. */
+int room_registry_init(chat_room_t *lobby);
+void room_registry_shutdown(void);
+
+/* Find a room by name, creating it when `create` is set.  NULL when the name
+ * is invalid, the room does not exist, or TNT_MAX_ROOMS are open.  Rooms live
+ * until shutdown, so the pointer stays valid. */
+chat_room_t *room_find(const char *name, bool create);
+
+/* Copy up to `capacity` room names, default room first, then by name. */
+int room_list(char (*names)[TNT_ROOM_NAME_MAX + 1], int capacity);
 
 /* Destroy chat room */
 void room_destroy(chat_room_t *room);
@@ -58,8 +84,11 @@ int room_add_client(chat_room_t *room, struct client *client);
 /* Remove client from room */
 void room_remove_client(chat_room_t *room, struct client *client);
 
-/* Broadcast message to all clients */
+/* Broadcast message to the room's members */
 void room_broadcast(chat_room_t *room, const message_t *msg);
+
+/* Mark `msg` as belonging to `room`, so message_save() logs it there. */
+void room_tag_message(const chat_room_t *room, message_t *msg);
 
 /* Install the non-blocking client notifier used by room_broadcast().  Rooms
  * default to no notifier so chat_room remains independently unit-testable. */
@@ -73,6 +102,9 @@ void room_set_client_name_accessor(chat_room_t *room,
 /* Install the accessor that exempts a client from the duplicate-name check. */
 void room_set_client_name_owner(chat_room_t *room,
                                 room_client_owns_name_fn accessor);
+
+void room_set_client_room_accessor(chat_room_t *room,
+                                   room_client_room_fn accessor);
 
 /* Install the presence hook called when a client joins or leaves. */
 void room_set_presence_notifier(chat_room_t *room, room_presence_fn notifier);
@@ -93,7 +125,8 @@ int room_copy_recent_messages(chat_room_t *room, message_t *out, int capacity,
 /* Get total message count */
 int room_get_message_count(chat_room_t *room);
 
-/* Get online client count */
+/* Get online client count: every session for the default room, the room's
+ * members for any other */
 int room_get_client_count(chat_room_t *room);
 
 /* Get room update sequence */

@@ -2,7 +2,8 @@ import { createVerifier, remoteKeys } from "./auth";
 import { createGateway } from "./gateway";
 import { createReporter } from "./events";
 import { createGuard } from "./guard";
-import { Ledger, readHistory } from "./history";
+import { readdir } from "node:fs/promises";
+import { Ledger, ROOM, isRoomName, readHistory } from "./history";
 import { signIn } from "./identity";
 import { encodePost, encodeRecord, parseTntLine, supportsIdentity, supportsPrivate } from "./module";
 
@@ -18,10 +19,19 @@ const write = (line: string) => {
 
 const ledger = new Ledger(HISTORY_LIMIT);
 for (const entry of await readHistory(stateDir, HISTORY_LIMIT)) ledger.add(entry);
+const rooms = new Map<string, Ledger>();
+for (const file of await readdir(stateDir).catch(() => [])) {
+  const room = /^room-(.+)\.log$/.exec(file)?.[1];
+  if (!isRoomName(room) || room === ROOM) continue;
+  const roomLedger = new Ledger(HISTORY_LIMIT, room);
+  for (const entry of await readHistory(stateDir, HISTORY_LIMIT, Date.now(), room)) roomLedger.add(entry);
+  rooms.set(room, roomLedger);
+}
 
 const verify = createVerifier(issuer, remoteKeys(env.TNT_GATEWAY_JWKS_URL || `${issuer}/oidc/jwks`));
 let identity = false;
 let direct = false;
+let roomsEnabled = false;
 const signingIn = new Set<string>();
 const eventsSecret = env.TNT_GATEWAY_EVENTS_SECRET;
 const reporter = eventsSecret ? createReporter({ issuer, secret: eventsSecret, file: `${stateDir}/gateway-events.json` }) : null;
@@ -38,8 +48,11 @@ const guard = createGuard({
 
 const gateway = createGateway({
   ledger,
+  rooms,
+  roomsEnabled: () => roomsEnabled,
+  ledgerLimit: HISTORY_LIMIT,
   verify,
-  post: (sender, text) => write(encodePost(sender, text)),
+  post: (sender, text, room) => write(encodePost(sender, text, room)),
   privatePost: (from, to, plain_text) => {
     if (direct) write(encodeRecord({ type: "private.post", from, to, plain_text }));
     return direct;
@@ -67,6 +80,7 @@ for await (const line of console) {
   if (event.type === "handshake") {
     identity = supportsIdentity(event.version);
     direct = supportsPrivate(event.version);
+    roomsEnabled = event.rooms;
   } else if (event.type === "private.created") {
     gateway.handlePrivate(event);
   } else if (event.type === "identity.changed") {

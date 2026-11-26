@@ -1,12 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { EVENT_OK, HANDSHAKE_OK, encodePost, parseTntLine, supportsIdentity, supportsPrivate } from "../src/module";
+import { EVENT_OK, HANDSHAKE_OK, HANDSHAKE_OK_ROOMS, encodePost, parseTntLine, supportsIdentity, supportsPrivate } from "../src/module";
 
 describe("parseTntLine", () => {
   test("answers the handshake", () => {
     const { reply, event } = parseTntLine('{"type":"handshake","protocol":"tnt.module.v1","server":{"name":"tnt","version":"1.4.0"}}');
     expect(reply).toBe(HANDSHAKE_OK);
     expect(JSON.parse(reply!)).toMatchObject({ type: "handshake.ok", protocol: "tnt.module.v1" });
-    expect(event).toEqual({ type: "handshake", version: "1.4.0" });
+    expect(event).toEqual({ type: "handshake", version: "1.4.0", rooms: false });
+  });
+
+  test("turns on rooms only when TNT offers them", () => {
+    const { reply, event } = parseTntLine('{"type":"handshake","protocol":"tnt.module.v1","server":{"name":"tnt","version":"1.10.1"},"features":["rooms"]}');
+    expect(JSON.parse(reply!)).toEqual({ type: "handshake.ok", protocol: "tnt.module.v1", features: ["rooms"] });
+    expect(reply).toBe(HANDSHAKE_OK_ROOMS);
+    expect(event).toMatchObject({ rooms: true });
+  });
+
+  test("reads the room of messages and presence, leaving the lobby implicit", () => {
+    const created = (room: string) =>
+      parseTntLine(`{"type":"message.created","message":{"timestamp":"2026-09-22T10:00:00Z","sender":"carol","plain_text":"hi","room":"${room}","metadata":{}}}`).event;
+    expect(created("ops")).toMatchObject({ room: "ops" });
+    expect(created("lobby")).not.toHaveProperty("room");
+    expect(created("../x")).not.toHaveProperty("room");
+    expect(parseTntLine('{"type":"presence.joined","nickname":"carol","room":"ops"}').event).toEqual({ type: "presence.joined", room: "ops", nickname: "carol" });
   });
 
   test("knows which servers accept identity records", () => {
@@ -82,5 +98,7 @@ describe("parseTntLine", () => {
 
 test("encodePost writes one JSON line", () => {
   expect(encodePost("alice", 'a\n"b"')).toBe('{"type":"message.post","sender":"alice","plain_text":"a\\n\\"b\\""}\n');
+  expect(encodePost("alice", "hi", "lobby")).toBe('{"type":"message.post","sender":"alice","plain_text":"hi"}\n');
+  expect(encodePost("alice", "hi", "ops")).toBe('{"type":"message.post","sender":"alice","plain_text":"hi","room":"ops"}\n');
   expect(EVENT_OK).toBe('{"type":"event.ok"}\n');
 });
