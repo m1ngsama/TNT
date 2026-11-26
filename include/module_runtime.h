@@ -102,6 +102,7 @@ int tnt_module_runtime_test_read_pair_fd(int fd, char *first,
                                          size_t first_size, char *second,
                                          size_t second_size, int timeout_ms);
 void tnt_module_runtime_test_reset_stop(void);
+size_t tnt_module_runtime_test_queued(const char *name);
 #endif
 
 #endif /* MODULE_RUNTIME_H */
